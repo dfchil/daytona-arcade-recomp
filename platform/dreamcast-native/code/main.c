@@ -2,11 +2,12 @@
 #include <sh4zam/shz_sh4zam.h>
 #include <malloc.h>
 #include <stdio.h>
+#ifdef NATIVE_DISC
+#include <kos/dbgio.h>
+#endif
 #include "practice.h"
 #include "render/materials/palette_ram.h"
-#ifdef NATIVE_DISC
-#define NM_ASSET_ROOT ENJ_CBASEPATH
-#else
+#ifndef NM_ASSET_ROOT /* make NATIVE_ASSET_ROOT=..., /cd/ with NATIVE_DISC=1 (local.cfg.mk) */
 #define NM_ASSET_ROOT "/pc/"
 #endif
 #include "../tests/startup_check.h"
@@ -64,6 +65,11 @@ static int check_math(void) {
 }
 
 int main(void) {
+#if defined(NATIVE_DISC) && !defined(NM_DISC_CONSOLE)
+    /* From a disc nobody reads the console: KOS would write it to the serial port, waiting on the port's FIFO at
+     * 115200 baud (a long report line about 10 ms). make NATIVE_DISC_CONSOLE=1 keeps it (a serial cable, Flycast). */
+    dbgio_dev_select("null");
+#endif
     if(nm_startup_check()) return 1;
     if (!check_math()) {
         puts("FAIL: SH4ZAM scale check");

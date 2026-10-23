@@ -84,6 +84,41 @@ To build other ELF variants against the outputs, pass the variables of
 `make-vars.txt` to `make -C platform/dreamcast-native` (see
 `platform/dreamcast-native/HANDOFF.md`, "Build and hardware").
 
+## Disc image
+
+A bootable `.cdi` of the game (the `elf/play` build: attract, credit, select, every course, music and effects) that
+runs from a disc without dcload. enDjinn's image target (`base_link.mk`, `$(ENJ_BINDIR)/$(ENJ_BASENAME).cdi`) runs
+`mkdcdisc` with the ELF as `1ST_READ.BIN` and the asset set (`ENJ_ROMDIR`) at the disc's root; `make cdi` names it.
+From the repository root, after a recipe run (here `build/dc-native-final.recipe`), with mkdcdisc built in
+`../mkdcdisc/builddir`:
+
+```
+source ../enDJinn/environ.sh
+PATH=$PWD/../mkdcdisc/builddir:$PATH make -C dreamcast-native ENDJINN_ROOT=$PWD/../enDJinn \
+  $(grep -v '^#' build/dc-native-final.recipe/make-vars.txt) \
+  NATIVE_RESIDENT_CAR=1 NATIVE_FRAME_PROFILE=1 NATIVE_HANDOPT=1 RACE_TICK_LIMIT=0 AUTO_START=attract \
+  NATIVE_DISC=1 ENJ_BUILDDIR=$PWD/build/dc-native-disc/obj ENJ_BINDIR=$PWD/build/dc-native-disc/bin -j8 cdi
+```
+
+The image is `build/dc-native-disc/bin/daytona-native-driving-3d-textured-world-scenery6-filterall-disc-resident-car-handopt-pal1555-smallcar12.cdi`
+(about 56 MB; the ELF beside it). It holds ROM-derived data: it stays in `build/`, never committed. `obj/` can go
+afterwards.
+
+- `NATIVE_DISC=1` reads the assets from `NATIVE_ASSET_ROOT`, default `/cd/` (a dcload build keeps `/pc/`; its
+  binary does not change). The diagnostics that write files to `/pc` (`NATIVE_CAPTURE`, `NATIVE_DIAG_LATE_CAPTURE`,
+  `NATIVE_SAMPLE_PROFILE`, `NATIVE_FRAME_COMPARE`) are refused. The console is dropped (KOS would write it to the
+  serial port, about 10 ms a long line); `NATIVE_DISC_CONSOLE=1` keeps it (a serial cable, Flycast's serial console).
+- Paths: mkdcdisc writes ISO 9660 with Joliet (no Rock Ridge); KOS's `fs_iso9660` takes the Joliet names and compares
+  them without case, so `course1-actors.dna` and `music/adpcm/t04.afb` open as they are (no renaming; the longest
+  name is 18 characters, the tree two directories deep).
+- Reads: a GD-ROM read blocks only the thread that makes it (KOS `cdrom.c`: the DMA's end is a semaphore wait,
+  `fs_iso9660.c` holds only its own mutex). On a disc the scene loader's reads run outside its slices
+  (`code/scene_loader.c`), and the music's file calls run on a worker thread (`code/audio/sound.c`, "From a disc"):
+  a seek of the drive is longer than any idle wait.
+- Hardware: a CD-R burned from the `.cdi` (DiscJuggler image, data track in the second session: a console that
+  boots MIL-CD/CD-R discs, i.e. not the last revisions) or an optical drive emulator (GDEMU, MODE, USB-GDROM) that
+  takes `.cdi`. The image is not padded (`--no-padding`): on a CD-R the data sits at the inner edge, the slowest part.
+
 ## Music (AICAflow)
 
 The soundtrack is not in the ROM set: it comes from vgmrips'

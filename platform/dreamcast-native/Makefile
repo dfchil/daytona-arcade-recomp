@@ -84,6 +84,15 @@ layout-check: $(ENJ_BINDIR)/$(ENJ_BASENAME).elf
 	@python3 tools/hot_layout.py check config/hot_layout.tsv $< --warn
 endif
 
+# The disc image (recipes/README.md, "Disc image"): enDjinn's image target, mkdcdisc with ENJ_ROMDIR at the root.
+.PHONY: cdi
+cdi: $(ENJ_BINDIR)/$(ENJ_BASENAME).cdi $(if $(filter 1,$(NATIVE_LAYOUT)),layout-check)
+ifneq ($(filter cdi %.cdi,$(MAKECMDGOALS)),)
+ifndef NATIVE_DISC
+$(error make cdi needs NATIVE_DISC=1: a dcload build reads its assets from /pc)
+endif
+endif
+
 comma := ,
 # The build's options that change its heap (tools/heap_budget.py).
 HEAP_BUDGET_FLAGS = $(if $(NATIVE_SAMPLE_PROFILE),--profile) $(if $(filter 0,$(NATIVE_SQ_STREAM)),--no-streams) \

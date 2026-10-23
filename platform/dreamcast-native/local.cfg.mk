@@ -253,12 +253,32 @@ endif
 NATIVE_CACHE_PROFILE_EVENT ?= PMCR_PIPELINE_FREEZE_BY_DCACHE_MISS_MODE
 ENJ_CFLAGS += -DNATIVE_CACHE_PROFILE -DNATIVE_CACHE_PROFILE_EVENT=$(NATIVE_CACHE_PROFILE_EVENT)
 endif
+# NATIVE_DISC=1: a build for a disc image (make NATIVE_DISC=1 cdi, recipes/README.md). The assets are read from
+# NATIVE_ASSET_ROOT, default /cd/ (mkdcdisc puts ENJ_ROMDIR's contents at the disc's root); the file reads take
+# the disc's paths (scene_loader.c, audio/sound.c: a GD-ROM read blocks only its own thread). Without dcload
+# there is no /pc: the diagnostics that write files there are refused.
+# NATIVE_ASSET_ROOT: where the game opens its assets (default /pc/, dcload's host directory).
 ifdef NATIVE_DISC
-ifdef NATIVE_CAPTURE
-$(error NATIVE_DISC cannot write framebuffer captures to /pc)
+ifneq ($(strip $(NATIVE_CAPTURE)$(NATIVE_DIAG_LATE_CAPTURE)$(NATIVE_SAMPLE_PROFILE)$(NATIVE_FRAME_COMPARE)),)
+$(error NATIVE_DISC cannot write captures or profiles to /pc: no dcload on a disc)
 endif
+NATIVE_ASSET_ROOT ?= /cd/
+ifneq ($(filter /pc%,$(NATIVE_ASSET_ROOT)),)
+$(error NATIVE_DISC reads its assets from the disc, not $(NATIVE_ASSET_ROOT))
+endif
+# enDjinn's own asset directory (none of its textures, sounds or fonts are used): the asset root itself, so the
+# image target does not add an empty directory to ENJ_ROMDIR.
+ROMBASEPATH := $(ENJ_ROMDIR)
 ENJ_BASENAME := $(ENJ_BASENAME)-disc
 ENJ_CFLAGS += -DNATIVE_DISC
+# NATIVE_DISC_CONSOLE=1: the console's lines still go to the serial port (without it they are dropped: main.c).
+ifeq ($(NATIVE_DISC_CONSOLE),1)
+ENJ_BASENAME := $(ENJ_BASENAME)-console
+ENJ_CFLAGS += -DNM_DISC_CONSOLE
+endif
+endif
+ifdef NATIVE_ASSET_ROOT
+ENJ_CFLAGS += -DNM_ASSET_ROOT='"$(NATIVE_ASSET_ROOT)"'
 endif
 # Cars and scenery are always resident (DNT6 palette packs). The variable only
 # names the build: existing build scripts pass it and expect "-resident-car".
