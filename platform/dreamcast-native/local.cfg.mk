@@ -1114,3 +1114,22 @@ ifneq ($(NATIVE_GUARD_BAND),2048)
 ENJ_BASENAME := $(ENJ_BASENAME)-guard$(NATIVE_GUARD_BAND)
 endif
 ENJ_CFLAGS += -DSQ_GUARD_BAND=$(NATIVE_GUARD_BAND).0f
+# The pad's analogue steering (include/steer_curve.h, code/practice.c; pad only: scripted races inject their steer
+# values and the arcade decoder and race after the table stay as they are). The stick's travel outside the dead
+# zone is rescaled to 0..1, raised to the curve's exponent and mapped onto the wheel's full band, so full lock is at
+# both ends of the stick and there is no step at the dead-zone edge.
+#   NATIVE_STEER_CURVE (default 2.0): the exponent; 1.0 is linear with full lock, higher is finer near the centre
+#     and steeper on the outer travel (4 is very flat near the centre). ELF suffix -steer<value> when not 2.0.
+#   NATIVE_STEER_DEADZONE (default 12): stick counts (of 127) around the centre that read as straight ahead.
+#     ELF suffix -steerdz<value> when not 12.
+NATIVE_STEER_CURVE ?= 2.0
+NATIVE_STEER_DEADZONE ?= 12
+$(if $(shell [ "$(NATIVE_STEER_DEADZONE)" -ge 0 ] 2>/dev/null && [ "$(NATIVE_STEER_DEADZONE)" -le 126 ] && echo ok),,$(error NATIVE_STEER_DEADZONE must be a whole number 0..126))
+$(if $(shell awk 'BEGIN{exit !("$(NATIVE_STEER_CURVE)"+0>0)}' && echo ok),,$(error NATIVE_STEER_CURVE must be a number above 0))
+ifneq ($(NATIVE_STEER_CURVE),2.0)
+ENJ_BASENAME := $(ENJ_BASENAME)-steer$(NATIVE_STEER_CURVE)
+endif
+ifneq ($(NATIVE_STEER_DEADZONE),12)
+ENJ_BASENAME := $(ENJ_BASENAME)-steerdz$(NATIVE_STEER_DEADZONE)
+endif
+ENJ_CFLAGS += -DNM_STEER_CURVE=$(NATIVE_STEER_CURVE) -DNM_STEER_DEADZONE=$(NATIVE_STEER_DEADZONE)

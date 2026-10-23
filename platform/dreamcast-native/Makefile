@@ -117,6 +117,10 @@ endif
 	$(ENJ_BUILDDIR)/race-input-check
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude tests/test_podium.c -o $(ENJ_BUILDDIR)/podium-check
 	$(ENJ_BUILDDIR)/podium-check
+	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -Iinclude \
+	  -DNM_STEER_CURVE=$(NATIVE_STEER_CURVE) -DNM_STEER_DEADZONE=$(NATIVE_STEER_DEADZONE) tests/test_steer_curve.c -lm \
+	  -o $(ENJ_BUILDDIR)/steer-curve-check
+	$(ENJ_BUILDDIR)/steer-curve-check
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -Iinclude tests/test_race_sound.c -lm -o $(ENJ_BUILDDIR)/race-sound-check
 	$(ENJ_BUILDDIR)/race-sound-check
 	cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -Iinclude tests/test_game_save.c \

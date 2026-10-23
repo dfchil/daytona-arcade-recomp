@@ -20,6 +20,10 @@
 #include "render/ui/title_render.h"
 #include "race_scene.h"
 #include "shifter.h"
+#include "steer_curve.h"
+#if !defined(NATIVE_RACE_SCRIPT) && !defined(NATIVE_DRIVING_TEST)
+static uint8_t practice_steer_table[256]; /* the pad's stick to the wheel's ADC byte (steer_curve.h), built once */
+#endif
 #include "race_intent_data.h"
 #include "race_record_data.h"
 #include "game_save.h"
@@ -864,10 +868,10 @@ static void practice_update(void *unused) {
     enj_ctrlr_state_t **controllers = enj_ctrl_get_states();
     for (size_t i=0; i<enj_ctrl_states_length(); ++i) if (controllers[i]) {
         const enj_ctrlr_state_t *c = controllers[i];
-        /* Map full physical ranges into the existing arcade ADC decoder;
-         * its dead zone/filter stay authoritative. Hardware calibration pending. */
-        const int axis = c->joyx < -127 ? -127 : c->joyx;
-        controls = nm_controls_decode((uint8_t)(128+axis*80/127),
+        /* The stick through the steering table (include/steer_curve.h: dead zone, power curve, full lock at the
+         * ends) into the existing arcade ADC decoder; the triggers over their full ranges. The decoder and the
+         * race after it stay the arcade's. */
+        controls = nm_controls_decode(nm_steer_table_adc(practice_steer_table,c->joyx),
             (uint8_t)(56+(unsigned)c->rtrigger*128/255),
             (uint8_t)(56+(unsigned)c->ltrigger*96/255),
             practice.controller_last.accel,practice.controller_last.brake);
@@ -2075,6 +2079,9 @@ static int practice_demo_start(void) { return 0; }
 #endif
 int nm_practice_run(const char *root) {
     practice.asset_root=root;
+#if !defined(NATIVE_RACE_SCRIPT) && !defined(NATIVE_DRIVING_TEST)
+    nm_steer_table_build(practice_steer_table,NM_STEER_CURVE,NM_STEER_DEADZONE);
+#endif
     nm_frontend_pool_reset(&practice_pool);
     practice_root=root;
     if (!enj_mode_push(&practice_mode)) return 1;
