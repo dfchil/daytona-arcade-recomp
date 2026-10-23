@@ -45,6 +45,10 @@ int __wrap_snd_init(void) { return 0; }
 void __wrap_snd_shutdown(void) {}
 #endif
 
+#if defined(NATIVE_DISC) && !defined(NM_SOUND_HOST_TEST)
+#define NM_SOUND_IO_WORKER 1 /* the music's file calls on a worker thread (below, "From a disc") */
+#endif
+
 /* PLAYING: the instance runs. ENDING: a stop is queued and AICAflow has not freed
  * the instance yet. LOADING: a recording is on its way into AICA RAM, a share a frame. AICAflow (firmware ABI 8) takes the ARM7's status reports by
  * interrupt on its own event thread and recycles an instance that ended by itself:
@@ -99,7 +103,11 @@ static void on_instance_end(afx_instance_t instance, const afx_instance_status_t
  * next update, before the effects module (AICAflow takes one upload at a time). Then the AFX in reads of the same
  * kind, and its upload (one PIO call) in a wait with time for it; a flow too large for any (the race pieces) waits
  * for a loading pause. nm_sound_settle lifts the limits: there the load runs at once. */
-enum { LOAD_BANK_OPEN, LOAD_BANK_HEADER, LOAD_ROOM, LOAD_BANK, LOAD_FLOW_OPEN, LOAD_FLOW_HEADER, LOAD_FLOW, LOAD_FLOW_UPLOAD };
+enum { LOAD_BANK_OPEN, LOAD_BANK_HEADER, LOAD_ROOM, LOAD_BANK, LOAD_FLOW_OPEN, LOAD_FLOW_HEADER, LOAD_FLOW, LOAD_FLOW_UPLOAD
+#ifdef NM_SOUND_IO_WORKER
+     , LOAD_BANK_SEEK /* after an odd header: the seek is a worker call of its own */
+#endif
+};
 #define LOAD_CHUNK_MAX 8192u  /* bytes: the staging buffer, and the largest read (a step at a pause: ~26 ms over /pc) */
 #define LOAD_READ_STEP 512u   /* reads in whole steps (all of the rest when it fits) */
 /* The flow's upload is one synchronous AICAflow call (a PIO copy: 254,681 bytes took 42.6 ms on hardware). */
@@ -119,6 +127,11 @@ static struct {
     uint32_t updates, waits, step_max_us, pause_max_us, upload_us, reads, overruns;
     uint8_t track, step, active, ready;
     uint8_t adpcm;          /* from music/adpcm/ (LOAD_ROOM) */
+#ifdef NM_SOUND_IO_WORKER
+    uint8_t room_opened;    /* LOAD_ROOM: the flow's open is done (room_file, NULL: no flow file) */
+    FILE *room_file;
+    uint32_t seek_to;       /* LOAD_BANK_SEEK */
+#endif
 } load = {.call_us = 1200.0f, .byte_us = 3.0f};
 
 /* The loads of the run, printed by nm_sound_shutdown. */
@@ -142,7 +155,16 @@ static void unload(void) {
 }
 
 /* The staging buffer exists only while a load runs: the heap of a running scene has no room to spare. */
+#ifdef NM_SOUND_IO_WORKER
+static void io_drain(void);
+#endif
 static void load_close(void) {
+#ifdef NM_SOUND_IO_WORKER
+    io_drain(); /* nothing of the worker's touches the buffers below any more */
+    if (load.room_file) fclose(load.room_file);
+    load.room_file = NULL;
+    load.room_opened = 0;
+#endif
     if (load.file) fclose(load.file);
     load.file = NULL;
     free(load.flow);
@@ -177,6 +199,9 @@ static FILE *load_open(const char *suffix) {
 
 /* Bytes for this wait's read of at most `left` (whole steps up to `limit`, or all of it): 0 when it has no time. */
 static uint32_t load_chunk(uint32_t left, uint32_t limit) {
+#ifdef NM_SOUND_IO_WORKER
+    return left < limit ? left : limit; /* the worker's reads do not take the wait's time; the same each step */
+#endif
     const float fit = (0.9f * (float)load.budget - load.call_us) / load.byte_us; /* a tenth kept for the fit's error */
     if (fit < (float)LOAD_READ_STEP && fit < (float)left) return 0;
     if (fit >= (float)left && left <= limit) return left;
@@ -185,7 +210,11 @@ static uint32_t load_chunk(uint32_t left, uint32_t limit) {
 }
 
 /* Time in this wait for one file call of a few bytes. */
+#ifdef NM_SOUND_IO_WORKER
+static int load_call_fits(void) { return 1; }
+#else
 static int load_call_fits(void) { return 0.9f * (float)load.budget >= load.call_us + 64.0f * load.byte_us; }
+#endif
 
 static int load_read(void *to, uint32_t bytes) {
     const uint64_t start = now_us();
@@ -215,6 +244,97 @@ static int load_read(void *to, uint32_t bytes) {
     return ok;
 }
 
+#ifdef NM_SOUND_IO_WORKER
+/* From a disc (make NATIVE_DISC=1) the music's file calls run on a worker thread below the game's priority: a
+ * GD-ROM read blocks only the thread that makes it (KOS cdrom.c waits for the DMA on a semaphore; fs_iso9660 holds
+ * only its own mutex), and the drive's seeks take tens to hundreds of milliseconds, more than any idle wait has.
+ * A step hands its call to the worker and returns; a later wait takes the result and the step goes on. A step
+ * repeats the same call until it is done (here the chunks do not depend on the wait's time), so the result is
+ * matched to the call. One call at a time; the closes are handed over without waiting for them. */
+enum { IO_OPEN = 1, IO_READ, IO_SEEK, IO_CLOSE };
+static struct {
+    kthread_t *thread;
+    semaphore_t wake;
+    volatile int busy, done;   /* busy: with the worker; done: its result waits for its step */
+    int op, ok;
+    FILE *request;             /* the file of the call (READ, SEEK, CLOSE) */
+    FILE *file;                /* OPEN's result */
+    void *to;
+    uint32_t bytes;
+    long offset;
+    char path[sizeof(sound.root) + 24];
+    alignas(32) unsigned char header[128]; /* the headers' reads (the steps' own are on their stack) */
+} io;
+
+static void io_run(void) {
+    switch (io.op) {
+    case IO_OPEN:
+        io.file = fopen(io.path, "rb");
+        if (io.file) setvbuf(io.file, NULL, _IONBF, 0); /* reads go straight into the buffers */
+        io.ok = io.file != NULL;
+        break;
+    case IO_READ: io.ok = fread(io.to, 1, io.bytes, io.request) == io.bytes; break;
+    case IO_SEEK: io.ok = !fseek(io.request, io.offset, SEEK_SET); break;
+    case IO_CLOSE: io.ok = !fclose(io.request); break;
+    }
+}
+
+static void *io_worker(void *unused) {
+    (void)unused;
+    for (;;) {
+        sem_wait(&io.wake);
+        io_run();
+        __atomic_store_n(&io.done, 1, __ATOMIC_RELEASE);
+        __atomic_store_n(&io.busy, 0, __ATOMIC_RELEASE);
+    }
+    return NULL;
+}
+
+static void io_submit(int op, FILE *file, void *to, uint32_t bytes, long offset, const char *suffix) {
+    io.op = op; io.request = file; io.file = NULL; io.to = to; io.bytes = bytes; io.offset = offset; io.done = 0;
+    if (suffix) snprintf(io.path, sizeof(io.path), "%smusic/%st%02u.%s", sound.root, load.adpcm ? "adpcm/" : "", load.track, suffix);
+    if (op == IO_READ) ++load.reads;
+    if (!io.thread) { io_run(); io.done = 1; return; } /* no worker: at once */
+    __atomic_store_n(&io.busy, 1, __ATOMIC_RELEASE);
+    sem_signal(&io.wake);
+}
+
+/* 1: the call is done (io.ok, io.file); 0: it is with the worker (handed over now, or still running). */
+static int io_call(int op, FILE *file, void *to, uint32_t bytes, long offset, const char *suffix) {
+    if (__atomic_load_n(&io.busy, __ATOMIC_ACQUIRE)) return 0;
+    if (io.done) {
+        io.done = 0;
+        if (io.op == op && io.request == file && io.to == to && io.bytes == bytes && io.offset == offset) return 1;
+        if (io.op == IO_OPEN && io.file) fclose(io.file); /* a result nobody waits for (not expected) */
+    }
+    io_submit(op, file, to, bytes, offset, suffix);
+    if (io.thread) return 0;
+    io.done = 0;
+    return 1;
+}
+
+/* A close without waiting for it (the worker is idle at each: its last result was just taken). */
+static void io_close(FILE *file) {
+    io_drain();
+    io_submit(IO_CLOSE, file, NULL, 0, 0, NULL);
+}
+
+/* Waits for the worker's call (a dropped load: its buffers are freed next) and drops its result. */
+static void io_drain(void) {
+    while (__atomic_load_n(&io.busy, __ATOMIC_ACQUIRE)) wait_ms(1);
+    if (io.done && io.op == IO_OPEN && io.file) fclose(io.file);
+    io.done = 0;
+}
+
+static void io_init(void) {
+    (void)load_open; (void)load_read; /* the idle wait's own calls (dcload) */
+    if (io.thread) return;
+    sem_init(&io.wake, 0);
+    const kthread_attr_t attr = {.stack_size = 16384, .prio = PRIO_DEFAULT + 1, .label = "music reader"};
+    if (!(io.thread = thd_create_ex(&attr, io_worker, NULL))) puts("Sound: no thread for the music's reads: they run in the idle wait");
+}
+#endif
+
 static int load_begin(uint8_t track) {
     if (!(load.buffer = aligned_buffer(LOAD_CHUNK_MAX + AFX_UPLOAD_ALIGN))) return 0;
     load.active = 1;
@@ -225,6 +345,10 @@ static int load_begin(uint8_t track) {
     load.start_us = now_us();
     load.updates = load.waits = load.step_max_us = load.pause_max_us = load.upload_us = 0;
     load.reads = load.overruns = load.ready = load.adpcm = 0;
+#ifdef NM_SOUND_IO_WORKER
+    load.room_opened = 0;
+    load.room_file = NULL;
+#endif
     return 1;
 }
 
@@ -237,13 +361,25 @@ static int load_step(void) {
     switch (load.step) {
     case LOAD_BANK_OPEN:   /* each step one file call at most (a seek after an odd header) */
         if (!load_call_fits()) return 0;
-        if (!(load.file = load_open("afb"))) { load_fail("no bank file", -AFX_BAD_BOUNDS); return 0; }
+#ifdef NM_SOUND_IO_WORKER
+        if (!io_call(IO_OPEN, NULL, NULL, 0, 0, "afb")) return 0;
+        load.file = io.file;
+#else
+        load.file = load_open("afb");
+#endif
+        if (!load.file) { load_fail("no bank file", -AFX_BAD_BOUNDS); return 0; }
         load.step = LOAD_BANK_HEADER;
         return 0;
     case LOAD_BANK_HEADER: {
         if (!load_call_fits()) return 0;
         unsigned char header[AFX_BANK_HEADER_BYTES];
+#ifdef NM_SOUND_IO_WORKER
+        if (!io_call(IO_READ, load.file, io.header, sizeof(header), 0, NULL)) return 0;
+        if (!io.ok) { load_fail("bank file unreadable", -AFX_BAD_FORMAT); return 0; }
+        nm_memcpy(header, io.header, sizeof(header));
+#else
         if (!load_read(header, sizeof(header))) { load_fail("bank file unreadable", -AFX_BAD_FORMAT); return 0; }
+#endif
         /* The AFB header as AICAflow's afx_bank_load_file checks it (bank.c decode_header); a short file shows in
          * the reads. */
         const uint32_t offset = read32le(header + 16), bytes = read32le(header + 20), total = read32le(header + 24);
@@ -251,19 +387,48 @@ static int load_step(void) {
             (!read32le(header + 8) && !read32le(header + 12)) || offset < AFX_BANK_HEADER_BYTES ||
             (offset & (AFX_UPLOAD_ALIGN - 1u)) || !bytes || total < offset || bytes != total - offset)
             { load_fail("not an AFB bank", -AFX_BAD_FORMAT); return 0; }
+#ifdef NM_SOUND_IO_WORKER
+        load.seek_to = offset;
+#else
         if (offset != AFX_BANK_HEADER_BYTES && fseek(load.file, (long)offset, SEEK_SET))
             { load_fail("bank file unreadable", -AFX_BAD_FORMAT); return 0; }
+#endif
         load.id = (afx_bank_id_t){read32le(header + 8), read32le(header + 12)};
         load.size = bytes;
+#ifdef NM_SOUND_IO_WORKER
+        load.step = offset != AFX_BANK_HEADER_BYTES ? LOAD_BANK_SEEK : LOAD_ROOM;
+#else
         load.step = LOAD_ROOM;
+#endif
         return 0;
     }
+#ifdef NM_SOUND_IO_WORKER
+    case LOAD_BANK_SEEK:
+        if (!io_call(IO_SEEK, load.file, NULL, 0, (long)load.seek_to, NULL)) return 0;
+        if (!io.ok) { load_fail("bank file unreadable", -AFX_BAD_FORMAT); return 0; }
+        load.step = LOAD_ROOM;
+        return 0;
+#endif
     case LOAD_ROOM: {
         /* Room in the AICA RAM for the bank and its flow (the flow's header names its size). With the effects' race
          * bank resident the PCM8 race pieces of Advanced (t04) and Expert (t05) do not fit: their ADPCM copy in
          * music/adpcm/ (recipes/build_assets.sh step music_adpcm) does. */
         if (!load_call_fits()) return 0;
         uint32_t flow = 0;
+#ifdef NM_SOUND_IO_WORKER
+        if (!load.room_opened) {
+            if (!io_call(IO_OPEN, NULL, NULL, 0, 0, "afx")) return 0;
+            load.room_file = io.file;
+            load.room_opened = 1;
+        }
+        if (load.room_file) {
+            if (!io_call(IO_READ, load.room_file, io.header, AFX_FILE_HEADER_BYTES, 0, NULL)) return 0;
+            if (io.ok) flow = read32le(io.header + 8);
+            io_close(load.room_file);
+            load.room_file = NULL;
+        }
+        load.room_opened = 0;
+#else
         FILE *file = load_open("afx");
         if (file) {   /* read as the loader's reads are (timed, fitted, overruns counted) */
             unsigned char header[AFX_FILE_HEADER_BYTES];
@@ -273,10 +438,15 @@ static int load_step(void) {
             load.file = bank_file;
             fclose(file);
         }
+#endif
         afx_mem_stats_t stats;
         const uint32_t bank = (load.size + 31u) & ~31u, need = bank + ((flow + 31u) & ~31u);
         if (!load.adpcm && !afx_mem_stats(&stats) && (bank > stats.largest_free_block || need > stats.free_bytes)) {
+#ifdef NM_SOUND_IO_WORKER
+            io_close(load.file);
+#else
             fclose(load.file);
+#endif
             load.file = NULL;
             load.adpcm = 1;
             load.step = LOAD_BANK_OPEN;
@@ -301,7 +471,11 @@ static int load_step(void) {
             if (result) { load_fail("bank upload", result); return 0; }
             sound.bank = (afx_bank_t){.asset = load.asset, .id = load.id, .bytes = load.size};
             load.asset = AFX_ASSET_INVALID;
+#ifdef NM_SOUND_IO_WORKER
+            io_close(load.file);
+#else
             fclose(load.file);
+#endif
             load.file = NULL;
             free(load.buffer);
             load.buffer = NULL;
@@ -312,7 +486,12 @@ static int load_step(void) {
             uint32_t bytes = load_chunk(load.size - load.done, LOAD_CHUNK_MAX);
             if (bytes < load.size - load.done) bytes &= ~(AFX_UPLOAD_ALIGN - 1u); /* only the last chunk is short */
             if (!bytes) return 0;
+#ifdef NM_SOUND_IO_WORKER
+            if (!io_call(IO_READ, load.file, load.buffer, bytes, 0, NULL)) return 0;
+            if (!io.ok) { load_fail("bank file short", -AFX_BAD_FORMAT); return 0; }
+#else
             if (!load_read(load.buffer, bytes)) { load_fail("bank file short", -AFX_BAD_FORMAT); return 0; }
+#endif
             nm_memset(load.buffer + bytes, 0, ((bytes + AFX_UPLOAD_ALIGN - 1u) & ~(AFX_UPLOAD_ALIGN - 1u)) - bytes);
 #ifndef NM_SOUND_TEST
             nm_sfx_quiesce(); /* a phrase's chunk in flight: AICAflow takes one DMA at a time */
@@ -324,14 +503,26 @@ static int load_step(void) {
         return 0;
     case LOAD_FLOW_OPEN:
         if (!load_call_fits()) return 0;
-        if (!(load.file = load_open("afx"))) { load_fail("no flow file", -AFX_BAD_BOUNDS); return 0; }
+#ifdef NM_SOUND_IO_WORKER
+        if (!io_call(IO_OPEN, NULL, NULL, 0, 0, "afx")) return 0;
+        load.file = io.file;
+#else
+        load.file = load_open("afx");
+#endif
+        if (!load.file) { load_fail("no flow file", -AFX_BAD_BOUNDS); return 0; }
         load.step = LOAD_FLOW_HEADER;
         return 0;
     case LOAD_FLOW_HEADER: {
         /* The AFX's 80-byte header names the file's length (format.h afx_file_header_t.total_size): no seeks. */
         if (!load_call_fits()) return 0;
         unsigned char header[AFX_FILE_HEADER_BYTES];
+#ifdef NM_SOUND_IO_WORKER
+        if (!io_call(IO_READ, load.file, io.header, sizeof(header), 0, NULL)) return 0;
+        if (!io.ok) { load_fail("flow file unreadable", -AFX_BAD_FORMAT); return 0; }
+        nm_memcpy(header, io.header, sizeof(header));
+#else
         if (!load_read(header, sizeof(header))) { load_fail("flow file unreadable", -AFX_BAD_FORMAT); return 0; }
+#endif
         const uint32_t total = read32le(header + 8);
         if (total < AFX_FILE_HEADER_BYTES || total > (4u << 20) || !(load.flow = nm_alloc(total)))
             { load_fail("flow file unreadable", -AFX_BAD_FORMAT); return 0; }
@@ -344,10 +535,19 @@ static int load_step(void) {
     case LOAD_FLOW: {
         const uint32_t bytes = load_chunk(load.size - load.done, LOAD_CHUNK_MAX);
         if (!bytes) return 0;
+#ifdef NM_SOUND_IO_WORKER
+        if (!io_call(IO_READ, load.file, load.flow + load.done, bytes, 0, NULL)) return 0;
+        if (!io.ok) { load_fail("flow file short", -AFX_BAD_FORMAT); return 0; }
+#else
         if (!load_read(load.flow + load.done, bytes)) { load_fail("flow file short", -AFX_BAD_FORMAT); return 0; }
+#endif
         load.done += bytes;
         if (load.done == load.size) {
+#ifdef NM_SOUND_IO_WORKER
+            io_close(load.file);
+#else
             fclose(load.file);
+#endif
             load.file = NULL;
             load.step = LOAD_FLOW_UPLOAD;
         }
@@ -479,6 +679,9 @@ int nm_sound_init(const char *asset_root) {
     nm_sfx_init(asset_root);
 #endif
     strcpy(sound.root, asset_root);
+#ifdef NM_SOUND_IO_WORKER
+    io_init();
+#endif
     sound.state = SOUND_IDLE;
     sound.wanted = -1;
     afx_mem_stats_t stats;
@@ -575,11 +778,20 @@ void nm_sound_hold(int on) { sound.hold = on; }
 
 void nm_sound_settle(void) {
     sound.settling = 1;
+#ifdef NM_SOUND_IO_WORKER
+    /* The worker's calls: a millisecond's wait each time one is running (a slow disc: up to 30 s). */
+    for (unsigned i = 0; i < 30000 && sound.state != SOUND_OFF; ++i) {
+#else
     for (unsigned i = 0; i < 4000 && sound.state != SOUND_OFF; ++i) {
+#endif
         if (sound.wanted < 0 && (sound.state == SOUND_IDLE || sound.state == SOUND_PLAYING)) break;
         if (sound.hold && sound.state == SOUND_IDLE && sound.track == (uint8_t)sound.wanted) break; /* loaded, held */
         nm_sound_update();
+#ifdef NM_SOUND_IO_WORKER
+        if (sound.state == SOUND_LOADING && !load.dma && !__atomic_load_n(&io.busy, __ATOMIC_ACQUIRE)) load_wait(1000000u);
+#else
         if (sound.state == SOUND_LOADING && !load.dma) load_wait(1000000u);
+#endif
         else wait_ms(1);
     }
     sound.settling = 0;

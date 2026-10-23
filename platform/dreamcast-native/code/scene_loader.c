@@ -1,6 +1,7 @@
 /* A scene's load in the idle waits of the screen before it (include/scene_loader.h). Outside the LTO unit
  * (Makefile): its code and placement do not touch the race's. */
 #include "scene_loader.h"
+#include "nm_mem.h"
 #include <stdio.h>
 
 #ifdef _arch_dreamcast
@@ -9,6 +10,7 @@
 #include <kos/sem.h>
 #include <kos/thread.h>
 #include <stddef.h>
+#include <string.h>
 
 #define LOADER_STACK (64u * 1024u)   /* as the updater's own (THD_KERNEL_STACK_SIZE) */
 #define PIECE_MIN 2048u              /* the smallest read piece worth a call */
@@ -19,6 +21,17 @@ static uint8_t stack[LOADER_STACK] __attribute__((aligned(32)));
 static kthread_t *thread;
 static semaphore_t go, back;
 static volatile int state;           /* 0 none, 1 running, 2 finished */
+#ifdef NATIVE_DISC
+/* From a disc a read blocks only the thread that makes it (KOS cdrom.c: the GD-ROM's DMA ends in a semaphore wait;
+ * fs_iso9660 holds only its own mutex), and a seek takes tens to hundreds of milliseconds, more than any slice. So
+ * the job's reads run outside its slices: the job hands the slice back, reads while the updater goes on with its
+ * frames, and waits for the next slice to go on; the updater gives no slice while the read runs. The job's own work
+ * still runs only inside slices. (Flycast, attract load in the title: 3 late frames, longest 26.9 ms, against 164
+ * and 435 ms with the slices' reads; one read a frame then paces the load: 8.4 MB, 1395 reads, 26 s there.) */
+static volatile int reading;
+#define DISC_PIECE (32u * 1024u)     /* the largest call: the file system's mutex is free between them */
+static uint8_t bounce[DISC_PIECE] __attribute__((aligned(32))); /* reads to a buffer that is not 32-byte aligned */
+#endif
 static nm_loader_job_t job;
 static void *job_arg;
 static const char *job_name = "";
@@ -140,6 +153,9 @@ int nm_loader_result(void) { return state == 2 ? result : 0; }
 
 void nm_loader_idle(uint64_t until) {
     if (state != 1 || !thread || in_job() || now_us() >= until) return;
+#ifdef NATIVE_DISC
+    if (reading) return;
+#endif
     deadline = until;
     ++slices;
     sem_signal(&go);
@@ -148,6 +164,9 @@ void nm_loader_idle(uint64_t until) {
 
 int nm_loader_finish(void) {
     while (state == 1 && thread && !in_job()) {
+#ifdef NATIVE_DISC
+        if (reading) { thd_sleep(1); continue; }
+#endif
         deadline = UINT64_MAX;
         ++slices;
         sem_signal(&go);
@@ -213,8 +232,45 @@ static void fit(uint32_t n, uint32_t took) {
 /* KOS's file calls (newlib's read and open go through them), at link time (local.cfg.mk --wrap). */
 ssize_t __real_fs_read(file_t hnd, void *buffer, size_t cnt);
 ssize_t __wrap_fs_read(file_t hnd, void *buffer, size_t cnt);
+#ifdef NATIVE_DISC
+/* The read itself, in pieces; a piece to an unaligned buffer goes through the aligned bounce buffer, so the file
+ * system reads whole sectors by DMA and does not take them one at a time through its sector cache. */
+static ssize_t disc_read(file_t hnd, void *buffer, size_t cnt) {
+    size_t done = 0;
+    while (done < cnt) {
+        size_t piece = cnt - done < DISC_PIECE ? cnt - done : DISC_PIECE;
+        uint8_t *const to = (uint8_t *)buffer + done;
+        const int direct = !((uintptr_t)to & 31u);
+        const uint64_t t0 = now_us();
+        const ssize_t r = __real_fs_read(hnd, direct ? to : bounce, piece);
+        const uint32_t took = (uint32_t)(now_us() - t0);
+        if (took > read_max_us) { read_max_us = took; read_max_bytes = (uint32_t)piece; }
+        ++reads;
+        if (r < 0) return done ? (ssize_t)done : r;
+        if (!direct) nm_memcpy(to, bounce, (size_t)r);
+        fit((uint32_t)piece, took);
+        bytes += (uint64_t)r;
+        done += (size_t)r;
+        if ((size_t)r < piece) break;
+    }
+    return (ssize_t)done;
+}
+#endif
 ssize_t __wrap_fs_read(file_t hnd, void *buffer, size_t cnt) {
     if (!in_job()) return __real_fs_read(hnd, buffer, cnt);
+#ifdef NATIVE_DISC
+    point("fs_read");
+    if (deadline == UINT64_MAX) return disc_read(hnd, buffer, cnt); /* nm_loader_finish: nothing to give way to */
+    reading = 1;
+    slice_end();
+    ++handbacks;
+    sem_signal(&back);
+    const ssize_t r = disc_read(hnd, buffer, cnt);
+    reading = 0;
+    sem_wait(&go);
+    slice_begin = point_us = now_us();
+    return r;
+#endif
     size_t done = 0;
     int handed = 0; /* this piece waited for a slice once already */
     while (done < cnt) {
