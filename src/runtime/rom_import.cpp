@@ -129,31 +129,34 @@ std::vector<RomCheck> check_rom_set(const std::string &zip_path) {
     return out;
 }
 
-M2Board::Images import_rom_set(const std::string &zip_path) {
+M2Board::Images import_rom_set(const std::string &zip_path, bool sound_enabled) {
     const auto z = open_archive(zip_path);
     M2Board::Images img;
     img.program.assign(0x200000, 0);
     img.main_data.assign(0x2000000, 0);
     img.copro_data.assign(0x800000, 0);
-    img.polygons.assign(0x1000000, 0);
-    img.textures.assign(0x1000000, 0);
+    img.polygons.assign(0x1000000 / sizeof(uint32_t), 0);
+    img.textures.assign(0x1000000 / sizeof(uint16_t), 0);
     img.copro_tables.assign(0x40000, 0);
-    img.sound_program.assign(0x40000, 0);
-    img.pcm1.assign(0x400000, 0);
-    img.pcm2.assign(0x400000, 0);
+    if (sound_enabled) {
+        img.sound_program.assign(0x40000, 0);
+        img.pcm1.assign(0x400000, 0);
+        img.pcm2.assign(0x400000, 0);
+    }
     const Set &set = this_set();
     for (const Load &l : std::span(set.loads, set.count)) {
+        if (!sound_enabled && l.region >= SoundProgram) continue;
         const std::vector<uint8_t> data = z->read(l.file); // CRC against the archive's own
         if (data.size() != l.size || crc32(data.data(), data.size()) != l.crc)
             throw ZipError(std::string(l.file) + ": not the " + set.name + " ROM this build was recompiled from");
-        std::vector<uint8_t> *r = nullptr;
+        uint8_t *r = nullptr;
         switch (l.region) {
-        case Program: r = &img.program; break;
-        case MainData: r = &img.main_data; break;
-        case CoproData: r = &img.copro_data; break;
-        case Polygons: r = &img.polygons; break;
-        case Textures: r = &img.textures; break;
-        case CoproTables: r = &img.copro_tables; break;
+        case Program: r = img.program.data(); break;
+        case MainData: r = img.main_data.data(); break;
+        case CoproData: r = img.copro_data.data(); break;
+        case Polygons: r = reinterpret_cast<uint8_t *>(img.polygons.data()); break;
+        case Textures: r = reinterpret_cast<uint8_t *>(img.textures.data()); break;
+        case CoproTables: r = img.copro_tables.data(); break;
         case SoundProgram: // 68000, big-endian: the files hold byte-swapped words
             for (uint32_t i = 0; i < l.size; i += 2) {
                 img.sound_program[l.offset + i] = data[i + 1];
@@ -164,8 +167,8 @@ M2Board::Images import_rom_set(const std::string &zip_path) {
         case Pcm2: std::copy(data.begin(), data.end(), img.pcm2.begin() + l.offset); continue;
         }
         for (uint32_t w = 0; w < l.size / 2; w++) {
-            (*r)[l.offset + w * 4] = data[w * 2];
-            (*r)[l.offset + w * 4 + 1] = data[w * 2 + 1];
+            r[l.offset + w * 4] = data[w * 2];
+            r[l.offset + w * 4 + 1] = data[w * 2 + 1];
         }
     }
     for (uint32_t dst = set.mirror_from + 0x100000; dst <= 0xF00000; dst += 0x100000) // ROM_COPY mirrors

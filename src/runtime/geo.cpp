@@ -38,18 +38,20 @@ struct quad_m2 {
     int32_t texlod = 0;
 };
 
-Geo::Geo(const std::vector<uint8_t> &polygons, const std::vector<uint8_t> &textures, uint32_t *buffer)
-    : polygon_rom_(polygons.size() / 4), texture_rom_(textures.size() / 2), buffer_(buffer) {
-    if (polygon_rom_.empty() || (polygon_rom_.size() & (polygon_rom_.size() - 1)) || texture_rom_.empty() ||
-        (texture_rom_.size() & (texture_rom_.size() - 1)))
+Geo::Geo(std::vector<uint32_t> polygons, std::vector<uint16_t> textures, uint32_t *buffer,
+         PagedRom *polygon_pages, PagedRom *texture_pages)
+    : polygon_rom_(std::move(polygons)), texture_rom_(std::move(textures)), buffer_(buffer) {
+    const size_t polygon_words = polygon_pages ? polygon_pages->size() / 4 : polygon_rom_.size();
+    const size_t texture_words = texture_pages ? texture_pages->size() / 2 : texture_rom_.size();
+    if (!polygon_words || (polygon_words & (polygon_words - 1)) || !texture_words || (texture_words & (texture_words - 1)))
         throw GeoFatal("bad polygon or texture ROM image");
-    std::memcpy(polygon_rom_.data(), polygons.data(), polygon_rom_.size() * 4);
-    std::memcpy(texture_rom_.data(), textures.data(), texture_rom_.size() * 2);
     raster_.texture_rom = texture_rom_.data();
-    raster_.texture_rom_mask = uint32_t(texture_rom_.size() - 1);
+    raster_.texture_rom_mask = uint32_t(texture_words - 1);
+    raster_.texture_pages = texture_pages;
     geo_.raster = &raster_;
     geo_.polygon_rom = polygon_rom_.data();
-    geo_.polygon_rom_mask = uint32_t(polygon_rom_.size() - 1);
+    geo_.polygon_rom_mask = uint32_t(polygon_words - 1);
+    geo_.polygon_pages = polygon_pages;
 }
 
 #ifdef M2_DC_MEMORY
@@ -370,9 +372,9 @@ void Geo::model2_3d_process_polygon(raster_state *raster, uint32_t attr)
 		tp = GeoPtr16{raster->texture_ram, 0x10000, raster->command_buffer[0] & 0xffff};
 	else
 #ifdef M2_DC_MEMORY
-		tp = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[0] & raster->texture_rom_mask, raster->rom};
+		tp = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[0] & raster->texture_rom_mask, nullptr, raster->rom};
 #else
-		tp = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[0] & raster->texture_rom_mask};
+		tp = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[0] & raster->texture_rom_mask, raster->texture_pages};
 #endif
 
 #ifdef M2_FAST_GEO
@@ -399,9 +401,9 @@ void Geo::model2_3d_process_polygon(raster_state *raster, uint32_t attr)
 		th = GeoPtr16{raster->texture_ram, 0x10000, raster->command_buffer[1] & 0xffff};
 	else
 #ifdef M2_DC_MEMORY
-		th = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[1] & raster->texture_rom_mask, raster->rom};
+		th = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[1] & raster->texture_rom_mask, nullptr, raster->rom};
 #else
-		th = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[1] & raster->texture_rom_mask};
+		th = GeoPtr16{raster->texture_rom, raster->texture_rom_mask + 1, raster->command_buffer[1] & raster->texture_rom_mask, raster->texture_pages};
 #endif
 
 #ifdef M2_FAST_GEO
@@ -1576,9 +1578,29 @@ GeoPtr Geo::geo_nop(geo_state *geo, uint32_t opcode, GeoPtr input)
 	return input;
 }
 
+Geo::Geo(const geo_state &snapshot) : buffer_(nullptr) {
+	if (!snapshot.raster) throw GeoFatal("missing inspection raster snapshot");
+	raster_ = *snapshot.raster;
+	geo_ = snapshot;
+	geo_.raster = &raster_;
+}
+
+void Geo::inspect_object(const ObjectSource &source) {
+	if ((source.opcode & 0x80000000) || ((source.opcode >> 23) & 0xf) != 1)
+		throw GeoFatal("inspection requires an object command");
+	const auto window = raster_.cur_window;
+	render_frame_start();
+	raster_.cur_window = window;
+	uint32_t parameters[] = {source.texture_points, source.texture_headers, source.address, source.count};
+	geo_object_data(&geo_, source.opcode, {parameters, 4, 0});
+}
+
 /* Command 01: Object Data */
 GeoPtr Geo::geo_object_data(geo_state *geo, uint32_t opcode, GeoPtr input)
 {
+	if (object_observer && !record_pushes)
+		throw GeoFatal("object observer requires rasterizer word recording");
+	const size_t word_start = pushed.size();
 	raster_state *raster = geo->raster;
 	uint32_t  tpa = *input++;     /* Texture Point Address */
 	uint32_t  tha = *input++;     /* Texture Header Address */
@@ -1615,9 +1637,9 @@ GeoPtr Geo::geo_object_data(geo_state *geo, uint32_t opcode, GeoPtr input)
 	{
 		/* Polygon ROM */
 #ifdef M2_DC_MEMORY
-		obp = GeoPtr{geo->polygon_rom, geo->polygon_rom_mask + 1, oba & geo->polygon_rom_mask, geo->rom};
+		obp = GeoPtr{geo->polygon_rom, geo->polygon_rom_mask + 1, oba & geo->polygon_rom_mask, nullptr, geo->rom};
 #else
-		obp = GeoPtr{geo->polygon_rom, geo->polygon_rom_mask + 1, oba & geo->polygon_rom_mask};
+		obp = GeoPtr{geo->polygon_rom, geo->polygon_rom_mask + 1, oba & geo->polygon_rom_mask, geo->polygon_pages};
 #endif
 	}
 	else
@@ -1645,6 +1667,9 @@ GeoPtr Geo::geo_object_data(geo_state *geo, uint32_t opcode, GeoPtr input)
 		/* No Normals present, Specular */
 		case 3: geo_parse_nn_s(geo, obp, obc); break;
 	}
+	if (object_observer)
+		object_observer(object_observer_data, *geo, {obp, opcode, tpa, tha, oba, obc},
+			std::span<const uint32_t>(pushed).subspan(word_start));
 
 	/* move by 4 parameters */
 	return input;
@@ -1792,7 +1817,7 @@ GeoPtr Geo::geo_polygon_data(geo_state *geo, uint32_t opcode, GeoPtr input)
 
 	/* move the data */
 	for (i = 0; i < count; i++)
-		*p++ = *input++;
+		(p++).at() = *input++;
 
 	return input;
 }
@@ -2008,7 +2033,7 @@ GeoPtr Geo::geo_test(geo_state *geo, uint32_t opcode, GeoPtr input)
 #ifdef M2_DC_MEMORY
 			data = geo->rom->dword(RomRegion::Polygons, address++ * 4);
 #else
-			data = geo->polygon_rom[address++];
+			data = *GeoPtr{geo->polygon_rom, geo->polygon_rom_mask + 1, address++, geo->polygon_pages};
 #endif
 
 			address &= geo->polygon_rom_mask;

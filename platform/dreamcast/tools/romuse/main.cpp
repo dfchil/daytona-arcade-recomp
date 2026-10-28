@@ -119,6 +119,13 @@ std::vector<uint8_t> load(const std::string &path) {
     return {std::istreambuf_iterator<char>(f), {}};
 }
 
+template <class T> std::vector<T> load_words(const std::string &path) {
+    const std::vector<uint8_t> bytes = load(path);
+    std::vector<T> words(bytes.size() / sizeof(T));
+    std::memcpy(words.data(), bytes.data(), words.size() * sizeof(T));
+    return words;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -150,22 +157,25 @@ int main(int argc, char **argv) {
         img.main_data = load(dir + "/main_data.bin");
         img.copro_tables = load(dir + "/copro_tables.bin");
         img.copro_data = load(dir + "/copro_data.bin");
-        img.polygons = load(dir + "/polygons.bin");
-        img.textures = load(dir + "/textures.bin");
+        img.polygons = load_words<uint32_t>(dir + "/polygons.bin");
+        img.textures = load_words<uint16_t>(dir + "/textures.bin");
         img.sound_program = load(dir + "/sound_program.bin");
         img.pcm1 = load(dir + "/pcm1.bin");
         img.pcm2 = load(dir + "/pcm2.bin");
         // The board keeps these vectors (moved, so the buffers stay put) and
         // reads program and main_data from them; the other images it keeps
         // are only the source of the copies the devices read.
-        const struct { const char *name; const std::vector<uint8_t> *image; bool board_reads; } wanted[] = {
-            {"program", &img.program, true},      {"main_data", &img.main_data, true},
-            {"polygons", &img.polygons, false},   {"textures", &img.textures, false},
-            {"copro_data", &img.copro_data, false}, {"pcm1", &img.pcm1, false}, {"pcm2", &img.pcm2, false},
+        const struct { const char *name; const void *data; size_t bytes; bool board_reads; } wanted[] = {
+            {"program", img.program.data(), img.program.size(), true},
+            {"main_data", img.main_data.data(), img.main_data.size(), true},
+            {"polygons", img.polygons.data(), img.polygons.size() * sizeof(uint32_t), false},
+            {"textures", img.textures.data(), img.textures.size() * sizeof(uint16_t), false},
+            {"copro_data", img.copro_data.data(), img.copro_data.size(), false},
+            {"pcm1", img.pcm1.data(), img.pcm1.size(), false}, {"pcm2", img.pcm2.data(), img.pcm2.size(), false},
         };
         struct Want { std::string name; uintptr_t own; size_t bytes; bool board_reads; };
         std::vector<Want> want;
-        for (const auto &w : wanted) want.push_back({w.name, uintptr_t(w.image->data()), w.image->size(), w.board_reads});
+        for (const auto &w : wanted) want.push_back({w.name, uintptr_t(w.data), w.bytes, w.board_reads});
 
         rt::GameLoop game(std::move(img), sound_log_path.empty());
         if (!nvram_dir.empty()) tools::load_nvram(game, nvram_dir);

@@ -26,20 +26,21 @@ inline uint16_t le16(const uint8_t *b, uint32_t i) { return uint16_t(b[i * 2] | 
 inline uint32_t rgb(uint32_t r, uint32_t g, uint32_t b) { return 0xff000000u | (r << 16) | (g << 8) | b; }
 } // namespace
 
-Video::Video(const uint8_t *tile_ram, const uint8_t *char_ram)
+Video::Video(const uint8_t *tile_ram, const uint8_t *char_ram, bool external_3d)
     : tile_ram_(tile_ram), char_ram_(char_ram),
 #ifdef M2_DC_SPEED
       // (The Dreamcast composes 16-bit layers: the 32-bit ones only if a
       // frame is ever drawn without external 3D, allocated then.)
       screen16_(size_t(kLayerStride) * H), sys24_16_(size_t(kLayerStride) * (H + 4)),
 #else
-      screen_(size_t(W) * H), sys24_(size_t(W) * (H + 4)),
+      screen_(external_3d ? 0 : size_t(W) * H), sys24_(external_3d ? 0 : size_t(W) * (H + 4)),
 #endif
 #ifndef M2_DC_MEMORY
       // (Not on the Dreamcast: its layers are screen_ and sys24_ themselves.)
-      background_gpu_(size_t(W) * H), foreground_gpu_(size_t(W) * H),
+      background_gpu_(external_3d ? 0 : size_t(W) * H), foreground_gpu_(external_3d ? 0 : size_t(W) * H),
 #endif
-      gpu_tile_words_(kGpuTileWords), gpu_pens_(kGpuPens) {
+      external_3d_(external_3d), gpu_tile_words_(external_3d ? 0 : kGpuTileWords),
+      gpu_pens_(external_3d ? 0 : kGpuPens), raster_(!external_3d) {
     static uint64_t instances = 0;
     instance_ = ++instances;
     for (auto &p : pens_) p = rgb(0, 0, 0); // palette_device starts black
@@ -51,9 +52,11 @@ Video::Video(const uint8_t *tile_ram, const uint8_t *char_ram)
     for (int l = 0; l < 4; l++) pixmap_[l].assign(512 * 512, 0), flags_[l].assign(512 * 512, 0);
     system24_tile_generations_.resize(4 * 4096);
 #ifndef M2_VITA_RENDER_OPT
-    dec_chars_.resize(0x80000);
-    dec_char_dirty_.resize(0x4000);
-    dec_tiles_.resize(4 * 4096);
+    if (!external_3d) {
+        dec_chars_.resize(0x80000);
+        dec_char_dirty_.resize(0x4000);
+        dec_tiles_.resize(4 * 4096);
+    }
 #endif
 #ifdef M2_VITA_RENDER_OPT
     character_copy_.resize(0x80000);
@@ -115,6 +118,8 @@ static inline bool same_block(const uint8_t *a, const uint16_t *b16)
 // of 8x8, 4bpp chars (char_layout, bit order swapped within 16-bit words),
 // pen = color * 16 + pixel, pen 0 transparent, category = tile bit 15.
 void Video::build_layer(int layer) {
+    pixmap_[layer].resize(512 * 512);
+    flags_[layer].resize(512 * 512);
     const uint32_t base = uint32_t(layer) * 0x1000; // tile_info_0s/0w/1s/1w
     uint16_t *pm = pixmap_[layer].data();
     uint8_t *fm = flags_[layer].data();
@@ -197,6 +202,9 @@ void Video::build_layer(int layer) {
 // HUD's digits change). Characters are compared (256-byte pages, then 32-byte
 // characters) only on frames the game wrote character RAM.
 void Video::decode_layers() {
+    dec_chars_.resize(0x80000);
+    dec_char_dirty_.resize(0x4000);
+    dec_tiles_.resize(4 * 4096);
 #ifdef M2_DC_SPEED
     // Neither tile RAM nor character RAM written since the last decode (the
     // board reports both): no tile can need rebuilding, so skip the 16,384
@@ -238,6 +246,24 @@ void Video::decode_layers() {
     character_memory_touched_ = tile_memory_touched_ = false;
 }
 #endif
+
+void Video::set_system24_cache(bool enabled) {
+    system24_cache_ = enabled;
+    if (!enabled) {
+        for (int layer = 0; layer < 4; ++layer) {
+            std::vector<uint16_t>().swap(pixmap_[layer]);
+            std::vector<uint8_t>().swap(flags_[layer]);
+        }
+#ifdef M2_VITA_RENDER_OPT
+        tiles_valid_ = false;
+#else
+        dec_valid_ = false;
+        std::vector<uint8_t>().swap(dec_chars_);
+        std::vector<uint8_t>().swap(dec_char_dirty_);
+        std::vector<uint16_t>().swap(dec_tiles_);
+#endif
+    }
+}
 
 #ifdef M2_VITA_RENDER_OPT
 void Video::update_tile_cache() {
@@ -686,11 +712,19 @@ void Video::screen_update(const std::vector<GeoPoly> &polys, int windows, const 
         for (uint32_t i = 0; i < 0x1000; i++) palette_w(i, mem.palram, mem.colorxlat);
         palette_dirty_ = false;
     }
+    if (!system24_cache_ && external_3d_ && !desktop_) {
+        // Raw consumers have no decoded-cache generations. Tracked writes
+        // invalidate the whole view; untracked callers still invalidate each
+        // frame so direct RAM edits cannot leave stale native tile surfaces.
+        system24_source_dirty_ |= !write_tracking_ || tile_memory_touched_ || character_memory_touched_;
+        tile_memory_touched_ = character_memory_touched_ = false;
+    } else {
 #ifdef M2_VITA_RENDER_OPT
-    update_tile_cache();
+        update_tile_cache();
 #else
-    decode_layers();
+        decode_layers();
 #endif
+    }
     if (system24_source_dirty_) {
         ++system24_texture_generation_;
         system24_source_dirty_ = false;
@@ -698,6 +732,8 @@ void Video::screen_update(const std::vector<GeoPoly> &polys, int windows, const 
     profile_.tile_cache = ticks() - before;
 #ifndef M2_VITA_RENDER_OPT
     if (external_3d_ && desktop_) {
+        gpu_tile_words_.resize(kGpuTileWords);
+        gpu_pens_.resize(kGpuPens);
         // Desktop hardware renderer: it draws the tilemap layers from the
         // pixmaps, with this frame's registers and pens (the game may write
         // them again before the frame is drawn). The CPU decides what the
@@ -811,6 +847,15 @@ void Video::screen_update(const std::vector<GeoPoly> &polys, int windows, const 
         screen_.assign(size_t(width()) * H, 0u);
         sys24_.assign(size_t(W) * (H + 4), 0u);
     }
+#endif
+#ifndef M2_DC_MEMORY
+    // GPU-only construction saves CPU framebuffers and the reference 3D
+    // target. Restore them lazily if a caller selects software composition.
+    screen_.resize(size_t(width()) * H);
+    sys24_.resize(size_t(W) * (H + 4));
+    background_gpu_.resize(size_t(width()) * H);
+    foreground_gpu_.resize(size_t(width()) * H);
+    if (!external_3d_) raster_.set_wide_margin(margin_);
 #endif
     // Non-zero pixels of a `width`-wide source onto the screen at column `at`.
     const size_t out_w = size_t(width());

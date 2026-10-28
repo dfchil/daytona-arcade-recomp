@@ -26,7 +26,7 @@ class Video {
 public:
     // tile_ram: 0x01000000 (0x10000 bytes, u16 entries); char_ram: 0x01080000
     // (0x80000 bytes, u16 entries); both as the i960 wrote them.
-    Video(const uint8_t *tile_ram, const uint8_t *char_ram);
+    Video(const uint8_t *tile_ram, const uint8_t *char_ram, bool external_3d = false);
 
     // Register writes (MAME handlers), fed by the bus as they happen.
     // palette_w after the bus has stored the write (palram holds the new value).
@@ -96,6 +96,21 @@ public:
     bool cpu_front() const { return hud_on_; }
     uint64_t instance() const { return instance_; } // tells a new Video from an old one at the same address
     bool external_3d() const { return external_3d_; }
+    // Native tile renderers consume the raw 4bpp characters/registers instead
+    // of four decoded 512x512 CPU pixmaps (3 MiB). Software output always
+    // restores those caches; desktop defaults are unchanged.
+    void set_system24_cache(bool enabled);
+    uint32_t system24_character_row(unsigned tile_value, unsigned y) const {
+        const auto *p = char_ram_ + (tile_value & 0x3fff) * 32 + (y & 7) * 4;
+        return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
+    }
+    uint16_t system24_pixel(int layer, unsigned x, unsigned y) const {
+        x &= 511; y &= 511;
+        const uint16_t value = tile(unsigned(layer & 3) * 4096 + (y / 8) * 64 + x / 8);
+        const unsigned offset = (value & 0x3fff) * 32 + (y & 7) * 4 + ((x & 7) / 2);
+        const uint8_t packed = char_ram_[offset ^ 1];
+        return uint16_t(((value >> 7) & 255) * 16 + ((x & 1) ? (packed & 15) : (packed >> 4)));
+    }
     void set_gpu_background(bool enabled) { gpu_background_ = enabled; }
     bool gpu_background() const { return external_3d_ && gpu_background_ && margin_; }
     // Like desktop main: only relocated per-item HUDs need the CPU front layer.
@@ -290,7 +305,7 @@ private:
     const std::vector<GeoPoly> *gpu_polys_ = nullptr;
     VideoMem gpu_mem_{};
     int gpu_windows_ = 0;
-    bool external_3d_ = false, desktop_ = false;
+    bool external_3d_ = false, desktop_ = false, system24_cache_ = true;
     std::vector<uint16_t> gpu_tile_words_;
     std::vector<uint32_t> gpu_pens_;
     uint64_t instance_;

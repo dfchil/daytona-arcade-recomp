@@ -36,7 +36,7 @@ struct VideoMem {
 
 class Raster {
 public:
-    Raster();
+    explicit Raster(bool allocate_target = true);
 
     // MAME render_polygons: clear, then draw windows from the last down to
     // 0, each in z-bucket order (low to high z; newest first within a

@@ -247,6 +247,7 @@ static inline void copy_frame(uint32_t *d, const uint32_t *s)
 
 void Cpu::do_call(uint32_t adr, int type, uint32_t stack)
 {
+	if (on_call) on_call(on_call_ctx, *this, adr, type); // read-only runtime diagnostic
 	int i;
 	uint32_t FP;
 
@@ -337,9 +338,11 @@ void Cpu::do_ret_0()
 void Cpu::do_ret()
 {
 	uint32_t x, y;
+	const uint32_t source = m_IP;
 	switch(m_r[I960_PFP] & 7) {
 	case 0:
 		do_ret_0();
+		if (on_return) on_return(on_return_ctx, *this, source);
 		break;
 
 	case 7:

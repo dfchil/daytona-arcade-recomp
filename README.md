@@ -19,6 +19,18 @@ MAME-format `.zip` or `.7z`): `daytona93` (Daytona USA Deluxe '93) or
 | iOS | Works on iPhone, installed through Xcode or AltStore, with touch controls or a controller; tested on a device | [platform/mobile](platform/mobile/README.md) |
 | PS Vita | Works: a native Vita app (SDL2); with vitaGL about 57.3 frames/s (the arcade runs 57.52) at CPU 444 / GPU 166 MHz, no overclocking plugin; tested on a Vita | [platform/vita](platform/vita/README.md), release build: [HOW_TO_COMPILE_RELEASE.md](HOW_TO_COMPILE_RELEASE.md) |
 | Dreamcast | Runs in the Flycast emulator with sound and the controller, about 32 frames/s (the arcade runs 57.52); not yet on a console; in progress | [platform/dreamcast](platform/dreamcast/README.md) |
+| Dreamcast, native | A separate port: the gameplay written again in C and bit-exact to the arcade, PVR-native rendering, 60 frames/s on a console, all three circuits; from `daytona93` | [dreamcast-native](dreamcast-native/README.md) |
+
+### Dreamcast, native port
+
+`dreamcast-native/` is a second Dreamcast port, separate from
+`platform/dreamcast`. It does not run the recompiled code. The game's logic is
+reimplemented in C and checked tick for tick against the recompiled game in
+this repository. Rendering uses the PVR directly, the assets are converted
+from your own `daytona93` set at build time, and music and effects play on the
+AICA through AICAflow. It runs at 60 frames/s on a Dreamcast, with all three
+circuits, the attract mode, the podium and the results. Start at
+[dreamcast-native/README.md](dreamcast-native/README.md).
 
 Every port starts from the desktop setup: the game code is generated on a
 desktop computer from your ROM set, then built for the other platform.

@@ -17,7 +17,9 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <span>
 #include <vector>
+#include "runtime/paged_rom.h"
 
 namespace rt {
 
@@ -60,11 +62,12 @@ struct GeoPoly {
 struct GeoPtr {
     uint32_t *base = nullptr;
     uint32_t size = 0, i = 0;
+    PagedRom *pages = nullptr;
 #ifdef M2_DC_MEMORY
     RomSource *rom = nullptr; // the polygon ROM, read through pages (base is null)
     mutable uint32_t rom_word = 0;
 #endif
-    bool null() const { return base == nullptr; }
+    bool null() const { return base == nullptr && pages == nullptr; }
     uint32_t &at() const {
 #ifdef M2_DC_MEMORY
         if (rom) return rom_word = rom->dword(RomRegion::Polygons, (i & (size - 1)) * 4);
@@ -72,7 +75,7 @@ struct GeoPtr {
         if (!base) throw GeoFatal("geometrizer read from missing memory");
         return base[i & (size - 1)];
     }
-    uint32_t &operator*() const { return at(); }
+    uint32_t operator*() const { return pages ? pages->read<uint32_t>(size_t(i & (size - 1)) * 4) : at(); }
     GeoPtr operator++(int) { GeoPtr t = *this; ++i; return t; }
     GeoPtr &operator+=(uint32_t n) { i += n; return *this; }
 #ifdef M2_FAST_GEO
@@ -81,6 +84,10 @@ struct GeoPtr {
     // page lookup each. (The ROM's pages are little-endian words, as the
     // Dreamcast's M2_DC_MEMORY supplies.)
     void read(uint32_t *out, uint32_t n) {
+        if (pages) {
+            for (; n; --n) *out++ = *(*this)++;
+            return;
+        }
         while (n) {
             const uint32_t w = i & (size - 1);
             uint32_t run = n < size - w ? n : size - w;
@@ -108,10 +115,12 @@ struct GeoPtr {
 struct GeoPtr16 {
     const uint16_t *base = nullptr;
     uint32_t size = 0, i = 0;
+    PagedRom *pages = nullptr;
 #ifdef M2_DC_MEMORY
     RomSource *rom = nullptr; // the texture ROM, read through pages (base is null)
 #endif
     uint16_t operator*() const {
+        if (pages) return pages->read<uint16_t>(size_t(i & (size - 1)) * 2);
 #ifdef M2_DC_MEMORY
         if (rom) return rom->word(RomRegion::Textures, (i & (size - 1)) * 2);
 #endif
@@ -122,6 +131,10 @@ struct GeoPtr16 {
 #ifdef M2_FAST_GEO
     // As GeoPtr::read, 16-bit words.
     void read(uint16_t *out, uint32_t n) {
+        if (pages) {
+            for (; n; --n) *out++ = *(*this)++;
+            return;
+        }
         while (n) {
             const uint32_t w = i & (size - 1);
             uint32_t run = n < size - w ? n : size - w;
@@ -152,7 +165,10 @@ public:
     // polygons: the model ROM (0x1000000 bytes); textures: the texture ROM
     // (0x1000000 bytes); buffer: buffer RAM (0x8000 dwords), which the
     // display list is read from.
-    Geo(const std::vector<uint8_t> &polygons, const std::vector<uint8_t> &textures, uint32_t *buffer);
+    // Takes ownership of the native-endian ROM words. M2Board moves them
+    // here, rather than retaining byte images and duplicating 32 MiB.
+    Geo(std::vector<uint32_t> polygons, std::vector<uint16_t> textures, uint32_t *buffer,
+        PagedRom *polygon_pages = nullptr, PagedRom *texture_pages = nullptr);
 #ifdef M2_DC_MEMORY
     // Both ROMs read through pages, not copied.
     Geo(RomSource &rom, uint32_t *buffer);
@@ -185,6 +201,7 @@ public:
     struct raster_state {
         const uint16_t *texture_rom = nullptr;
         uint32_t texture_rom_mask = 0;
+        PagedRom *texture_pages = nullptr;
 #ifdef M2_DC_MEMORY
         RomSource *rom = nullptr;
 #endif
@@ -210,6 +227,7 @@ public:
         uint32_t mode = 0;
         uint32_t *polygon_rom = nullptr;
         uint32_t polygon_rom_mask = 0;
+        PagedRom *polygon_pages = nullptr;
 #ifdef M2_DC_MEMORY
         RomSource *rom = nullptr;
 #endif
@@ -221,6 +239,22 @@ public:
         uint32_t polygon_ram0[0x8000] = {};
         uint32_t polygon_ram1[0x8000] = {};
     };
+
+    // Optional host asset inspection. Source coordinates are still local;
+    // raster_words independently expose the transformed reference output.
+    // The observer borrows everything for this call and requires record_pushes.
+    struct ObjectSource {
+        GeoPtr vertices;
+        uint32_t opcode, texture_points, texture_headers, address, count;
+    };
+    // Host asset inspection: own mutable geometry/raster RAM, borrow only ROM
+    // pointers/pages from a live observer snapshot. That ROM owner must outlive
+    // this instance. No display-list buffer; use inspect_object, not parse.
+    explicit Geo(const geo_state &snapshot);
+    void inspect_object(const ObjectSource &source);
+    void *object_observer_data = nullptr;
+    void (*object_observer)(void *, const geo_state &, const ObjectSource &,
+                            std::span<const uint32_t> raster_words) = nullptr;
 
     int windows() const { return raster_.cur_window; } // after parse: the last window used
     void zclip_w(uint32_t data) { raster_.master_z_clip = uint8_t(data); } // model2_3d_zclip_w

@@ -56,7 +56,7 @@ void IoBoard::write(uint32_t index, uint8_t v) {
 #ifdef M2_DC_MEMORY
 // The Dreamcast: no texture RAM vectors (the frontend's, in video RAM), a
 // two-level page table, ROM through img_.rom.
-M2Board::M2Board(Images images)
+M2Board::M2Board(Images images, bool external_3d)
     : img_(std::move(images)), ram_(0x20000), work_(0x100000), cpuctl_(0x1000), backup_(0x4000, 0xff), tile_(0x10000),
       chr_(0x80000), palette_(0x4000), xlat_(0xc000), luma_(0x20000), comm_(0x4000),
       chunks_(size_t(1) << 12), tgp_(img_.copro_tables, *img_.rom) {
@@ -66,14 +66,14 @@ M2Board::M2Board(Images images)
     map(0x00200000, 0x0021ffff, Ram, ram_.data());
     map_rom(0x00220000, 0x0023ffff, RomRegion::Program, 0x20000);
 #else
-M2Board::M2Board(Images images)
+M2Board::M2Board(Images images, bool external_3d)
     : img_(std::move(images)), ram_(0x20000), work_(0x100000), cpuctl_(0x1000), backup_(0x4000, 0xff), tile_(0x10000),
       chr_(0x80000), palette_(0x4000), xlat_(0xc000), tex0_(0x200000), tex1_(0x200000), luma_(0x20000), fb_a_(0x80000),
-      fb_b_(0x80000), comm_(0x4000), pages_(size_t(1) << (32 - kPageBits)), tgp_(img_.copro_tables, img_.copro_data) {
+      fb_b_(0x80000), comm_(0x4000), tgp_(img_.copro_tables, img_.copro_data, img_.copro_pages.get()) {
     // model2o memory map (MAME model2_base_mem, model2_tgp_mem, model2o_mem)
     map(0x00000000, 0x001fffff, Rom, img_.program.data());
     map(0x00200000, 0x0021ffff, Ram, ram_.data());
-    map(0x00220000, 0x0023ffff, Rom, img_.program.data() + 0x20000);
+    map(0x00220000, 0x0023ffff, Rom, img_.program.empty() ? nullptr : img_.program.data() + 0x20000);
 #endif
     map(0x00500000, 0x005fffff, Ram, work_.data());
     map(0x00800000, 0x00807fff, Dev, nullptr, 0, false);
@@ -100,7 +100,7 @@ M2Board::M2Board(Images images)
     map_rom(0x06000000, 0x06ffffff, RomRegion::MainData, 0x1000000);
 #else
     map(0x02000000, 0x03ffffff, Rom, img_.main_data.data());
-    map(0x06000000, 0x06ffffff, Rom, img_.main_data.data() + 0x1000000);
+    map(0x06000000, 0x06ffffff, Rom, img_.main_data.empty() ? nullptr : img_.main_data.data() + 0x1000000);
 #endif
     map(0x10000000, 0x105fffff, Dev, nullptr, 0, false);
 #ifdef M2_DC_MEMORY
@@ -127,9 +127,10 @@ M2Board::M2Board(Images images)
 #ifdef M2_DC_MEMORY
     geo_ = std::make_unique<Geo>(*img_.rom, tgp_.buffer_data());
 #else
-    geo_ = std::make_unique<Geo>(img_.polygons, img_.textures, tgp_.buffer_data());
+    geo_ = std::make_unique<Geo>(std::move(img_.polygons), std::move(img_.textures), tgp_.buffer_data(),
+                                 img_.polygon_pages.get(), img_.texture_pages.get());
 #endif
-    video_ = std::make_unique<Video>(tile_.data(), chr_.data());
+    video_ = std::make_unique<Video>(tile_.data(), chr_.data(), external_3d);
     video_->enable_write_tracking();
 }
 
@@ -160,7 +161,10 @@ void M2Board::map(uint32_t start, uint32_t end, Kind k, uint8_t *base, uint32_t 
 #ifdef M2_DC_MEMORY
             Page &p = map_page(uint32_t(a | m));
 #else
-            Page &p = pages_[uint32_t(a | m) >> kPageBits];
+            const uint32_t addr = uint32_t(a | m);
+            auto &bank = pages_[addr >> 20];
+            if (!bank) bank = std::make_unique<Page[]>(256);
+            Page &p = bank[(addr >> kPageBits) & 255];
 #endif
             p.kind = k;
             p.burst = burst;
@@ -432,6 +436,18 @@ void M2Board::tex_write(const Page &p, uint32_t addr, uint32_t lane_data) {
 
 // --- bus ---------------------------------------------------------------------
 
+const uint8_t *M2Board::rom_base(const Page &p, uint32_t addr) {
+    if (p.base) return p.base;
+    if (addr < 0x00200000 || (addr >= 0x00220000 && addr < 0x00240000)) {
+        if (!img_.program_pages) throw Fatal("program data ROM missing");
+        const uint32_t offset = addr < 0x00200000 ? addr : 0x20000 + (addr & 0x1ffff);
+        return img_.program_pages->page(offset);
+    }
+    if (!img_.main_pages) throw Fatal("main data ROM missing");
+    const uint32_t offset = addr >= 0x06000000 ? 0x1000000 + (addr & 0xffffff) : addr & 0x1ffffff;
+    return img_.main_pages->page(offset);
+}
+
 uint32_t M2Board::fetch(uint32_t addr) {
     const Page &p = page(addr);
     if (p.kind != Rom && p.kind != Ram) throw Fatal("instruction fetch from a device");
@@ -442,7 +458,7 @@ uint32_t M2Board::fetch(uint32_t addr) {
         return v;
     }
 #endif
-    std::memcpy(&v, M2_AL(p.base + (addr & 0xffc), 4), 4);
+    std::memcpy(&v, M2_AL((p.kind == Rom ? rom_base(p, addr) : p.base) + (addr & 0xffc), 4), 4);
     return v;
 }
 
@@ -489,10 +505,10 @@ uint8_t M2Board::read_byte(uint32_t addr) {
     switch (p.kind) {
 #ifdef M2_FAST_BUS
     case Ram: case Tex: fast_read(addr, p); return p.base[addr & 0xfff];
-    case Rom: return p.base[addr & 0xfff];
 #else
-    case Rom: case Ram: case Tex: return p.base[addr & 0xfff];
+    case Ram: case Tex: return p.base[addr & 0xfff];
 #endif
+    case Rom: return rom_base(p, addr)[addr & 0xfff];
     case Dev: return uint8_t(dev_read(addr & ~3u, 0xffu << sh) >> sh);
     default: return 0;
     }
@@ -524,7 +540,7 @@ uint16_t M2Board::read_word(uint32_t addr) {
     case Rom: case Ram: case Tex: {
 #endif
         uint16_t v;
-        std::memcpy(&v, M2_AL(p.base + (addr & 0xfff), 2), 2);
+        std::memcpy(&v, M2_AL((p.kind == Rom ? rom_base(p, addr) : p.base) + (addr & 0xfff), 2), 2);
         return v;
     }
     case Dev: return uint16_t(dev_read(addr & ~3u, 0xffffu << sh) >> sh);
@@ -567,7 +583,7 @@ uint32_t M2Board::read_dword(uint32_t addr) {
     case Rom: case Ram: case Tex: {
 #endif
         uint32_t v;
-        std::memcpy(&v, M2_AL(p.base + (addr & 0xfff), 4), 4);
+        std::memcpy(&v, M2_AL((p.kind == Rom ? rom_base(p, addr) : p.base) + (addr & 0xfff), 4), 4);
         return v;
     }
     case Dev: return dev_read(addr, 0xffffffffu);

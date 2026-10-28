@@ -74,7 +74,13 @@ bool Lockstep::apply() {
             free_calls_.push_back(fn);
             call();
 #else
-            calls_[fn]();
+            if (free_run_) {
+                auto call = std::move(calls_[fn]);
+                free_calls_.push_back(fn);
+                call();
+            } else {
+                calls_[fn]();
+            }
 #endif
         } else if (e.kind == Event::Line) {
             ++next_;
@@ -120,8 +126,14 @@ void Lockstep::add_callback(uint64_t at, std::function<void()> fn) {
         calls_.push_back(std::move(fn));
     }
 #else
-    e.fn = calls_.size();
-    calls_.push_back(std::move(fn));
+    if (free_run_ && !free_calls_.empty()) {
+        e.fn = free_calls_.back();
+        free_calls_.pop_back();
+        calls_[e.fn] = std::move(fn);
+    } else {
+        e.fn = calls_.size();
+        calls_.push_back(std::move(fn));
+    }
 #endif
     // Before the first event at the same count or later (the log is in count order).
     auto it = log_.begin() + long(next_);
@@ -141,7 +153,7 @@ void Lockstep::on_take(void *ctx, int vector, uint32_t ip, bool pending) {
     if (n >= log.size() || log[n].count != t.count || log[n].a != vector || log[n].ip != ip ||
         (log[n].kind == Event::Pend) != pending || (log[n].kind == Event::Imm) != !pending) {
         char buf[256];
-        std::snprintf(buf, sizeof buf,
+        ::snprintf(buf, sizeof buf,
                       "interrupt taken here that MAME did not take: %s vector %d at ip %08x, instruction %" PRIu64
                       "; MAME's next event: count %" PRIu64 " vector %d ip %08x",
                       pending ? "pending" : "immediate", vector, ip, t.count, n < log.size() ? log[n].count : 0,
