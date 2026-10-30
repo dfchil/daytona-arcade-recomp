@@ -965,6 +965,10 @@ endif
 #   symbol in the LTO unit fails silently; KOS's pvr_*/fs_* wraps above work because KOS is outside it). After
 #   NATIVE_PAD_MONKEY_FRAMES frames (default 60000, 17 minutes: three to five games by the race's time-out) the pad
 #   is released, a line printed and the run returns to the loader.
+#   NATIVE_PAD_MONKEY_SCHEDULE=2 (suffix -schedule2): the credits pressed a fixed number of frames into the cinematic,
+#   the V.R. demo and the title in turn (schedule 1's all land in the cinematic), and the select scripted: the stick's
+#   excursions pick the course slot (Beginner, Advanced, Expert, Advanced in turn) and every other game is manual
+#   (tests/pad_monkey.c).
 ifeq ($(NATIVE_PAD_MONKEY),1)
 ifdef NATIVE_RACE_SCRIPT
 $(error NATIVE_PAD_MONKEY drives the pad, which a NATIVE_RACE_SCRIPT run ignores)
@@ -972,9 +976,11 @@ endif
 ifdef NATIVE_DRIVING_TEST
 $(error NATIVE_PAD_MONKEY drives the pad, which NATIVE_DRIVING_TEST does not read)
 endif
-ENJ_BASENAME := $(ENJ_BASENAME)-monkey$(NATIVE_PAD_MONKEY_FRAMES)
+NATIVE_PAD_MONKEY_SCHEDULE ?= 1
+ENJ_BASENAME := $(ENJ_BASENAME)-monkey$(NATIVE_PAD_MONKEY_FRAMES)$(if $(filter-out 1,$(NATIVE_PAD_MONKEY_SCHEDULE)),-schedule$(NATIVE_PAD_MONKEY_SCHEDULE))
 OBJS += $(ENJ_BUILDDIR)/tests/pad_monkey.o
-$(ENJ_BUILDDIR)/tests/pad_monkey.o: DEFINES += -fno-lto $(if $(NATIVE_PAD_MONKEY_FRAMES),-DNATIVE_PAD_MONKEY_FRAMES=$(NATIVE_PAD_MONKEY_FRAMES))
+$(ENJ_BUILDDIR)/tests/pad_monkey.o: DEFINES += -fno-lto $(if $(NATIVE_PAD_MONKEY_FRAMES),-DNATIVE_PAD_MONKEY_FRAMES=$(NATIVE_PAD_MONKEY_FRAMES)) \
+  -DNATIVE_PAD_MONKEY_SCHEDULE=$(NATIVE_PAD_MONKEY_SCHEDULE)
 $(ENJ_BUILDDIR)/enDjinn/code/enj_ctrl.o: DEFINES += -fno-lto
 ENJ_LDFLAGS += -Wl,--wrap=enj_ctrl_get_states -Wl,--wrap=enj_ctrl_map_states
 else ifneq ($(filter-out 0,$(NATIVE_PAD_MONKEY)),)
