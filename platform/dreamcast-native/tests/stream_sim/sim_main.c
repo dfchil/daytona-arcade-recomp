@@ -1208,9 +1208,10 @@ static int hud_sheets_load(const char *folder) {
     FILE *f=fopen(name,"rb"); if(!f) return 0;
     if(fread(palette,4,2,f)!=2 || palette[0]!=0x4c415044u || palette[1]>16*8 || fread(palette+2,4,palette[1],f)!=palette[1]) { fclose(f); return 0; }
     colours=palette[1]; fclose(f);
-    for(hud_sheet_count=0;hud_sheet_count<colours/16;++hud_sheet_count) {
+    (void)colours;
+    for(hud_sheet_count=0;hud_sheet_count<8;++hud_sheet_count) { /* A palette bank can span sheets: as many as there are files. */
         snprintf(name,sizeof name,"%s/hud/sheet-%u.dt",folder,hud_sheet_count);
-        if(!(f=fopen(name,"rb"))) return 0;
+        if(!(f=fopen(name,"rb"))) break;
         uint32_t head[8]; if(fread(head,4,8,f)!=8 || head[0]!=0x78546344u || (head[4]>>27&7)!=5) { fclose(f); return 0; }
         pvr_alpha_t *a=hud_sheets+hud_sheet_count; a->w=head[3]&0xffffu; a->h=head[3]>>16;
         uint8_t *data=malloc(a->w*a->h/2); if(fread(data,1,a->w*a->h/2,f)!=a->w*a->h/2) { fclose(f); return 0; }
@@ -1221,7 +1222,7 @@ static int hud_sheets_load(const char *folder) {
             unsigned index=(x/side+y/side)*side*side;
             for(unsigned bit=0;(1u<<bit)<side;++bit) index|=((y>>bit)&1u)<<(2*bit) | ((x>>bit)&1u)<<(2*bit+1);
             a->index[y*a->w+x]=(data[index/2]>>(index&1 ? 4 : 0))&15;
-            a->opaque[y*a->w+x]=(palette[2+16*hud_sheet_count+a->index[y*a->w+x]]>>24)>=128;
+            a->opaque[y*a->w+x]=a->index[y*a->w+x]!=0; /* Entry 0 of every bank is the transparent one (prepare_hud.py). */
         }
         free(data);
     }

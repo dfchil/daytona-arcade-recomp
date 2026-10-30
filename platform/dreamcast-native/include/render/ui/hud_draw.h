@@ -124,14 +124,16 @@ static __attribute__((noinline, unused)) void nm_hud_map_apart(nm_hud_list_t *li
     const nm_hud_course_map_t *m=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
     if(!m) return;
     const float (*leader)[3]=m->leader,(*player)[3]=m->player;
-    const float ax=leader[0][2],ay=leader[1][2],standard=((const float *)nm_hud_map_scales[h->course])[1];
+    const float ax=leader[0][2],ay=leader[1][2],standard=nm_force_float(nm_hud_map_scales[h->course][1]);
     const float k=h->map_scale==standard ? 1.0f : h->map_scale*(1.0f/standard);
     float s,c;
     if(k==1.0f) nm_hud_sprite(list,m->sprite,(float)m->x,(float)m->y,1.0f,0.0f);
     else {
         nm_hud_sprite(list,m->sprite,ax+k*((float)m->x-ax),ay+k*((float)m->y-ay),k,0.0f);
         for(unsigned i=0;i+1<list->count;++i) if(list->quads[i].sprite==NM_HUD_CONDITION_LABEL) {
-            const nm_hud_quad_t q=list->quads[i];list->quads[i]=list->quads[list->count-1];list->quads[list->count-1]=q;
+            nm_hud_quad_t q;
+            nm_memcpy(&q,list->quads+i,sizeof(q));nm_memcpy(list->quads+i,list->quads+list->count-1,sizeof(q));
+            nm_memcpy(list->quads+list->count-1,&q,sizeof(q));
             break;
         }
     }

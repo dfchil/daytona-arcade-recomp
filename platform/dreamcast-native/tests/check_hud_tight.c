@@ -202,7 +202,7 @@ static void row_parse(const char *line,nm_hud_t *h) {
     const char *size=strstr(line," mapsize="); /* The map's size (the chord); rows made before the field have none. */
     if(size) {
         h->map_index=(uint8_t)strtoul(size+9,&end,10);h->map_scale=bits_float(end+1,NULL);
-        h->map_apart=h->map_scale!=((const float *)nm_hud_map_scales[h->course])[1] || h->course || h->leader_second;
+        h->map_apart=h->map_scale!=nm_force_float(nm_hud_map_scales[h->course][1]) || h->course || h->leader_second;
     }
     const char *message=strstr(line," message="); /* ad34; the time back from its cells to ticks at nm_hud_time's rate. */
     if(message) {

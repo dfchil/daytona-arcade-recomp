@@ -316,10 +316,11 @@ static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, cons
             if(index<3u && !(vr&1u)) hud->radar_index=(uint8_t)index;
             else if(index<3u) hud->map_index=(uint8_t)index;
         }
-        const float *table=(const float *)nm_hud_map_scales[hud->course<3u ? hud->course : 0u];
-        if(hud->map_scale==0.0f) hud->map_scale=table[1];
-        hud->map_scale=nm_force_float(0x3e4ccccdu)*(table[hud->map_index]-hud->map_scale)+hud->map_scale;
-        hud->map_apart=hud->map_scale!=table[1] || hud->course || c->leader_second;
+        const uint32_t *table=nm_hud_map_scales[hud->course<3u ? hud->course : 0u];
+        const float standard=nm_force_float(table[1]);
+        if(hud->map_scale==0.0f) hud->map_scale=standard;
+        hud->map_scale=nm_force_float(0x3e4ccccdu)*(nm_force_float(table[hud->map_index])-hud->map_scale)+hud->map_scale;
+        hud->map_apart=hud->map_scale!=standard || hud->course || c->leader_second;
     }
     if(race->active_phase==22 && !(c->start_flags&1u) && c->completed && hud->lap_ticks>0 && !(race->finish_flags&2u)) {
         hud->lap_label=0;
