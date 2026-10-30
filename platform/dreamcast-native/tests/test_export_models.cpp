@@ -114,13 +114,8 @@ static void check_lighting() {
 static void check_race_scenery_lights() {
     std::mt19937 random(0x574c4954);
     const auto value=[&]() { return (int(random()%20001)-10000)/10000.f; };
-    for (unsigned i=0;i<65536;++i) {
-        daytona::native::ModelFace face{};
-        for (float &n : face.normal) n=4*value();
-        auto &l=face.lighting;
-        l.diffuse=random()%256; l.ambient=i%4 ? random()%256 : 255;
-        l.specular_control=random()%256; l.specular_scale=l.ambient==255 ? random()%256 : 0;
-        const unsigned mode=i&1;
+    const auto check=[&](const daytona::native::ModelFace &face,unsigned mode) {
+        const auto &l=face.lighting;
         const auto allowed=daytona::native::race_scenery_lumas(face,mode);
         // Independent quaternion-derived rigid rotations, not exported views.
         double q[4]={value(),value(),value(),value()}, length=0;
@@ -149,6 +144,25 @@ static void check_race_scenery_lights() {
         material.specular_control=l.specular_control; material.specular_scale=l.specular_scale;
         const int actual=nm_face_lighting(mode,normal,points,light,&material);
         assert(actual>=0 && allowed.contains(uint16_t(actual&255)));
+    };
+    for (unsigned i=0;i<65536;++i) {
+        daytona::native::ModelFace face{};
+        for (float &n : face.normal) n=4*value();
+        auto &l=face.lighting;
+        l.diffuse=random()%256; l.ambient=i%4 ? random()%256 : 255;
+        l.specular_control=random()%256; l.specular_scale=l.ambient==255 ? random()%256 : 0;
+        check(face,i&1);
+    }
+    // Variable specular (mode 1, ambient below 255, control and scale non-zero;
+    // Expert's glass and metal): every luma the term reaches under a rigid view.
+    for (unsigned i=0;i<65536;++i) {
+        daytona::native::ModelFace face{};
+        for (float &n : face.normal) n=4*value();
+        auto &l=face.lighting;
+        l.diffuse=random()%256; l.ambient=random()%255;
+        l.specular_control=1+random()%255; l.specular_scale=1+random()%255;
+        assert(daytona::native::race_scenery_specular(l,1));
+        check(face,1);
     }
     daytona::native::ModelFace bad{};
     const auto rejects=[&](unsigned mode) {
@@ -158,10 +172,13 @@ static void check_race_scenery_lights() {
     };
     assert(rejects(2) && rejects(3));
     bad.lighting.specular_control=bad.lighting.specular_scale=1;
-    assert(rejects(1));
+    assert(!rejects(1));
+    bad.lighting.specular_scale=-1; assert(rejects(1));
+    bad.lighting.specular_scale=1; bad.lighting.specular_control=256; assert(rejects(1));
+    bad.lighting.specular_control=0;
     bad.lighting.specular_scale=0; bad.normal[0]=4.01f; assert(rejects(0));
     bad.normal[0]=NAN; assert(rejects(0));
-    puts("PASS: 65536 rigid-view scenery light envelopes, FTRV perturbations and unsupported material rejection");
+    puts("PASS: 131072 rigid-view scenery light envelopes, variable specular, FTRV perturbations and unsupported material rejection");
 }
 
 int main() {
