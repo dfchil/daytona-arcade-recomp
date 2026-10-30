@@ -931,6 +931,35 @@ endif
 ENJ_BASENAME := $(ENJ_BASENAME)-race-script
 ENJ_CFLAGS += -DNATIVE_RACE_SCRIPT -I$(abspath $(NATIVE_RACE_SCRIPT_DIR))
 endif
+# NATIVE_PAD_MONKEY=1 (test build; ELF suffix -monkey, -monkeyN with NATIVE_PAD_MONKEY_FRAMES=N): a scripted pad on
+#   port A in place of the real one (tests/pad_monkey.c), for an unattended console run through several games on the
+#   production paths (attract, credit, select, race, results, name entry, attract again): the accelerator held with
+#   short releases (the select screens confirm on the trigger's edge), the stick swinging slowly from lock to lock
+#   (walls and traffic), START for four frames every 600 frames or so with a drifting period (a credit in the
+#   cinematic, the title or the V.R. demo; a slot reel stop in a race), the left trigger never (the settings chord),
+#   no other button (A and X shift, B resets the session, Y and the D-pad pick views). enDjinn's pad refresh at the
+#   top of every frame (enj_ctrl_map_states) steps the script, so every reader of a frame sees one state and one
+#   edge; it and enj_ctrl_get_states are wrapped at link time (enDjinn and the product's sources are unchanged).
+#   Both units are built outside the LTO unit: whole-program LTO inlines enj_ctrl_get_states (one load) into every
+#   reader and resolves the engine's own calls, and the link's --wrap then sees no call to redirect (a wrap of a
+#   symbol in the LTO unit fails silently; KOS's pvr_*/fs_* wraps above work because KOS is outside it). After
+#   NATIVE_PAD_MONKEY_FRAMES frames (default 60000, 17 minutes: three to five games by the race's time-out) the pad
+#   is released, a line printed and the run returns to the loader.
+ifeq ($(NATIVE_PAD_MONKEY),1)
+ifdef NATIVE_RACE_SCRIPT
+$(error NATIVE_PAD_MONKEY drives the pad, which a NATIVE_RACE_SCRIPT run ignores)
+endif
+ifdef NATIVE_DRIVING_TEST
+$(error NATIVE_PAD_MONKEY drives the pad, which NATIVE_DRIVING_TEST does not read)
+endif
+ENJ_BASENAME := $(ENJ_BASENAME)-monkey$(NATIVE_PAD_MONKEY_FRAMES)
+OBJS += $(ENJ_BUILDDIR)/tests/pad_monkey.o
+$(ENJ_BUILDDIR)/tests/pad_monkey.o: DEFINES += -fno-lto $(if $(NATIVE_PAD_MONKEY_FRAMES),-DNATIVE_PAD_MONKEY_FRAMES=$(NATIVE_PAD_MONKEY_FRAMES))
+$(ENJ_BUILDDIR)/enDjinn/code/enj_ctrl.o: DEFINES += -fno-lto
+ENJ_LDFLAGS += -Wl,--wrap=enj_ctrl_get_states -Wl,--wrap=enj_ctrl_map_states
+else ifneq ($(filter-out 0,$(NATIVE_PAD_MONKEY)),)
+$(error NATIVE_PAD_MONKEY must be 0 or 1)
+endif
 ifdef NATIVE_GAMEPLAY_SH4ZAM
 # Timing comparison only: approximate SH4ZAM divide/length in car state.
 ENJ_CFLAGS += -DNM_GAMEPLAY_SH4ZAM
