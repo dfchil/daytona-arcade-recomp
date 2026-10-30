@@ -1203,12 +1203,11 @@ static struct { unsigned count; const uint8_t *kind; const float (*matrix)[12]; 
 static float sim_road_depth=NM_ROAD_DEPTH_SCALE;
 static uint64_t frame_extra_ta;
 static int hud_sheets_load(const char *folder) {
-    char name[512]; uint32_t palette[2+16*8]; unsigned colours=0;
+    char name[512]; uint32_t palette[2+16*8];
     snprintf(name,sizeof name,"%s/hud/hud.dp",folder);
     FILE *f=fopen(name,"rb"); if(!f) return 0;
     if(fread(palette,4,2,f)!=2 || palette[0]!=0x4c415044u || palette[1]>16*8 || fread(palette+2,4,palette[1],f)!=palette[1]) { fclose(f); return 0; }
-    colours=palette[1]; fclose(f);
-    (void)colours;
+    fclose(f);
     for(hud_sheet_count=0;hud_sheet_count<8;++hud_sheet_count) { /* A palette bank can span sheets: as many as there are files. */
         snprintf(name,sizeof name,"%s/hud/sheet-%u.dt",folder,hud_sheet_count);
         if(!(f=fopen(name,"rb"))) break;
