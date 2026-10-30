@@ -328,6 +328,19 @@ int main(int argc,char **argv) {
                 assert(!memcmp(&got,plain+i,sizeof(got)));
             }
             if(road) {
+                /* Another camera's scale (sq_road_depth_set): the road class of the emission table, and so the
+                 * emitter, take it; 1 is refused; then the build's scale again. */
+                materials.count=1;
+                assert(sq_emit_records_prepare(1) && sq_emit_records[1][0].group->depth==NM_ROAD_DEPTH_SCALE);
+                sq_road_depth_set(1.0f); assert(sq_road_depth==NM_ROAD_DEPTH_SCALE);
+                sq_road_depth_set(0.755f); assert(sq_road_depth==0.755f && sq_emit_records[1][0].group->depth==0.755f);
+                reset(); assert(sq_emit_range(PVR_LIST_OP_POLY,1,2,0,UINT_MAX) && writes==5);
+                for(unsigned i=1;i<5;++i)
+                    assert(stream[i].vertex.z==points[(i==1)?1:(i==2)?2:(i==3)?0:3].q*(0.755f*(1.0f+(float)layer*NM_LAYER_DEPTH_STEP)));
+                sq_road_depth_set(NM_ROAD_DEPTH_SCALE); assert(sq_emit_records[1][0].group->depth==NM_ROAD_DEPTH_SCALE);
+                sq_emit_records_release(1); materials.count=0;
+            }
+            if(road) {
                 sq_sources[1].batches=NULL; sq_sources[1].count=0; batch.source=0;
                 world_draw.pack=NULL; world_draw.materials=NULL; world_draw.cache=NULL;
                 sq_surface_bindings=NULL;
@@ -335,7 +348,7 @@ int main(int argc,char **argv) {
             ++checked;
         }
         faces[0].layer=0;
-        printf("PASS: face layers, %u layer/road-surface cases; depth only, exact table product\n",checked);
+        printf("PASS: face layers, %u layer/road-surface cases; depth only, exact table product; road class rewritten to another scale\n",checked);
     }
     faces[0].count=4;
     binding.color=0x7f123456; /* Exercise opaque-alpha forcing, including PT. */

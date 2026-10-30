@@ -593,6 +593,38 @@ int nm_practice_render_player_car(nm_practice_scene_t *scene) {
         scene->window_vertex_count,scene->intro.reflection_u,scene->intro.reflection_v))) return 0;
     return 1;
 }
+/* The road class's depth scale of this frame's camera (render/models/model_renderer.h, NM_ROAD_DEPTH_SCALE). In a
+ * race view (the race frame's camera mode 0 or 2, race_view.h): h/(h+NM_ROAD_SINK) for h the highest of the four
+ * presets' eye heights (VR1..VR4 1.05, 1.10, 1.85, 3.74: 0.636, 0.647, 0.755, 0.862) that the drawn eye has
+ * reached. The eye height word 501724 moves an eighth of the way to its target a tick (8814): from the last view's
+ * after a change, from the reset record's (1.85) after the crash or start camera, to the reset record's at the
+ * finish; the view's own preset would put the scale above what the eye's height allows on the way up (VR1 to
+ * VR4: some 20 ticks) and cut the wheels again. The frame draws the word the previous tick's update left: the
+ * lower of the last frame's and this one's. Every other camera (attract, podium, the keyed race cameras, the
+ * inspector): NM_ROAD_DEPTH_SCALE. A change rewrites the road class (nm_render_road_depth): at most three times a
+ * view change, never per frame. Render only: the gameplay words are read, none is written. */
+#define PRACTICE_ROAD_REACHED (1.0f/1024.0f) /* an eased word stops some ulps short of its target */
+static float practice_road_depth=NM_ROAD_DEPTH_SCALE; /* this frame's; the shadow prisms take it too */
+static __attribute__((noinline)) void practice_road_depth_pick(const nm_practice_scene_t *scene) {
+#ifndef NM_ROAD_DEPTH_FIXED
+    static float last; /* the eye height word after the last frame's tick */
+    const nm_race_view_frame_t *const frame=&scene->race.camera_frame;
+    const float now=nm_force_float(scene->race.cars[0].car.camera_words[1]),eye=now<last ? now : last;
+    last=now;
+    float scale=NM_ROAD_DEPTH_SCALE,reached=0;
+    if(!scene->attract_active && !scene->inspect_paused && frame->valid && (frame->mode==0 || frame->mode==2) &&
+       scene->race.view_presets) {
+        for(unsigned k=0;k<4;++k) {
+            const float h=nm_force_float(scene->race.view_presets[k].words[0]);
+            if(h>reached && h<=eye+PRACTICE_ROAD_REACHED) reached=h;
+        }
+        if(reached>0) scale=shz_divf(reached,reached+NM_ROAD_SINK);
+    }
+    if(scale!=practice_road_depth) practice_road_depth=nm_render_road_depth(scale);
+#else
+    (void)scene; /* make NATIVE_DIAG_ROAD_DEPTH: every camera at NM_ROAD_DEPTH_SCALE */
+#endif
+}
 /* Ground shadows as PVR modifier volumes. The original draws the authored
  * footprints (opponents 8d9e42 solid black; player 8d7ab7 black on every other
  * pixel of a screen checkerboard, raster checker bit) as flat polygons sorted
@@ -601,8 +633,9 @@ int nm_practice_render_player_car(nm_practice_scene_t *scene) {
  * extruded along world-vertical into a closed prism on the opaque modifier
  * list; road-surface polygons carry the cheap-shadow bit (compile_draw_header)
  * and are darkened by the global shadow scale where they pass through a
- * prism. The surface is written at NM_ROAD_DEPTH_SCALE of its true depth, so
- * the prisms are too; rails and walls keep true depth and do not receive.
+ * prism. The surface is written at this frame's road depth scale
+ * (practice_road_depth) of its true depth, so the prisms are too; rails and
+ * walls keep true depth and do not receive.
  * Selection and pose are unchanged: every shadow instance the part lists
  * produce is taken out of the mesh stream and becomes one volume. */
 #define PRACTICE_SHADOW_REACH 1.0f /* Up and down from the posed footprint, world units. */
@@ -700,7 +733,7 @@ typedef struct {
 } practice_shadow_build_t;
 static void practice_shadow_project(practice_shadow_build_t *b,const float *v,float *out) {
     const float q=shz_invf_fsrra(v[2]);
-    out[0]=b->cx+v[0]*b->focus*q;out[1]=b->cy-v[1]*b->focus*q;out[2]=q*NM_ROAD_DEPTH_SCALE;
+    out[0]=b->cx+v[0]*b->focus*q;out[1]=b->cy-v[1]*b->focus*q;out[2]=q*practice_road_depth;
     b->left&=out[0]<0;b->right&=out[0]>496;b->above&=out[1]<0;b->below&=out[1]>384;
     out[0]*=(640.0f/496.0f)*ENJ_XSCALE;out[1]*=480.0f/384.0f;
 }
@@ -1241,6 +1274,8 @@ static int practice_prepare(nm_practice_scene_t *scene) {
         if(!nm_contact_scenery_cell(position.x,position.z,&cell) ||
             !nm_scenery_cells(scene->scenery.orders[0],cell,0,0x1ffffffu,&scene->inspect_cells)) return 0;
     } else scene->inspect_camera_active=0;
+    /* The road class's depth scale of this frame's camera: before the shadow prisms and the world's lists. */
+    practice_road_depth_pick(scene);
     /* Scenery by stage (render/scene/track_surface.h). The sky is four
      * opaque quads at NM_SKY_DEPTH behind everything the renderer accepts. */
     const int setup_failed=!nm_practice_render_projection(scene,1) ||

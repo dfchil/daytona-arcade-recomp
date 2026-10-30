@@ -537,7 +537,7 @@ static int draw_emit_value(unsigned s,unsigned index,nm_sq_emit_t *out,pvr_poly_
     out->argb=nm_material_argb(materials,binding);
     out->origin[0]=uv.origin[0]; out->origin[1]=uv.origin[1];
     out->scale[0]=uv.scale[0]; out->scale[1]=uv.scale[1];
-    out->depth=s && sq_surface_bindings && sq_surface_bindings[index] ? NM_ROAD_DEPTH_SCALE : 1.0f;
+    out->depth=s && sq_surface_bindings && sq_surface_bindings[index] ? sq_road_depth : 1.0f;
     out->padding=0;
     return 1;
 }
@@ -854,6 +854,7 @@ void nm_render_world_capacity(unsigned points,unsigned faces) {
     sq_world_point_bound=points;sq_world_face_bound=faces;
 }
 void nm_render_world_streams(int enabled) { sq_stream_wanted=enabled!=0; }
+float nm_render_road_depth(float scale) { sq_road_depth_set(scale); return sq_road_depth; }
 unsigned nm_render_world_stream_idle(unsigned budget_us) { return sq_stream_idle(budget_us); }
 
 /* Frame-counter animations (include/clock_actors.h): the course's DNA1 file, owned by the scene
@@ -1223,8 +1224,14 @@ int nm_render_world_attach(const nm_pack_t *pack) {
         if(point_bindings) printf("Native split cutouts: %u opaque bindings point sampled\n",point_bindings);
         free(material_class);
         sq_surface_bindings=world_draw.surface;
-        printf("Native road surface class: %u of %u drawn materials, %u bindings; depth scale %g\n",
-            surface_materials,used,surface_bindings,(double)NM_ROAD_DEPTH_SCALE);
+#ifdef NM_ROAD_DEPTH_FIXED
+        printf("Native road surface class: %u of %u drawn materials, %u bindings; depth scale %g for every camera "
+            "(NATIVE_DIAG_ROAD_DEPTH)\n",surface_materials,used,surface_bindings,(double)sq_road_depth);
+#else
+        printf("Native road surface class: %u of %u drawn materials, %u bindings; depth scale %g now: a race view's "
+            "h/(h+%g) of its eye height h, %g for every other camera\n",surface_materials,used,surface_bindings,
+            (double)sq_road_depth,(double)NM_ROAD_SINK,(double)NM_ROAD_DEPTH_SCALE);
+#endif
     }
     {
         /* Binding of each live face per side, once: the pack's lumas, this

@@ -858,11 +858,12 @@ endif
 ENJ_BASENAME := $(ENJ_BASENAME)-opb$(NATIVE_DIAG_OPB)
 ENJ_CFLAGS += -DNM_DIAG_OPB=$(NATIVE_DIAG_OPB)
 endif
-# NATIVE_DIAG_ROAD_DEPTH=<factor>: depth written for the road-surface class relative to true 1/z (the build's own
-#   value is 0.5, render/models/model_renderer.h). 1.0 draws the road at its true depth: cars are cut by it.
+# NATIVE_DIAG_ROAD_DEPTH=<factor>: depth written for the road-surface class relative to true 1/z, the same for every
+#   camera (the build's own is the race view's, h/(h+0.6) of its eye height h, and 0.5 for the other cameras:
+#   render/models/model_renderer.h). 1.0 draws the road at its true depth: cars are cut by it.
 ifdef NATIVE_DIAG_ROAD_DEPTH
 ENJ_BASENAME := $(ENJ_BASENAME)-roaddepth$(NATIVE_DIAG_ROAD_DEPTH)
-ENJ_CFLAGS += -DNM_ROAD_DEPTH_SCALE=$(NATIVE_DIAG_ROAD_DEPTH)f
+ENJ_CFLAGS += -DNM_ROAD_DEPTH_SCALE=$(NATIVE_DIAG_ROAD_DEPTH)f -DNM_ROAD_DEPTH_FIXED=1
 endif
 # NATIVE_DIAG_FILL_PROBE=pt|tr|presort|add: not an effect, a fill probe (code/render/scene/practice.c): while the race
 #   runs, two layers of a 256x256-pixel quad (131,072 pixel samples a frame, the arcade's average tyre-smoke frame) on

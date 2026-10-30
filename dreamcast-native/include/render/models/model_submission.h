@@ -2766,6 +2766,10 @@ static inline __attribute__((always_inline)) int sq_point_drawable(const nm_cach
 /* World binding index -> 1 when every face of its materials is road surface
  * (nm_render_world_attach). NULL: no world class, true depth everywhere. */
 static const uint8_t *sq_surface_bindings;
+/* The depth class of those bindings now: NM_ROAD_DEPTH_SCALE until the scene
+ * sets its camera's (nm_render_road_depth, sq_road_depth_set below the
+ * stream records). The emission classes and stream records hold it. */
+static float sq_road_depth=NM_ROAD_DEPTH_SCALE;
 /* TA bytes of the model stream: every header and every vertex is 32 bytes.
  * The guard charges what is actually written (a strip of n triangles is n+2
  * vertices, not 3n); draw_ta_fits counts in units of three vertices. The
@@ -2798,7 +2802,7 @@ typedef struct {
     const pvr_poly_hdr_t *header;
     uint32_t argb;
     float origin[2], scale[2];
-    float depth; /* NM_ROAD_DEPTH_SCALE for a road-surface binding, else 1 */
+    float depth; /* sq_road_depth for a road-surface binding, else 1 */
     uint32_t padding;
 } nm_sq_emit_t;
 typedef struct {
@@ -2826,7 +2830,7 @@ static inline void sq_emit_lookup(nm_sq_emit_t *out,unsigned s,unsigned index) {
     out->argb=nm_material_argb(materials,binding);
     out->origin[0]=cache[index].uv.origin[0]; out->origin[1]=cache[index].uv.origin[1];
     out->scale[0]=cache[index].uv.scale[0]; out->scale[1]=cache[index].uv.scale[1];
-    out->depth=s && sq_surface_bindings && sq_surface_bindings[index] ? NM_ROAD_DEPTH_SCALE : 1.0f;
+    out->depth=s && sq_surface_bindings && sq_surface_bindings[index] ? sq_road_depth : 1.0f;
     out->padding=0;
 }
 /* The whole value of a binding from the table. */
@@ -6338,6 +6342,46 @@ static int sq_stream_prepare(const nm_pack_t *pack) {
     return 1;
 }
 #endif
+/* The road-surface depth class at another scale (nm_render_road_depth: the
+ * scene's camera changed, a rare event). The world's emission classes of the
+ * road bindings: a class key holds the depth, so while it is below 1 no other
+ * binding has such a class. Then every prebuilt stream record whose binding is
+ * road surface (every binding its face can take has the front's class,
+ * sq_stream_check): its class's depth times the face's layer factor, as
+ * sq_stream_job_step forms it. A mesh the record cache is building starts
+ * again (what it wrote is not on the path yet); records built later read the
+ * classes. In a frame's setup or between frames: nothing holds a class or a
+ * record across it, and the stream stays the queue path's word for word.
+ * Cost: one pass over the bindings and over the records of the meshes on the
+ * path (a whole-table course's ~15,000). */
+static __attribute__((noinline)) void sq_road_depth_set(float scale) {
+    if(scale==sq_road_depth || !(scale>0.0f && scale<1.0f) || !(sq_road_depth<1.0f)) return;
+    sq_road_depth=scale;
+    nm_sq_class_t *const classes=sq_emit_classes[1];
+    const nm_sq_bind_t *const records=sq_emit_records[1];
+    if(!classes || !records || !sq_surface_bindings || !world_draw.materials) return;
+    for(unsigned b=0;b<world_draw.materials->count;++b)
+        if(sq_surface_bindings[b]) classes[records[b].group-classes].depth=scale;
+#if SQ_STREAMS
+    const nm_pack_t *const pack=sq_stream_pack;
+    if(!sq_stream_faces || !pack) return;
+    const unsigned meshes=((const nm_header_t *)pack->data)->meshes;
+    for(unsigned m=0;m<meshes;++m) {
+        if(!sq_stream_meshes[m]) continue;
+        const nm_mesh_t *const mesh=pack->meshes+m;
+        const nm_face_t *const faces=pack->faces+mesh->face_first;
+        nm_sq_stream_face_t *const out=sq_stream_table[m].faces;
+        for(unsigned r=0;r<mesh->face_count;++r) {
+            if(!sq_surface_bindings[out[r].front]) continue;
+            const unsigned layer=faces[out[r].index].layer;
+            const float depth=records[out[r].front].group->depth;
+            out[r].depth=layer ? depth*draw_layer_scale[layer] : depth;
+        }
+    }
+    if(sq_stream_pool_bytes && sq_stream_job.mesh!=UINT_MAX)
+        sq_stream_job_start(&sq_stream_job,sq_stream_job.mesh,sq_stream_job.block);
+#endif
+}
 #if defined(__DREAMCAST__) || defined(NM_HOST_BAKED_WORLD)
 /* Before the world's batches are walked: this frame's bindings of the live faces of the meshes the frame draws
  * (`pack`'s live instance table, the visible cells; a class shared by several is evaluated once). `view` is the

@@ -76,13 +76,28 @@ int nm_render_inspect_strips(void);
  * on; its wheels and sills do lie below the coarse road mesh (host measure on
  * the arcade's own matrices: up to 0.57 units in a race lap). With a depth
  * buffer a car pixel wins against the road only if the sink is less than
- * (1/scale-1) times the camera's height above that road polygon: at 0.5 that
- * is one camera height. Rails, walls and everything standing up keep true
- * depth and occlude cars normally; the scale is uniform, so road polygons
- * keep their order. Anything else lying on the road (shadow volumes) must
- * use the same scale. make NATIVE_DIAG_ROAD_DEPTH=<factor> sets another
- * value for a measurement build. */
+ * (1/scale-1) times the camera's height h above that road polygon; the lower
+ * the scale, the farther geometry buried under the ground (rocks) shows
+ * through it: at 0.5, one camera height, it pokes through far away. So the
+ * scale is the camera's (nm_render_road_depth): in a race view
+ * h/(h+NM_ROAD_SINK), h the eye height, VR1..VR4 0.636, 0.647, 0.755, 0.862
+ * (render/scene/practice.c; hardware: 0.76 cleared VR3's cases), and
+ * NM_ROAD_DEPTH_SCALE for every other camera (attract, podium, the keyed race
+ * cameras, the inspector) and until a race view sets its own. Rails, walls
+ * and everything standing up keep true depth and occlude cars normally; the
+ * scale is uniform within a frame, so road polygons keep their order.
+ * Anything else lying on the road (shadow volumes) must use the same scale.
+ * make NATIVE_DIAG_ROAD_DEPTH=<factor> fixes it for every camera
+ * (NM_ROAD_DEPTH_FIXED) in a measurement build. */
 #ifndef NM_ROAD_DEPTH_SCALE
 #define NM_ROAD_DEPTH_SCALE 0.5f
 #endif
+/* The sink a race view's scale leaves room for: the 0.57 measured, rounded up. */
+#define NM_ROAD_SINK 0.6f
+/* The road-surface depth scale from the next submission on, 0 < scale < 1 (another is ignored); returns the one in
+ * effect. When it differs from the current one, the world's road classes and the prebuilt stream records of road
+ * faces are rewritten (model_submission.h sq_road_depth_set; a whole-table course's ~15,000 records, a few
+ * milliseconds: once per change, not per frame). Call between frames or in a frame's setup, never while its lists
+ * are submitted. A world attached later is built at the current scale. Render only: no gameplay word depends on it. */
+float nm_render_road_depth(float scale);
 #endif
