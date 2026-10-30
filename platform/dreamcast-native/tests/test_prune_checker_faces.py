@@ -127,15 +127,20 @@ with tempfile.TemporaryDirectory(prefix='daytona-checker-test-') as tmp:
     (source/'instances.txt').write_text('\n'.join(' '.join(map(str,(*models.INSTANCE.unpack(raw)[:2],*context)))
                                                 for raw in instances)+'\n')
     (source/'cells.txt').write_text('0 0 3\n'+''.join(f'{i} 3 0\n' for i in range(1,256)))
-    prepared=models.prepare(source)[0]
     for number,options in enumerate(([],['--omit-checker-faces'],['--omit-checker-faces','--share-positions'],
                     ['--omit-checker-faces','--face-group-size','1'],
                     ['--world-cells','--omit-checker-faces','--share-positions'])):
         output=root/f'cli{number}.dnm'
         run=subprocess.run([sys.executable,str(tool),str(source),str(output),*options],capture_output=True,text=True)
         assert run.returncode==0,(run.stdout,run.stderr)
+        # As the CLI: world packs keep checker faces' vertices apart (prepare_face_order rewrites their u, v).
+        models.SPLIT_CHECKER_VERTICES='--world-cells' in options
+        prepared=models.prepare(source)[0]
+        models.SPLIT_CHECKER_VERTICES=False
         expected=models.world_cells(prepared,source) if '--world-cells' in options else prepared
         before=models.HEADER.unpack_from(expected)
+        if '--world-cells' in options:
+            assert before[3]>models.HEADER.unpack_from(models.prepare(source)[0])[3]
         if '--omit-checker-faces' in options:
             expected=models.omit_checker_faces(expected)
             report=json.loads(run.stdout)
