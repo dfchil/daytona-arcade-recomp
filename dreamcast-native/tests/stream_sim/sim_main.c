@@ -1757,6 +1757,8 @@ static void road_depth_frame(float table,long frame) {
     }
     sim_road_depth=scale;
     sq_road_depth_set(scale);
+#else
+    (void)table; (void)frame; road_low=road_high=sim_road_depth;
 #endif
 }
 /* SIM_ROAD_DEPTH_CHECK: the emission classes against the frame's scale, then each mesh on the stream path against a
@@ -1826,6 +1828,9 @@ static int road_records_check(unsigned tick) {
 /* A frame table's scale against the rule (render/models/model_renderer.h): attract, podium and the keyed race cameras
  * NM_ROAD_DEPTH_SCALE; a race view that, or a preset's h/(h+0.6) (FLT_EPSILON: the console's division may round it). */
 static int road_table_legal(float scale,unsigned attract,unsigned camera_mode) {
+#ifdef NM_ROAD_DEPTH_FIXED
+    return 1; /* this build's one scale is not the table's */
+#endif
     if(scale==NM_ROAD_DEPTH_SCALE) return 1;
     if(attract || camera_mode==1u) return 0;
     for(unsigned k=0;k<4;++k) if(fabsf(scale-road_presets[k])<=FLT_EPSILON) return 1;
@@ -2008,7 +2013,9 @@ int main(int argc,char **argv) {
         assert(sq_prepare_source(0,packs) && sq_prepare_source(1,packs+1));
         assert(sq_queue_objects(boundaries,head[5],head[6]));
         /* The idle wait before the registration: the record cache's step (sq_stream_idle). */
+#if defined(SIM_HAS_STREAM) && SQ_STREAMS
         if(sq_stream_pool_bytes) (void)sq_stream_idle(getenv("SIM_STREAM_BUDGET") ? (unsigned)atoi(getenv("SIM_STREAM_BUDGET")) : 2000u);
+#endif
         uint64_t frame_stats[2][S_COUNT]={{0}};
         for(unsigned pass=0;pass<3;++pass) for(unsigned q=0;q<queued;++q) {
             if(queue[q].list!=lists[pass]) continue;
@@ -2671,7 +2678,9 @@ int main(int argc,char **argv) {
     }
     if(road_check && !road_records_check(UINT_MAX)) return 1; /* the meshes that joined in the last frame */
     road_depth_summary(frames);
+#if defined(SIM_HAS_STREAM) && SQ_STREAMS
     sq_stream_report();
+#endif
     fclose(out); if(faces_out) fclose(faces_out);
     return 0;
 }
