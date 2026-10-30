@@ -23,8 +23,8 @@
 #          not a candidate: ssfar4cf3 with no fence rule (every stipple panel at full density at every distance);
 #          ssfar4cf3r, ssfar4eu and ssfar4f (the recommended set since 15 October, evening) are built always and
 #          accepted here for older command lines.
-# --host-build DIR  use an existing CMake build of this checkout (setup.sh's build/) for m2segment and the pack
-#          checkers instead of configuring and building OUTDIR/host. Its m2segment must know --dump-video.
+# --host-build DIR  use an existing CMake build of this checkout, configured with -DM2_DREAMCAST_NATIVE=ON, for m2segment
+#          and the pack checkers instead of configuring and building OUTDIR/host. Its m2segment must know --dump-video.
 # --keep   keep the three large traces (HUD, race and manual race reference, about 520 MB) after their consumers ran.
 # --jobs N parallel jobs for CMake and make (default: number of CPUs).
 # --face-group N  faces per face group of the world packs (prepare_models.py --face-group-size; default 8 since
@@ -208,7 +208,7 @@ M=$H/m2segment
 DESC_host_configure="CMake configure of the host tools (OUTDIR/host)"
 host_configure() {
   local gen=(); command -v ninja >/dev/null && gen=(-G Ninja)
-  cmake -S $REPO -B $H $gen -DCMAKE_BUILD_TYPE=Release -DM2_ROMSET=daytona93
+  cmake -S $REPO -B $H $gen -DCMAKE_BUILD_TYPE=Release -DM2_ROMSET=daytona93 -DM2_DREAMCAST_NATIVE=ON
   cmake --build $H --parallel $JOBS --target m2import m2recomp m2tgprecomp
 }
 DESC_rom_import="m2import ROM -> OUTDIR/rom/daytona93 (silent images)"
