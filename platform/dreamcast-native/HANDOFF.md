@@ -242,6 +242,56 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
 (`build/dc-native-int2.recipe`, "16 October").
 `run_hw.sh` records video only with `VIDEO=1` (the disk filled up).
 
+### 30 October: four gaps closed (branch gaps-1)
+
+- **Eye turn 69b4** (`race_view.h` `nm_race_view_eye_turn`, `race_camera.h`): off course 0, except in VR4, a camera entity
+  pitch +28 of -546 or less turns the eye about x by pitch + 546, clamped at -1092, in registers only (+b8, +bc and the
+  scenery anchor keep the unturned eye). +28 is half the ground pitch in modes 0 and 2, the full one under the crash
+  camera (669c), 0 under the start and pit tracks (667c). View 501560 against the original, rows over 0.001 before ->
+  after: Advanced finish 2,847 -> 0 of 13,002, Expert finish 730 -> 0 of 14,256; with VR1..VR4 cycled 425 -> 0 of 5,842
+  and 446 -> 0 of 5,356 (VR4 does not turn); time-outs 102 -> 0, 156 -> 0; three crashes on a slope 184, 158, 175 -> 0 of
+  192 each, largest 0.64 -> 0.0002. Race views stay within 0.00037 units (word rounding, as on the rows that never
+  turn). The turn feeds the detail count, yet every car stayed equal before and after: no race changed. The V.R.
+  demos never reach the pitch. `compare_race_trace.py --view-limit U` checks race rows; the course steps use 0.001.
+  Crash runs: the finish inputs plus `F-F+70 steer=0x00|0xff`, `accel=0xe0`, then wheel centred, F = 2327 + 1910 on
+  Advanced, 2367 + 2970 on Expert.
+- **START in the podium and the results.** The tasks read 53e584 bit 4 in every scene: the big bird 22475c, the statue
+  22231c, the slot machine 220554 (visible 574 podium rows on Beginner). `props_scene.c` reads the edge on each tick
+  that steps the actors, `nm_intro_scene_t.start_edge` carries it to the cinematic's slot machine, practice.c latches
+  START in the podium and consumes it in its ticks and the results'. A second find: the result actor takes 53e120 bit 4
+  HELD (b680): at 576 or less the countdown drops to 192; `nm_results_t.start_held` feeds `nm_result_clock_step`,
+  which was always called with 0. `trace_race_native` runs that step too, and after the race now reads the reference
+  rows of logic passes only (`next_logic_row`, as compare_race_trace.py's stalled()). Runs with `start=1` two frames in
+  47: Expert finish (frames 16790..18350, 18365..19020): 16,291 rows equal with --podium, test_expert_lockstep 15,596 of
+  15,598 + 2 stage cuts (15,243 before, the bird 4.0 off); Expert time-out (8380..9040): 6,308 rows, 6,309 of 6,309 draws;
+  Beginner finish (podium ticks n 10580, 10640, 10700, 10760): 12,477 rows, reels and state equal to the original's RAM
+  at six ticks (`build/dc-native-game2.work/host/m2segment`, `M2_SNAP_DIR`, `M2_SNAP_B0`; two of the four edges fall
+  outside the visible rows and are lost in both). Not stepped: Beginner's slot in the results of a race without a
+  podium (no world drawn, nothing reads 5010d0 there). START in the name entry was pressed in the Expert run but the harness
+  stops at phase 29.
+- **Slow knock 2230ac.** `cone_run.cpp`, `props_run.cpp` and their runs were deleted with their build directories, so
+  `m2segment --trace-props NEW_FILE` (with --trace-race, tools/trace_race.hpp) now writes the run format of
+  tests/test_props.c; the race trace is byte-identical with it on. `drive_race_native --replay SCRIPT --target
+  X,Z,PROFILE,NEAR,SPEED` follows a script to NEAR road profiles before PROFILE, then a controller goes to the point at
+  that speed index. `recipes/inputs/inputs-prop-advanced.txt` (id 4, profile 47) and `inputs-prop-expert.txt` (id 14, profile
+  555) hit the prop at speed index 54: test_props 10,917 of 10,917 ticks (649 with a moving prop), 32,273 of 32,273 draw
+  matrices, 2 of 2 hit sounds, knock starts 2230ac 2/0; every car equal (1,698 and 6,997 rows), 9e00 exact. With the
+  Expert finish as a check of the tool: 27,625 ticks, 73,251 draws, 7 sounds. Recipe step `props_slow`.
+- **Expert's attract.** Cars, camera, cells and light of every stretch were compared already; draws only on Advanced's
+  cinematic. `trace_attract_native --clock F REF --actors C` steps props and actors as practice.c and writes K, P rows for
+  course C's cinematic and demo. test_expert_lockstep 2,756 of 2,756 rows (22214c, 22275c, 223bc0, 223ce0, 22430c, 224730,
+  224854 drawn; 0.0001 units), test_clock_lockstep on Advanced 2,756 of 2,756, test_props over four loops 11,128 ticks and
+  21,149 draws. No game code changed. 5036fc stays 0: the attract's car never enters the statue's zone. On the demo's
+  last tick `race.course` is the next course and the actors do not step: nothing they draw is lost there (equal rows).
+- **Open.** The keyed pit tracks differ on single rows: 126 of 1,276 rows of the Expert time-out over 0.001, largest 0.20,
+  the same before the eye turn (+28 is 0 there); not looked into. In the results the native runs no camera pass, so a
+  view left by VR1 or VR2 stands where the original's glides back: nothing is drawn. Whole-recipe runs of the changed
+  steps (`props_slow`, `attract_lockstep` with Expert) have not happened; their commands ran by hand.
+- **Console (not run).** `elf/stats-advanced-finish` and `elf/stats-expert-finish` over slopes: the camera must not jump
+  where the eye turn starts. `elf/play` on Expert: hold in the results to skip them, press START in the podium (the
+  bird grows, where drawn); on Beginner the slot's reels stop in the podium. Knock a slow prop by hand on Advanced at
+  (-298, 165). Expected checkpoint rows do not change: none of this is in them.
+
 ### 30 October: games one after another (branch second-game)
 
 A second game after a race, and a game started from the title or the V.R. demo, are bit-exact with the original: one
@@ -723,7 +773,7 @@ table left: the tables and their generator lived in build directories that are g
   CHECKPOINT row equal, through the podium (phases 27/28) and the results; the podium cinematic on both courses with its
   cars and the props (Expert: cones 6-9 and prop 22 knocked over in the race); the props of Advanced and Expert at rest
   on the ground. Also `elf/play` on Advanced/Expert to a top-3 finish if a driver can.
-- **Not done**: Expert's sound-manager object 222288 and its other actors; 2230ac's slow knock set against the original;
+- **Not done**: Expert's sound-manager object 222288 and its other actors; 2230ac's slow knock set against the original (done 30 October);
   the attract's Advanced/Expert stretches (the course-2 world actors: done, see above).
 
 ### 18 October: Expert raced (branch expert)
@@ -1183,7 +1233,7 @@ transmission).
   10.33 / 13.81, VR4 10.31 / 13.67. The close views cost less (no player car,
   no cars behind).
 - Open: the radar zoom chord (START + VR2/3/4) is not wired; course 1/2's
-  pitch-dependent eye turn (`69b4`) is not ported; the manual car's hoods.
+  pitch-dependent eye turn (`69b4`) is not ported (done 30 October); the manual car's hoods.
 
 ### 16 October: the grass is not super-sampled (branch grass-no-ss)
 
