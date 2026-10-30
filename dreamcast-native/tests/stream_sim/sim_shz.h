@@ -96,6 +96,11 @@ static inline float sim_fsrra(float x) {
     ++sim_sh4_fsrra;
     return (float)(1.0/sqrt(fabs((double)x))*(1.0+sim_sh4_sign(&x,1,2)*0x1p-20));
 }
+/* SH4ZAM's root: x*FSRRA(x), 0 at 0 (the renderer takes it for bounds at load). */
+static inline float shz_sqrtf(float x) {
+    if(sim_sh4()==SIM_SH4_IDEAL) return sqrtf(x);
+    return x==0.0f ? 0.0f : sim_fsrra(x)*x;
+}
 static inline float shz_invf_fsrra(float x) {
     if(sim_sh4()==SIM_SH4_IDEAL) return 1.0f/fabsf(x);
     return sim_fsrra(x*x);
