@@ -27,7 +27,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from prepare_hud import bits_float, points, trace_rows, unit
+from prepare_hud import MAP_SCALES, bits_float, points, trace_rows, unit
 from prepare_material_crops import block_index
 
 BLANKS = {0x8280, 0x8020, 0x0020}
@@ -240,7 +240,7 @@ def main():
     messages = [0, 0]  # wrong-way message frames compared, of them drawn
     extensions = [0, 0]  # time extension message cells compared, of them drawn
     gears = [0, 0, 0]  # gear indicator frames compared, of them with the lever, with the digit
-    radar = dict(frames=0, icons=0, zoom=0, worst=0.0, panel_frames=0)
+    radar = dict(frames=0, icons=0, zoom=0, worst=0.0, panel_frames=0, mapsize=0)
     overlay, drawn = {}, {}  # the rolling start's overlay: frames compared and frames it is drawn on, by element
     lap_messages = [0, 0, 0]  # lap message (ad34) frames compared, with LAP TIME, with BEST LAP
     for row in reference:
@@ -259,6 +259,10 @@ def main():
             radar['zoom'] += 1
             if int(row['zoom'], 16) != int(d['zoom'].split(':')[1], 16) or row['zix'] != d['zoom'].split(':')[0]:
                 fail('panel zoom', frame, (row['zix'], row['zoom']), d['zoom'])
+        if 'mix' in row and 'mapsize' in d:  # and its +52, +38
+            radar['mapsize'] += 1
+            if row['mix'] != d['mapsize'].split(':')[0] or abs(bits_float(row['mscale'])-bits_float(d['mapsize'].split(':')[1])) > 1e-13:
+                fail('map size', frame, (row['mix'], row['mscale']), d['mapsize'])
         if 'gear' in shown and 'gear' in d:
             gears[0] += 1; gears[1] += shown['gear'][0] != '_'; gears[2] += shown['gear'][1] != '_'
         for kind in ('hint', 'digit', 'go', 'banner', 'scroll'):
@@ -298,6 +302,10 @@ def main():
                 fail(key+' marker visibility', frame, True, False)
                 continue
             origin = np.array(fit[matrix])@np.array([bits_float(source[0]), bits_float(source[1]), 1.0])
+            if d.get('mapsize'):  # The size of the chord: the places scale about the model's origin (hud_draw.h).
+                standard = bits_float('%08x' % MAP_SCALES[0][1])
+                k, anchor = bits_float(d['mapsize'].split(':')[1])/standard, np.array(fit['affine_leader'])[:, 2]
+                origin = anchor+k*(origin-anchor)
             c, s = unit(int(source[2]))
             for (x, y), offset in zip(points(row[key]), fit[local]):
                 expected = origin+(c*np.eye(2)+s*turn)@np.array(offset)
@@ -348,7 +356,7 @@ def main():
     if radar['frames']:
         print(f"  CONDITION panel (12c98..13208): {radar['frames']} frames, panel at its place on {radar['panel_frames']}, "
               f"{radar['icons']} opponent icons (and the player's on every frame), worst icon error={radar['worst']:.4f} px; "
-              f"zoom compared bit for bit on {radar['zoom']} frames")
+              f"zoom compared bit for bit on {radar['zoom']} frames, the map's size on {radar['mapsize']}")
     if extensions[0]:
         print(f'  time extension message (ae98): compared on {extensions[0]} cells (rows 12 and 16 of a frame), drawn on {extensions[1]}')
     if gears[0]:

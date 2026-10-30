@@ -40,9 +40,7 @@
  *
  * Not here yet: the 501a80
  * time-attack variants (12f20: record times in place of the CONDITION
- * panel's cars), the START + VR2/VR3/VR4 zoom chord of 1299c..12a04 (the port
- * has no VR buttons: the zoom stays at its default) and the mph branch of b1a4
- * (53e59a == 0). */
+ * panel's cars) and the mph branch of b1a4 (53e59a == 0). */
 
 enum { NM_HUD_BLANK=255, NM_HUD_MINUTE=10, NM_HUD_SECOND=11 };
 /* 231efc glyphs after the rank: 11 ST, 12 ND, 13 RD, 14 TH. */
@@ -61,6 +59,7 @@ typedef struct {
     uint16_t accel;              /* 501054 of this tick: d480 chooses the hint by it. */
     uint16_t lap_last;           /* +66 after this tick: the ticks of the lap just ended. */
     uint32_t finish_flags;       /* 5010d8 after this tick: bit1 (the last lap's line) hides the lap message. */
+    uint32_t held;               /* 53e120 of this tick: the chord of 129d0 (set by the caller after nm_hud_observe). */
 } nm_hud_race_t;
 
 /* CONDITION panel inputs: a car's position and its drawn heading +58 + +d6. */
@@ -131,13 +130,19 @@ typedef struct {
     uint8_t roll_banner, roll_hint, roll_digit, roll_go;
     uint8_t lap_label;            /* ad34: 0 not drawn, 1 "LAP TIME", 2 "BEST LAP" */
     uint8_t overlay;              /* Something of nm_hud_overlay is drawn. */
+    uint8_t map_index;            /* The map task's +52 (129d0): its size, 1 at the start. */
     uint16_t roll_scroll;
     uint16_t lap_time;            /* ad34: the ticks it shows. */
+    float map_scale;              /* The map task's +38, 0 until its first tick. */
+    uint8_t map_resized;          /* map_scale is not the course's default. */
 } nm_hud_t;
 
 /* 234dd8: zoom by index (START + VR2/VR3/VR4 select 0, 1, 2; 1 at the map object's start, 12898..128ac).
  * tools/prepare_hud.py checks the table against the ROM. */
 static const uint32_t nm_hud_radar_zooms[3]={0x3c03126fu,0x3ba3d70au,0x3b23d70au}; /* 0.008, 0.005, 0.0025 */
+/* 234de8[course*4 + index]: the map's scale by the course slot and the index +52 (12a4c); the same check. */
+static const uint32_t nm_hud_map_scales[3][3]={{0x339652e8u,0x3356bf95u,0x331652e8u},{0x32e7eda1u,0x32bcfa83u,0x32920765u},
+    {0x332bcc77u,0x3300d959u,0x32abcc77u}};
 
 /* 187c0, 18a08, 1891c, 18b44: right-aligned decimal, blank cells left of it. */
 static inline void nm_hud_number(uint32_t value, uint8_t *cells, unsigned count) {
@@ -254,7 +259,7 @@ static inline void nm_hud_reset(nm_hud_t *hud, const nm_hud_race_t *race, const 
      * that starts in another gear than the last one ended in animates once). Here: the gear at entry. */
     hud->gear_lever=NM_HUD_BLANK;hud->gear_last=hud->gear_from=(uint8_t)(cars->gear&3u);
     /* 12898..128ac: zoom index 1 and its zoom; 340c: 5010d4 = 0 (5010dc is cleared by phase 21). */
-    hud->radar_index=1;hud->zoom=nm_force_float(nm_hud_radar_zooms[1]);
+    hud->radar_index=1;hud->zoom=nm_force_float(nm_hud_radar_zooms[1]);hud->map_index=1;
 }
 
 /* 12d4c..13208 (the map task, after its markers): the zoom follows its target by a fifth a tick (TGP
@@ -300,6 +305,22 @@ static inline void nm_hud_radar(nm_hud_t *hud, const nm_hud_cars_t *c) {
  * only store to +204 is e45c's zero. */
 static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
     const int stage=race->stage;
+    /* 129d0..12a04, the map task's chord, while START 53e120 bit 4 is held: VR2, VR3, VR4 alone choose the CONDITION
+     * panel's zoom +53 = 0, 1, 2, and with VR1 the map's size +52 = 0, 1, 2 (table 13278, the bits VR4 VR3 VR2 VR1).
+     * 12a38..12aa8: +38 follows the course's 234de8[+52] by a fifth a tick, as the zoom. The map and its markers'
+     * places scale with it; the markers keep their size (12b04: 6e-8 / +38 under the scale +38). */
+    if(race->active_phase==20 || race->active_phase==22 || race->active_phase==24 || race->active_phase==26) {
+        if(race->held&16u) {
+            const unsigned vr=((race->held>>5)&7u)|((race->held>>13)&8u);
+            const unsigned choice=vr&14u,index=choice==2u ? 0u : choice==4u ? 1u : choice==8u ? 2u : 3u;
+            if(index<3u && !(vr&1u)) hud->radar_index=(uint8_t)index;
+            else if(index<3u) hud->map_index=(uint8_t)index;
+        }
+        const float *table=(const float *)nm_hud_map_scales[hud->course<3u ? hud->course : 0u];
+        if(hud->map_scale==0.0f) hud->map_scale=table[1];
+        hud->map_scale=nm_force_float(0x3e4ccccdu)*(table[hud->map_index]-hud->map_scale)+hud->map_scale;
+        hud->map_resized=hud->map_scale!=table[1];
+    }
     if(race->active_phase==22 && !(c->start_flags&1u) && c->completed && hud->lap_ticks>0 && !(race->finish_flags&2u)) {
         hud->lap_label=0;
         if(hud->lap_ticks!=1 && (hud->lap_ticks&4)) {
@@ -311,7 +332,7 @@ static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, cons
     hud->roll_hint=hud->roll_banner && !stage && (race->counter&31u)<15u ? (race->accel>128u ? 2u : 1u) : 0u;
     hud->roll_digit=stage>=1 && stage<=3 ? (uint8_t)(4-stage) : 0u;
     hud->roll_go=stage>3 && (stage&15)>7;
-    hud->overlay=hud->roll_banner || hud->roll_digit || hud->roll_go || hud->lap_label;
+    hud->overlay=hud->roll_banner || hud->roll_digit || hud->roll_go || hud->lap_label || hud->map_resized;
 }
 
 /* One gameplay tick. `race` and `cars` are the state after the tick. */

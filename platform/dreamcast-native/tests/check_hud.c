@@ -115,9 +115,9 @@ int main(int argc,char **argv) {
             if(race.active_phase<19) continue;
             nm_hud_reset(&hud,&race,&cars);started=1;
         } else {
-            /* 1299c..12a04: START + VR2/VR3/VR4 set the zoom index +53 before 12db4 follows it; the port has no
-             * VR buttons, so the reference's index is applied here (its own value after this tick). */
-            if(field(line,"zix")) hud.radar_index=(uint8_t)number(line,"zix",10);
+            /* 129d0..12a04: the chord from the reference's held inputs. Traces before the field: its index after this tick. */
+            if(field(line,"held")) race.held=(uint32_t)number(line,"held",16);
+            else if(field(line,"zix")) hud.radar_index=(uint8_t)number(line,"zix",10);
             nm_hud_tick(&hud,&race,&cars);
         }
         nm_hud_dump(out,frame,&hud);++rows;

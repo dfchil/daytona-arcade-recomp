@@ -12,7 +12,7 @@
 #else
 #define NM_HUD_SHEET_BANK(sheet) ((unsigned)(sheet))
 #endif
-enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1+6+9 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons, nm_hud_overlay_place. */
+enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1+6+9+3 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons, nm_hud_overlay_place. */
 /* Strip order. sprite, at and turn repeat the placement (nm_hud_tight below). */
 typedef struct { float xy[4][2], uv[4][2]; uint8_t sheet, sprite; float at[2], turn[2]; } nm_hud_quad_t;
 
@@ -100,8 +100,36 @@ static inline void nm_hud_radar_place(nm_hud_list_t *list, const nm_hud_t *h, nm
 /* The car of the banner on the screen: column 0 of the tile layer in the 1024-pixel ring, as -512..511; the car and
  * the banner lie within the ring's first 512 pixels, so one place shows all of them. */
 static inline int nm_hud_roll_x(const nm_hud_t *h) { return (int)((1536u-h->roll_scroll)&1023u)-512; }
+/* The map at another size than its default (the chord, nm_hud_overlay): map scale k against the default. Its polygons
+ * and the marker places scale about the projected origin of its model, the constant of the leader's matrix (height
+ * 0); the markers keep their size. One whole quad for the map: it is on whole pixels only at k = 1. The largest size
+ * reaches the CONDITION label: on course 0 the map's sheet is the label's and the two swap places, as tiles over
+ * polygons; the other courses' maps lie on a later sheet and paint over the label's top row. Out of line after the
+ * other sprites: nm_hud_place stays what it was. */
+static __attribute__((noinline, unused)) void nm_hud_map_scaled(nm_hud_list_t *list, const nm_hud_t *h, nm_hud_sincos_t sincos) {
+    const nm_hud_course_map_t *course_map=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
+    if(!course_map) return;
+    const float (*leader)[3]=course_map->leader,(*player)[3]=course_map->player;
+    const float ax=leader[0][2],ay=leader[1][2],k=h->map_scale*(1.0f/((const float *)nm_hud_map_scales[h->course])[1]);
+    float s,c;
+    /* Early in the paint order, in the CONDITION label's place. */
+    nm_hud_sprite(list,course_map->sprite,ax+k*((float)course_map->x-ax),ay+k*((float)course_map->y-ay),k,0);
+    if(list->count) for(unsigned i=0;i+1<list->count;++i) if(list->quads[i].sprite==NM_HUD_CONDITION_LABEL) {
+        const nm_hud_quad_t q=list->quads[i];list->quads[i]=list->quads[list->count-1];list->quads[list->count-1]=q;
+        break;
+    }
+    if(h->leader) {
+        sincos(h->leader_yaw,&s,&c);
+        nm_hud_sprite(list,NM_HUD_MARKER_LEADER,ax+k*(leader[0][0]*h->leader_x+leader[0][1]*h->leader_z),
+            ay+k*(leader[1][0]*h->leader_x+leader[1][1]*h->leader_z),c,s);
+    }
+    sincos(h->player_yaw,&s,&c);
+    nm_hud_sprite(list,NM_HUD_MARKER_PLAYER,ax+k*(player[0][0]*h->player_x+player[0][1]*h->player_z+player[0][2]-ax),
+        ay+k*(player[1][0]*h->player_x+player[1][1]*h->player_z+player[1][2]-ay),c,s);
+}
 /* nm_hud_overlay's elements. Tile layer 0 lies over the map's polygons, as the paint order here. */
-static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t *list, const nm_hud_t *h) {
+static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t *list, const nm_hud_t *h, nm_hud_sincos_t sincos) {
+    if(h->map_resized && h->map) nm_hud_map_scaled(list,h,sincos);
     if(h->roll_banner) {
         const int x=nm_hud_roll_x(h);
         nm_hud_late_sprite(list,NM_HUD_ROLL_CAR,x+NM_HUD_ROLL_CAR_X,NM_HUD_ROLL_CAR_Y);
@@ -206,9 +234,10 @@ static inline unsigned nm_hud_place(const nm_hud_t *h, nm_hud_quad_t quads[NM_HU
     if(h->extension&1u) nm_hud_sprite(&list,NM_HUD_EXTENSION,NM_HUD_EXTENSION_X,NM_HUD_EXTENSION_Y,1,0);
     if(h->extension&2u) nm_hud_sprite(&list,NM_HUD_EXTENSION,NM_HUD_EXTENSION_LOW_X,NM_HUD_EXTENSION_LOW_Y,1,0);
     if(h->pit) nm_hud_sprite(&list,NM_HUD_PIT,NM_HUD_PIT_X,NM_HUD_PIT_Y,1,0);
-    /* The course's map (prepare_hud.py nm_hud_course_maps: course 0's, and --course-map's); none without one. */
+    /* The course's map (prepare_hud.py nm_hud_course_maps: course 0's, and --course-map's); none without one.
+     * At its default size here; another size above. */
     const nm_hud_course_map_t *course_map=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
-    if(h->map && course_map) {
+    if(h->map && course_map && !h->map_resized) {
         const float (*leader)[3]=course_map->leader,(*player)[3]=course_map->player;
         nm_hud_sprite(&list,course_map->sprite,course_map->x,course_map->y,1,0);
         if(h->leader) { /* ponytail: the "2" marker shown while the player leads is not exported yet. */
@@ -241,7 +270,7 @@ static inline unsigned nm_hud_place(const nm_hud_t *h, nm_hud_quad_t quads[NM_HU
 #ifdef NM_HUD_GEAR
     if(h->gear_lever<=6 || h->gear_digit) nm_hud_gear_place(&list,h);
 #endif
-    if(h->overlay) nm_hud_overlay_place(&list,h);
+    if(h->overlay) nm_hud_overlay_place(&list,h,sincos);
     return list.count;
 }
 static inline unsigned nm_hud_quads(const nm_hud_t *h, nm_hud_quad_t quads[NM_HUD_MAX_QUADS], nm_hud_sincos_t sincos) {
@@ -347,13 +376,13 @@ static inline unsigned nm_hud_tight_pieces(const nm_hud_quad_t *quads, unsigned 
         if(q->sheet!=sheet) continue;
         const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(q->sprite);
         const float z=NM_HUD_DEPTH+2.0f*(float)rank++;
-        if(!nm_hud_quad_fixed(q)) { /* One quad as it was; opaque when the sprite has no transparent texel. */
+        if(!nm_hud_quad_fixed(q)) { /* One quad as it was; opaque when the sprite has no transparent texel (one core alone). */
             nm_hud_piece_t *o=out+total++;
             for(unsigned corner=0;corner<4;++corner) {
                 o->xy[corner][0]=q->xy[corner][0]*sx;o->xy[corner][1]=q->xy[corner][1]*sy;
                 o->uv[corner][0]=q->uv[corner][0];o->uv[corner][1]=q->uv[corner][1];
             }
-            o->sheet=q->sheet;o->opaque=t->cores!=0;o->z=z+(float)o->opaque;
+            o->sheet=q->sheet;o->opaque=t->cores==1 && !t->pieces;o->z=z+(float)o->opaque;
             continue;
         }
         const nm_hud_sprite_t *p=nm_hud_sprites+q->sprite;

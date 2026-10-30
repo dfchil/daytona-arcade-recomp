@@ -176,13 +176,17 @@ static int practice_tunnel_warned; /* the car pack lacks the windows' tunnel bin
  * inspector): the D-pad holds
  * VR1..VR4 as the cabinet's four buttons (up: driver's view, right: hood, down: behind, left: behind and
  * high), START held keeps the view; Y steps to the next view (VR1, VR2, VR3, VR4 round) with one tick of
- * that view's button. */
+ * that view's button. START + right, down, left: the CONDITION panel's zoom, START + up + right, up alone,
+ * up + left: the map's size (hud.h nm_hud_overlay). */
 #define PRACTICE_VIEW_NEXT(c) ((c)->button.Y==ENJ_BUTTON_DOWN_THIS_FRAME)
 static uint32_t practice_view_pad,practice_view_step;
 static void practice_view_buttons(const enj_ctrlr_state_t *c) {
     practice_view_pad=(c->button.START&1u ? NM_VIEW_HELD_START : 0u)|(c->button.UP&1u ? NM_VIEW_HELD_VR1 : 0u)|
         (c->button.RIGHT&1u ? NM_VIEW_HELD_VR2 : 0u)|(c->button.DOWN&1u ? NM_VIEW_HELD_VR3 : 0u)|
         (c->button.LEFT&1u ? NM_VIEW_HELD_VR4 : 0u);
+    /* The HUD chord 129d0: a D-pad has no VR1 + VR3, the middle map size; START + up alone (no chord in the original) stands for it. */
+    if((practice_view_pad&(NM_VIEW_HELD_START|NM_VIEW_HELD_VR1|NM_VIEW_HELD_VR2|NM_VIEW_HELD_VR3|NM_VIEW_HELD_VR4))==
+       (NM_VIEW_HELD_START|NM_VIEW_HELD_VR1)) practice_view_pad|=NM_VIEW_HELD_VR3;
     if(PRACTICE_VIEW_NEXT(c)) practice_view_step=1;
 }
 /* The held word of the next race tick: the pad's, plus the next view's button on the first tick after Y. */
@@ -249,7 +253,8 @@ static void practice_hud_reset(void) {
 }
 static void practice_hud_tick(void) {
     nm_hud_race_t race;
-    nm_hud_observe(&practice.race,&race,&practice_hud_cars);nm_hud_tick(&practice_hud,&race,&practice_hud_cars);
+    nm_hud_observe(&practice.race,&race,&practice_hud_cars);race.held=practice_view_held; /* 129d0 */
+    nm_hud_tick(&practice_hud,&race,&practice_hud_cars);
     nm_hud_render_tick(&practice_hud);
 }
 

@@ -185,6 +185,9 @@ struct HudTrace {
         // and every opponent of the list 501224 as id,x,z,+58,+d6 (positions as float bits).
         std::fprintf(file, " pd6=%d", int16_t(b.read_word(player + 0xd6)));
         if (radar_task) std::fprintf(file, " zoom=%08x zix=%u", b.read_dword(radar_task + 0x34), b.read_byte(radar_task + 0x53));
+        // The same task's map size: index +52 (129d0..12a04, START + VR1 and VR2/3/4) and the scale +38; the held inputs.
+        if (radar_task) std::fprintf(file, " mix=%u mscale=%08x", b.read_byte(radar_task + 0x52), b.read_dword(radar_task + 0x38));
+        std::fprintf(file, " held=%x", b.read_dword(0x53e120));
         {
             std::fputs(" cars=", file);
             uint32_t at = b.read_dword(0x501224);

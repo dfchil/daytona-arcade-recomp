@@ -405,7 +405,7 @@ static void records_build(int flat) {
         depth+=2.0f;
         if(!nm_hud_quad_fixed(q)) { /* One quad as it was; opaque when the sprite has no transparent texel. */
             ++rectangles;
-            if(t->cores && !flat) { HUD_HEADER(op);op=put_quad(op,q,sx,sy,z+1.0f); }
+            if(t->cores==1 && !t->pieces && !flat) { HUD_HEADER(op);op=put_quad(op,q,sx,sy,z+1.0f); }
             else { HUD_HEADER(pt);pt=put_quad(pt,q,sx,sy,z); }
             continue;
         }

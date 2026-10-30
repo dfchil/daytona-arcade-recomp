@@ -73,7 +73,7 @@ data	panel_records	-	0x03f8c	0x0004	4	0.0000	-
 data	panel	-	0x03fa0	0x00a0	160	0.0000	-
 data	draw_inspect_texture	-	0x04040	0x0004	4	0.0000	-
 data	poses	-	0x04060	0x00c0	192	0.0000	-
-data	practice_hud	-	0x04120	0x02c0	696	0.0000	-
+data	practice_hud	-	0x04120	0x02c0	704	0.0000	-
 data	practice_hud_cars	-	0x043e0	0x0260	608	0.0000	-
 data	nm_hud_tight	-	0x04640	0x028e	654	0.0000	-
 data	draw_layer_scale	-	0x048e0	0x0400	1024	0.0000	-

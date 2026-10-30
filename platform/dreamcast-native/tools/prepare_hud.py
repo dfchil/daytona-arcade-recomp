@@ -115,6 +115,8 @@ LAP_MESSAGE_WORDS = {0xad7c: 0x100082c, 0xada0: 0x10007b0, 0xada8: 0x28829a0, 0x
 # CONDITION panel (12c98..13208): zoom table 234dd8 (include/hud.h nm_hud_radar_zooms), the icon of the
 # automatic car 13218[0], the opponents' icon 288b550 (each car's +84 in the race).
 RADAR_ZOOMS = (0x3c03126f, 0x3ba3d70a, 0x3b23d70a)
+# 234de8[course*4 + index], the map's scale +38 (include/hud.h nm_hud_map_scales, 12a4c).
+MAP_SCALES = ((0x339652e8, 0x3356bf95, 0x331652e8), (0x32e7eda1, 0x32bcfa83, 0x32920765), (0x332bcc77, 0x3300d959, 0x32abcc77))
 RADAR_SCALE = 4  # sprite texels per arcade pixel of the radar icons (2 x 5 and 6 x 7 arcade pixels)
 
 
@@ -1053,6 +1055,8 @@ def main():
     # ---- the rolling start's overlay ----------------------------------------
     # Last in the table (index >= NM_HUD_TIGHT_EARLY): the race's hot table nm_hud_tight keeps its place and size.
     early_sprites = len(sprites)
+    if any(struct.unpack_from('<3I', program, 0x34de8+16*course) != MAP_SCALES[course] for course in range(3)):
+        raise ValueError('unexpected map scale table 234de8')
     if any(program_word(a) != v for a, v in ROLLING_WORDS.items()):
         raise ValueError('unexpected rolling start overlay ab78, d438')
 

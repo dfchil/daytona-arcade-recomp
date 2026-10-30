@@ -941,7 +941,7 @@ int main(int argc,char **argv) {
         if(parts_out && !parts_dump(tick+1,r->frame)) { printf("native player parts rejected tick %ld\n",tick+1);status=1;break; }
         if(effects_out && !effects_dump(tick+1,r->frame)) { printf("native car effects rejected tick %ld\n",tick+1);status=1;break; }
         if(hud_out) {
-            nm_hud_observe(&race,&hud_race,&hud_cars);nm_hud_tick(&hud,&hud_race,&hud_cars);
+            nm_hud_observe(&race,&hud_race,&hud_cars);hud_race.held=r->held;nm_hud_tick(&hud,&hud_race,&hud_cars);
             nm_hud_dump(hud_out,r->frame,&hud);
         }
         /* Same rows as code/practice.c NATIVE_RACE_CHECKPOINTS. */
