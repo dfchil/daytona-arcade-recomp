@@ -1707,6 +1707,7 @@ static void pvr_summary(void) {
 }
 
 /* SIM_ROAD_DEPTH, SIM_ROAD_DEPTH_STEPS and SIM_ROAD_DEPTH_CYCLE (see the top), and what the run did with them. */
+static const float road_presets[5]={1.05f/1.65f,1.10f/1.70f,1.85f/2.45f,3.74f/4.34f,NM_ROAD_DEPTH_SCALE}; /* h/(h+0.6) of VR1..VR4, others */
 static float road_fixed,road_step_scale[64],road_low=FLT_MAX,road_high;
 static long road_step_frame[64],road_cycle;
 static unsigned road_steps,road_changes,road_restarts,road_rejoined;
@@ -1735,10 +1736,9 @@ static void road_depth_setup(void) {
  * the records of road faces the build has written: sq_road_depth_set must start that mesh again. */
 static void road_depth_frame(float table,long frame) {
 #ifndef NM_ROAD_DEPTH_FIXED
-    static const float presets[5]={1.05f/1.65f,1.10f/1.70f,1.85f/2.45f,3.74f/4.34f,NM_ROAD_DEPTH_SCALE}; /* VR1..VR4, others */
     float scale=table>0.0f ? table : NM_ROAD_DEPTH_SCALE;
     for(unsigned i=0;i<road_steps && frame>=road_step_frame[i];++i) scale=road_step_scale[i];
-    if(road_cycle) scale=presets[(unsigned long)(frame/road_cycle)%5u];
+    if(road_cycle) scale=road_presets[(unsigned long)(frame/road_cycle)%5u];
     if(road_fixed>0.0f) scale=road_fixed;
     assert(scale>0.0f && scale<1.0f);
     if(scale<road_low) road_low=scale;
@@ -1822,6 +1822,14 @@ static int road_records_check(unsigned tick) {
 #endif
     ++road_checked_frames;
     return 1;
+}
+/* A frame table's scale against the rule (render/models/model_renderer.h): attract, podium and the keyed race cameras
+ * NM_ROAD_DEPTH_SCALE; a race view that, or a preset's h/(h+0.6) (FLT_EPSILON: the console's division may round it). */
+static int road_table_legal(float scale,unsigned attract,unsigned camera_mode) {
+    if(scale==NM_ROAD_DEPTH_SCALE) return 1;
+    if(attract || camera_mode==1u) return 0;
+    for(unsigned k=0;k<4;++k) if(fabsf(scale-road_presets[k])<=FLT_EPSILON) return 1;
+    return 0;
 }
 static void road_depth_summary(long frames) {
     printf("road depth: %ld frames, scales %.9g .. %.9g, %u changes",frames,(double)road_low,(double)road_high,road_changes);
@@ -1963,6 +1971,10 @@ int main(int argc,char **argv) {
         if(head[0]>=0x334d5246u) assert(fread(animated,4,head[0]>=0x344d5246u ? 137 : 134,in)==(head[0]>=0x344d5246u ? 137u : 134u));
         float road_table=0;
         if(head[0]>=0x354d5246u) assert(fread(&road_table,4,1,in)==1);
+        if(head[0]>=0x354d5246u && getenv("SIM_ORACLE") && !road_table_legal(road_table,head[2],trailer[22])) {
+            printf("reference mismatch: tick %u (attract %u, camera mode %u) has road depth scale %.9g\n",head[1],head[2],trailer[22],(double)road_table);
+            return 1;
+        }
         /* nm_practice_render_scenery: a cell whose mesh has no selected face is not an instance. */
         unsigned kept=0;
         for(unsigned i=0;i<head[4];++i) if(packs[1].meshes[world_instances[i].mesh].face_count) world_instances[kept++]=world_instances[i];

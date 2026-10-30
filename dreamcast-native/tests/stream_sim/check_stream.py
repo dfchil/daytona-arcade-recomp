@@ -98,6 +98,8 @@ def road_run(sim, tmp, table, stage, label, **settings):
     return frame_words(out), summary[0]
 
 def road_same(what, table, rows, other):
+    if len(rows) != len(other):
+        raise SystemExit(f'FAIL: road depth, {Path(table).name}: {what}: {len(rows)} frames against {len(other)}')
     for row, expected in zip(rows, other):
         if row != expected:
             raise SystemExit(f'FAIL: road depth, {Path(table).name}: {what}, tick {row[0]}: {row} against {expected}')
@@ -132,8 +134,8 @@ with tempfile.TemporaryDirectory(prefix='daytona-stream-') as tmp:
     for table in frames:
         for stage in stages:
             run = subprocess.run([str(Path(tmp)/'sim'), assets, table, os.devnull],
-                                 env=dict(os.environ, SIM_ORACLE='1', SIM_STAGE=stage, **production), capture_output=True, text=True)
-            lines = [line for line in run.stdout.splitlines() if 'reference' in line]
+                                 env=dict(os.environ, SIM_ORACLE='1', SIM_STAGE=stage, SIM_ROAD_DEPTH_CHECK='1', **production), capture_output=True, text=True)
+            lines = [line for line in run.stdout.splitlines() if 'reference' in line or 'road depth check' in line]
             if run.returncode or not any('independent reference' in line and ' 0 mismatches' in line for line in lines):
                 print('\n'.join(lines[:12]) or run.stderr[-2000:])
                 raise SystemExit(f'FAIL: stage {stage}, {table}: the submitted stream differs from the reference renderer')

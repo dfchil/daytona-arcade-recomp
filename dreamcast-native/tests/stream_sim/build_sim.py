@@ -3,8 +3,8 @@
 Builds the real submission path (sq_prepare_batch / sq_emit_batches / sq_queue_objects of
 include/render/models/model_submission.h with the real scenery stage selection, mesh and
 material loaders, vertex cache and clipper) for the host. It is driven by frame tables
-(per tick: car instances, world instances, view, car part boundaries), captures every
-word handed to the PVR and prints per frame digests of the stream.
+(per tick: car instances, world instances, view, car part boundaries; gen_frames.py writes
+them), captures every word handed to the PVR and prints per frame digests of the stream.
 
 SIM_ORACLE=1 at run time compares every frame, triangle by triangle, with the reference
 renderer tests/reference_stream.h: the independent check that replaced the console's
@@ -29,7 +29,7 @@ MUTANTS={
  '1':('if(layer) depth_scale*=draw_layer_scale[layer]; /* see sq_emit_range */',''),                       # decal layers lose their depth factor
  '2':('    if(side<0) return baked.back==UINT16_MAX ? -1 : baked.back;','    if(side<0) return baked.front;'),  # rear side drawn with the front binding
  '3':('out->uv[v][0]=vertex->u; out->uv[v][1]=vertex->v;','out->uv[v][0]=pack->vertices[mesh->vertex_first+representative].u; out->uv[v][1]=pack->vertices[mesh->vertex_first+representative].v;'),  # a shared position keeps its representative's UV
- '4':('nm_float_negative(approximate+margin) ? -1 : 0;','nm_float_negative(approximate+margin) ? 1 : 0;'),      # a face decided rear is treated as front
+ '4':('     * zero. */\n    return nm_float_positive(approximate-margin) ? 1 : nm_float_negative(approximate+margin) ? -1 : 0;','     * zero. */\n    return nm_float_positive(approximate-margin) ? 1 : nm_float_negative(approximate+margin) ? 1 : 0;'),      # a face decided rear is treated as front
  # level of detail (needs a world pack with NM_PACK_LOD_GROUPS)
  '6':('f=lod->first+(level ? lod->count[0] : 0u)+(level>1 ? lod->count[1] : 0u);\n            stop=f+lod->count[level]; in_group=1;',
       '{ const unsigned wrong=level ? level-1u : 1u; f=lod->first+(wrong ? lod->count[0] : 0u)+(wrong>1 ? lod->count[1] : 0u); stop=f+lod->count[wrong]; } in_group=1;'),  # the range of another level is drawn
@@ -40,15 +40,15 @@ MUTANTS={
  '9':('            if(face->layer) depth*=draw_layer_scale[face->layer];\n            out->depth=depth;','            out->depth=depth;'),  # a stream face loses its layer's depth factor
  '10':('    *binding=face->back; *argb=record->argb; *selected=record->group->header;\n','    (void)record;\n'),  # the rear side of a two-luma face drawn with the front binding
  '11':('            const unsigned level=sq_lod_select(lod_first+i,row,scale);','            const unsigned chosen=sq_lod_select(lod_first+i,row,scale),level=chosen ? chosen-1u : 1u;'),  # the range of another level is drawn (and transformed)
- '12':('sq_stream_uv(front,emit->uv[order[k]][0],emit->uv[order[k]][1],out->uv[k]);','sq_stream_uv(front,emit->uv[k][0],emit->uv[k][1],out->uv[k]);'),  # corrupted prebuilt record: u,v of another corner
+ '12':('                out->uv[k][0]=((float)emit->uv[order[k]][0]-origin_u)*scale_u;\n                out->uv[k][1]=((float)emit->uv[order[k]][1]-origin_v)*scale_v;','                out->uv[k][0]=((float)emit->uv[k][0]-origin_u)*scale_u;\n                out->uv[k][1]=((float)emit->uv[k][1]-origin_v)*scale_v;'),  # corrupted prebuilt record: u,v of another corner
  '13':('out->corner[k]=emit->corner[order[k]];','out->corner[k]=emit->corner[k];'),  # corrupted prebuilt record: another corner's position
- '14':('sq_stream_uv(mapping,in->uv[0],in->uv[1],out->uv);','sq_stream_uv(mapping,in->uv[1],in->uv[0],out->uv);'),  # corrupted prebuilt strip vertex: u and v exchanged
+ '14':('                out->uv[0]=((float)in->uv[0]-mapping->origin[0])*mapping->scale[0];\n                out->uv[1]=((float)in->uv[1]-mapping->origin[1])*mapping->scale[1];','                out->uv[0]=((float)in->uv[1]-mapping->origin[0])*mapping->scale[0];\n                out->uv[1]=((float)in->uv[0]-mapping->origin[1])*mapping->scale[1];'),  # corrupted prebuilt strip vertex: u and v exchanged
  # strip runs from the strip vertex records (sq_stream_run's record colours, prepare_restrip.py packs)
  '15':('out->argb=records[sq_baked_faces[strip->face_first+member].front].argb;',
        'out->argb=records[sq_baked_faces[strip->face_first+(member+1u<strip->face_count ? member+1u : 0u)].front].argb;'),  # a strip vertex record holds another face's colour
  '16':('                const unsigned index=pack->strip_indices[strip->vertex_first+v];',
        '                const unsigned index=pack->strip_indices[strip->vertex_first+(v+1u<triangles+2u ? v : v-2u)];'),  # corrupted strip: its last vertex is its third-last
- '17':('table[strip->face_first+f].special=(uint16_t)(strip->face_count-f);','table[strip->face_first+f].special=(uint16_t)(strip->face_count-f+1u);'),  # corrupted strip table: a run may take the face after its strip
+ '17':('table[strip->face_first+f].special=(uint16_t)reach;','table[strip->face_first+f].special=(uint16_t)(reach+1u);'),  # corrupted strip table: a run may take the face after its strip
  # prebuilt car streams (model_submission.h, NM_SQ_CAR_STREAM; 5 above is the queue path's light class mutant)
  '18':('out->binding=(uint16_t)selected; out->argb=record->argb; out->group=record->group;',
        'out->binding=(uint16_t)selected; out->argb=sq_emit_records[0][selected^1u].argb; out->group=record->group;'),  # a resolved light class holds another binding's colour

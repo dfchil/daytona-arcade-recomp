@@ -198,6 +198,30 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
 (`build/dc-native-int2.recipe`, "16 October").
 `run_hw.sh` records video only with `VIDEO=1` (the disk filled up).
 
+### 30 October: the stream simulator (branch sim-net)
+
+The simulator had stopped building with SH4ZAM 0.10, drew the road class at 0.5 whatever the camera, and had no frame
+table left: the tables and their generator lived in build directories that are gone.
+
+- `dreamcast-native/tests/stream_sim/gen_frames.py OUT.frm ASSETS HEADERS [--course N] [--views TICK:VR,...]
+  [--attract TICKS]` writes tables from the game's own code: the frame assembly of `render/scene/practice.c`, sliced
+  into `tests/trace_race_native.c`, replays a recipe's race script through the podium. A script holds no view button;
+  `--views` presses them, and the race then leaves the script's course (what is drawn feeds the opponents). Tables are
+  ROM-derived: `build/` only. 12,000 ticks at `--step 20` are about 4 MB.
+- FRM5 carries each frame's road depth scale, as `practice_road_depth_pick` chose it on every tick. The simulator sets
+  it before the frame's lists, the reference expects it, and a frame outside the rule (0.5 for the attract, the podium
+  and the keyed cameras; else 0.5 or a preset's h/(h+0.6)) fails. `SIM_ROAD_DEPTH`, `_STEPS`, `_CYCLE`, `_CHECK`:
+  `sim_main.c`.
+- `check_stream.py` per table: the scale changed in the middle of the run against a world built at it from the start
+  and against the queue path, word for word, with every record on the path compared with a build each frame; then the
+  record cache with changes falling in meshes' builds (a table that does not manage that fails: it needs some 400
+  frames). `--course 1` and `2` take Expert's and Advanced's worlds; Expert runs on its record cache.
+- Reference: z is q times one factor, class depth times layer factor, the renderer's form. `(q*layer)*scale` agreed
+  only at 0.5. Frame-counter groups (`NM_OBJECT_CLOCK`) are outside its object selection.
+- Not covered: the frame-counter animations, knocked cones and damaged bodies are not in the tables (the damaged
+  bodies have `SIM_DAMAGE_CHECK`); the manual car; the fence sweep and mutants 29 and 30 need a pack with stipple groups;
+  `SIM_SIDE` (the PVR work model's sky and HUD) has no generator now.
+
 ### 19 October: the placed actors' lighting (branch actor-cost)
 
 - **Why**: the Expert finish run on hardware went from 1 to 7 late frames with Expert's actors, all cause=cpu-registration
@@ -2051,8 +2075,10 @@ overlay, and what the original shows in the ~386 blank ticks before results.
   no table or cache of the renderer). `tests/stream_sim/` is the submission
   simulator; with `SIM_ORACLE=1` it compares every submitted triangle of every
   frame with the reference:
-  `python3 dreamcast-native/tests/stream_sim/check_stream.py ASSETS FRAMES.frm`
-  (stages 3 and 5; ctest `native_stream_reference` when the cache variables
+  `python3 dreamcast-native/tests/stream_sim/check_stream.py [--course N] ASSETS FRAMES.frm`
+  (stages 3, 5 and 6; `tests/stream_sim/gen_frames.py` writes the frame
+  tables, see "30 October: the stream simulator"; ctest
+  `native_stream_reference` when the cache variables
   `NATIVE_STREAM_TEST_ASSETS` / `NATIVE_STREAM_TEST_FRAMES` are set). Run it
   after every renderer change. The console keeps the SH4 self-checks (FTRV
   matrix and lighting, the assembly vertex writer, header compile parity).
@@ -2371,6 +2397,10 @@ attract), each with the reference check; nothing has run on hardware.
   binding, LOD range, corrupted prebuilt u/v, corner, strip vertex) are caught.
   Console self-checks: the face writer and the lean transform against their C
   forms before the first frame.
+- The road class's scale changes with the camera (`sq_road_depth_set`): the
+  records of the road faces are rewritten, a mesh the record cache is building
+  starts again. `check_stream.py` holds that to a world built at the scale from
+  the start, word for word (mutants 41..44).
 - Model (SH4 instructions, world only, assets-objL12): about 29% fewer on
   average, 28-36% in the worst frames; stage 6 fast 694k -> 491k a frame.
   Memory: +1.27 MB at stage 6 (5.4 MB never taken; 3.5 MB with the profile).
