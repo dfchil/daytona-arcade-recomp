@@ -16,9 +16,9 @@
  * angle itself. */
 static inline float nm_pose_radians(uint16_t angle) { return (float)angle*(1.0f/SHZ_FSCA_RAD_FACTOR); }
 static int nm_pose_verify=1;
-/* SH4ZAM 0.9.0's software back-end multiplies the translation column by its apply_rotation_* matrix too (rot[3] is
- * XMTRX's own column 3); the SH4 back-end (shz_xmtrx_sh4.inl.h: two FTRVs into columns 0 and 1 for Z) transforms
- * the inner 3x3 only, XMTRX = XMTRX R. The host check models the SH4's. */
+/* SH4ZAM 0.9.0's software back-end multiplied the translation column by its apply_rotation_* matrix too (rot[3]
+ * was XMTRX's own column 3; 0.10.0's rotate_* keeps it as the SH4 does); the SH4 back-end (shz_xmtrx_sh4.inl.h: two
+ * FTRVs into columns 0 and 1 for Z) transforms the inner 3x3 only, XMTRX = XMTRX R. The host check models the SH4's. */
 static inline void nm_pit_crew_sw_rotation(unsigned axis,float radians) {
     alignas(32) shz_mat3x4_t m;
     shz_xmtrx_store_3x4(&m);
@@ -31,12 +31,12 @@ static inline void nm_pit_crew_sw_rotation(unsigned axis,float radians) {
     for(unsigned r=0;r<3;++r) { u[r]=c*ou[r]+sign*s*ov[r];v[r]=c*ov[r]-sign*s*ou[r]; }
     shz_xmtrx_load_3x4(&m);
 }
-#undef shz_xmtrx_apply_rotation_x
-#undef shz_xmtrx_apply_rotation_y
-#undef shz_xmtrx_apply_rotation_z
-#define shz_xmtrx_apply_rotation_x(r) nm_pit_crew_sw_rotation(0,(r))
-#define shz_xmtrx_apply_rotation_y(r) nm_pit_crew_sw_rotation(1,(r))
-#define shz_xmtrx_apply_rotation_z(r) nm_pit_crew_sw_rotation(2,(r))
+#undef shz_xmtrx_rotate_x
+#undef shz_xmtrx_rotate_y
+#undef shz_xmtrx_rotate_z
+#define shz_xmtrx_rotate_x(r) nm_pit_crew_sw_rotation(0,(r))
+#define shz_xmtrx_rotate_y(r) nm_pit_crew_sw_rotation(1,(r))
+#define shz_xmtrx_rotate_z(r) nm_pit_crew_sw_rotation(2,(r))
 #endif
 
 /* The pit crew's draw (spec: build/dc-native-pit.xjs2cE/spec-pitstop.md section 3), presentation only: the six
@@ -171,13 +171,13 @@ static inline int nm_pit_crew_parts_to(const nm_drive_params_t *p,const nm_pit_c
     shz_memcpy4(frame.elem,view,sizeof(frame));
     shz_xmtrx_load_3x4(&frame);
     shz_xmtrx_translate(position[0],position[1],position[2]);
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)heading)));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)heading)));
     shz_xmtrx_store_3x4(&frame);
     /* Root: T(pose) Ry Rx Rz, resident after the frame. */
     shz_xmtrx_translate(pose->xyz[0],pose->xyz[1],pose->xyz[2]);
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)pose->angle[1])));
-    shz_xmtrx_apply_rotation_x(nm_pose_radians((uint16_t)(-(int)pose->angle[0])));
-    shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)pose->angle[2])));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)pose->angle[1])));
+    shz_xmtrx_rotate_x(nm_pose_radians((uint16_t)(-(int)pose->angle[0])));
+    shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)pose->angle[2])));
     shz_xmtrx_store_3x4(matrix[0]);
     const uint16_t foot=(uint16_t)(-((int)heading-(int)camera_heading+(int)heading2));
     unsigned resident=0;
@@ -189,12 +189,12 @@ static inline int nm_pit_crew_parts_to(const nm_drive_params_t *p,const nm_pit_c
         shz_xmtrx_translate(offset[0],offset[1],offset[2]);
         switch(nm_pit_crew_tree[k].kind) {
         case NM_PIT_CREW_JOINT:
-            shz_xmtrx_apply_rotation_x(nm_pose_radians((uint16_t)(-(int)pose->angle[a])));
-            shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)pose->angle[a+2])));
-            shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)pose->angle[a+1])));
+            shz_xmtrx_rotate_x(nm_pose_radians((uint16_t)(-(int)pose->angle[a])));
+            shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)pose->angle[a+2])));
+            shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)pose->angle[a+1])));
             break;
         case NM_PIT_CREW_TURN:
-            shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)pose->angle[a])));
+            shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)pose->angle[a])));
             break;
         case NM_PIT_CREW_FOOT: {
             /* 0x1111/0x707: only the translation of the chain survives. */
@@ -202,7 +202,7 @@ static inline int nm_pit_crew_parts_to(const nm_drive_params_t *p,const nm_pit_c
             const float *t=matrix[k]->elem+9;
             shz_xmtrx_init_rotation_x(nm_pose_radians((uint16_t)(-(int)pose->angle[a])));
             shz_xmtrx_set_translation(t[0],t[1],t[2]);
-            shz_xmtrx_apply_rotation_y(nm_pose_radians(foot));
+            shz_xmtrx_rotate_y(nm_pose_radians(foot));
             break;
         }
         default: return 0;
@@ -260,7 +260,7 @@ static inline int nm_pit_crew_item(const nm_drive_params_t *p,const nm_pit_crew_
     shz_memcpy4(matrix.elem,root,sizeof(matrix));
     shz_xmtrx_load_3x4(&matrix);
     shz_xmtrx_translate(offset[0],offset[1],offset[2]);
-    if(art->item_roll[item]) shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)art->item_roll[item])));
+    if(art->item_roll[item]) shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)art->item_roll[item])));
     shz_xmtrx_store_3x4(&matrix);
     for(unsigned i=0;i<12;++i) if(!isfinite(matrix.elem[i])) return 0;
     if(nm_pose_verify)

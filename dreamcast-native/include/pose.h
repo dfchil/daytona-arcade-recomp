@@ -161,12 +161,12 @@ static inline int nm_car_part_pose(const nm_drive_params_t *p,const nm_player_t 
         nm_pose_radians((uint16_t)(-(int)car->render_angles[0])),
         nm_pose_radians((uint16_t)(-(int)car->render_angles[2])));
     shz_xmtrx_set_translation(xyz.x,xyz.y,xyz.z);
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-residual)));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-residual)));
     if(crash_rotation && damage->overlay_model) {
         if(crash_rotation==2) shz_xmtrx_scale(1,nm_force_float(0x3c23d70a),1);
-        shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)damage->angle[2])));
-        shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)damage->angle[1])));
-        shz_xmtrx_apply_rotation_x(nm_pose_radians((uint16_t)(-(int)damage->angle[0])));
+        shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)damage->angle[2])));
+        shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)damage->angle[1])));
+        shz_xmtrx_rotate_x(nm_pose_radians((uint16_t)(-(int)damage->angle[0])));
         if(crash_rotation==1) shz_xmtrx_translate(0,nm_force_float(0xbf0a3d71),0); // Local pivot, not world-space addition.
     }
     shz_xmtrx_store_3x4(&result); // One resident chain, no intermediate bank reloads.
@@ -239,9 +239,9 @@ static inline int nm_wheel_pose(const nm_drive_params_t *p, const nm_player_t *c
         nm_pose_radians((uint16_t)(-(int)undo[2])));
     const shz_vec3_t offset=shz_xmtrx_transform_vec3(shz_vec3_init(xyz[0],xyz[1],xyz[2]));
     shz_xmtrx_set_translation(offset.x,offset.y,offset.z);
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)steer[1])));
-    shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)roll[2])));
-    shz_xmtrx_apply_rotation_x(nm_pose_radians((uint16_t)(-(int)phase)));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)steer[1])));
+    shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)roll[2])));
+    shz_xmtrx_rotate_x(nm_pose_radians((uint16_t)(-(int)phase)));
     shz_xmtrx_store_3x4(&chained);
     for(unsigned i=0;i<12;++i) if(!isfinite(chained.elem[i])) return 0;
     if(nm_pose_verify) {

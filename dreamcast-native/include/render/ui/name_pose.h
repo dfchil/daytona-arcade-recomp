@@ -33,8 +33,8 @@ static inline int nm_name_radial_pose(const nm_drive_params_t *p,float radius,
     shz_xmtrx_init_rotation_z(nm_pose_radians((uint16_t)(-(int)angle)));
     shz_xmtrx_set_translation(0,-0.6f,depth);
     shz_xmtrx_translate(0,radius,0);
-    shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)angle));
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)spin)));
+    shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)angle));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)spin)));
     shz_xmtrx_scale(0.02f,0.02f,0.02f);
     shz_xmtrx_store_3x4(&matrix);
     shz_memcpy4(out,matrix.elem,sizeof(matrix));

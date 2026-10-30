@@ -39,11 +39,11 @@ static inline int nm_name_exit_pose(const nm_drive_params_t *math,
     shz_xmtrx_init_rotation_z(nm_pose_radians((uint16_t)(-(int)angle)));
     shz_xmtrx_set_translation(0,height,1);
     shz_xmtrx_translate(offset.x,offset.y,offset.z);
-    shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)angle));
+    shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)angle));
     if(phase==5) {
-        shz_xmtrx_apply_rotation_x(nm_pose_radians((uint16_t)(-(int)spin[0])));
-        shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)spin[1])));
-        shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)spin[2])));
+        shz_xmtrx_rotate_x(nm_pose_radians((uint16_t)(-(int)spin[0])));
+        shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)spin[1])));
+        shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)spin[2])));
     }
     shz_xmtrx_scale(scale,scale,scale);
     shz_xmtrx_store_3x4(&pose);shz_memcpy4(out,pose.elem,sizeof(pose));

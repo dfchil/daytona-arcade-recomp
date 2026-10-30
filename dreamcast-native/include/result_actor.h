@@ -27,8 +27,8 @@ static inline int nm_result_actor_pose(const nm_drive_params_t *p,
 #ifdef __DREAMCAST__
     alignas(32) shz_mat3x4_t matrix;
     shz_xmtrx_init_scale(1.2f,1.2f,1.2f);
-    shz_xmtrx_apply_rotation_y(nm_pose_radians((uint16_t)(-(int)s->other_angle[part])));
-    shz_xmtrx_apply_rotation_z(nm_pose_radians((uint16_t)(-(int)s->angle[part])));
+    shz_xmtrx_rotate_y(nm_pose_radians((uint16_t)(-(int)s->other_angle[part])));
+    shz_xmtrx_rotate_z(nm_pose_radians((uint16_t)(-(int)s->angle[part])));
     shz_xmtrx_set_translation(s->position[part].x,-0.01f,s->position[part].y);
     shz_xmtrx_store_3x4(&matrix);
     shz_memcpy4(out,matrix.elem,sizeof(matrix));

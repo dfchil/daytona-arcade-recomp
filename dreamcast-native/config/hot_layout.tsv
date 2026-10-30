@@ -168,5 +168,5 @@ upd	practice_object_place	-	0x303c0	0x0620	1424	0.0198	-
 upd	nm_scenery_select	-	0x309e0	0x10c0	3472	0.0181	-
 upd	nm_hud_tick	-	0x31aa0	0x0fa0	3944	0.0353	-
 upd	nm_hud_place	-	0x32a40	0x2aa0	10774	0.0441	-
-upd	practice_prepare	-	0x354e0	0x2ee0	12000	0.2463	-
-upd	practice_update	-	0x383c0	0x4b60	15192	0.0623	-
+upd	practice_prepare	-	0x354e0	0x2f20	12004	0.2463	-
+upd	practice_update	-	0x38400	0x4b60	15192	0.0623	-

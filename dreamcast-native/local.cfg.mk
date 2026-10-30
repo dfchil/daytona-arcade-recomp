@@ -992,15 +992,16 @@ ENJ_DEFAULT_OPTLEVEL := 3
 ENJ_CFLAGS += $(KOS_CFLAGS) -fno-fast-math -ffp-contract=off -include $(abspath include/finite.h)
 ENJ_CFLAGS += -I$(KOS_PORTS)/include/zlib
 # NATIVE_SH4ZAM_ROOT: the SH4ZAM checkout (its include/, and lib/libsh4zam.a built from it) used instead of the one
-#   installed in KOS's addons. Default: extern/sh4zam, the release this code was measured with (v0.9.0, 0fd3a1e;
-#   scripts/fetch_sh4zam.sh), since KOS's copy is shared and can move (2d550a1 turns shz_vec4_t's e[4] into a
-#   vector: geometry.c's pointers into it do not compile). NATIVE_SH4ZAM_ROOT= (empty) links KOS's copy.
+#   installed in KOS's addons. Default: extern/sh4zam at the pinned release (v0.10.0, 70dbb17; scripts/fetch_sh4zam.sh), since KOS's copy
+#   is shared and can move. SHZ_SH4_DOT_FIPR: v0.10.0 computes shz_dot6f/shz_dot8f (and the squared magnitudes) with
+#   scalar FPU code unless it is defined; the renderer's bounds (geometry.c) and face classes (model_submission.h)
+#   mirror the FIPR form in their own asm, so the FIPR form stays. NATIVE_SH4ZAM_ROOT= (empty) links KOS's copy.
 NATIVE_SH4ZAM_ROOT ?= $(abspath ../extern/sh4zam)
 ifneq ($(strip $(NATIVE_SH4ZAM_ROOT)),)
 ifeq ($(wildcard $(NATIVE_SH4ZAM_ROOT)/lib/libsh4zam.a),)
 $(error $(NATIVE_SH4ZAM_ROOT)/lib/libsh4zam.a is missing: run scripts/fetch_sh4zam.sh (or set NATIVE_SH4ZAM_ROOT=))
 endif
-ENJ_CFLAGS += -I$(abspath $(NATIVE_SH4ZAM_ROOT))/include
+ENJ_CFLAGS += -I$(abspath $(NATIVE_SH4ZAM_ROOT))/include -DSHZ_SH4_DOT_FIPR
 ENJ_LDLIBS += $(abspath $(NATIVE_SH4ZAM_ROOT))/lib/libsh4zam.a -lz
 else
 ENJ_LDLIBS += -lsh4zam -lz
