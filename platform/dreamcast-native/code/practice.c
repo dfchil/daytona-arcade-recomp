@@ -1088,7 +1088,7 @@ static void practice_update(void *unused) {
         practice.start_edges+=input.active.force_recovery;
         practice_reject_step="race scene step";
         /* 503690 = 5010b0 & 1 (5818, each frame): the crash end's lane value 41/42 (damage.h). */
-        input.active.variant=(uint8_t)(practice.race.ticks&1u);
+        input.active.variant=(uint8_t)((practice.race.counter_base+practice.race.ticks)&1u);
         /* Race sound commands: audio/race_sound_hooks.h, one call per hook. */
         const uint32_t countdown=nm_race_sound_hook_before(&practice.race,practice.road.profile_count);
         const int result=nm_race_scene_step(&practice.race,practice.math,&nm_intro_speeds,&practice.contact,

@@ -769,7 +769,7 @@ int main(int argc,char **argv) {
         uint32_t hold=0;uint16_t gate=0;
         input.active.dynamics.curve=(uint8_t)transmission;
         input.active.gear_selector=(uint8_t)(transmission ? r->gearsel : 0);
-        input.active.variant=(uint8_t)(race.ticks&1u); /* 503690 = 5010b0 & 1, as code/practice.c */
+        input.active.variant=(uint8_t)((race.counter_base+race.ticks)&1u); /* 503690 = 5010b0 & 1, as code/practice.c */
         if(reference_inputs) {
             input.active.dynamics.curve=(uint8_t)r->manual;
             input.active.gear_selector=(uint8_t)r->gearsel;
