@@ -2730,3 +2730,62 @@ running.
   and camera-restore branches.
 - A car spawned on the last road profile reads the record after the table for
   one tick; for course 0 those bytes are zero and are exported as such.
+
+## 30 October: the presentation list (branch gaps-2)
+
+Four of six done, host-verified, not run on a console. The pack changed: `hud_data.h` and `hud/` go together, an older
+asset set stops at "FAIL HUD startup". The recipe was not rerun as a whole: the `hud` step's command by hand (a disk cache
+around `tight_pieces`, which gives what the search gives), `expected.sha256` rows from that.
+
+- **Rolling start overlay** (`include/hud.h` nm_hud_overlay, a pure state of 501850, 5010b0, 501054, 501854). `ROLL_*`:
+  the banner and its car run left 4 pixels a tick through the 1024-pixel ring of the tile layer pair, ACCEL ON! or AUTO
+  DRIVE by the pedal, 3 2 1, GO!. The banner's stipple is not art: a translucent panel of 11 rectangles, 25,476 arcade
+  pixels (+0.1 ms by the CONDITION panel's measurement, against 1.2 ms for the stipple as punch-through), under
+  NATIVE_HUD_RADAR_PANEL. The map stays bright under the panel; in the original the stipple covers it.
+  Not reproduced: a pedal crossing 128 inside the 15 on-ticks leaves column 43 of ACCEL ON! until the next erase.
+- **Lap message** ad34: `MSG_*`. ae24.. (" PIT WORK" on +204) never runs: e45c's zero is the program's only store to +204.
+- **Chord** 129d0: `race.held`, nm_hud_map_apart scales the map and the marker places about the leader matrix's constant;
+  markers keep their size (6e-8 / +38 under +38). Pad: START + right, down, left the zoom; START + up + right, up + left,
+  up alone the map's size (a D-pad has no VR1 + VR3). `nm_hud_quad_fixed` false no longer means opaque: that was only true
+  of sprites of one core, and the scaled map was the first other one.
+- **"2" marker** 12b34: 288b5f0, 14 polygons, from `--second-marker 1 TRACE` (new step `trace_hud_lead`: the Expert
+  finish leads from frame 11483; the fast race never leads). `MARKER_TOP`: a copy of the player's marker on its sheet.
+- **Found on the way, fixed:** every marker on Advanced and Expert was wrong: headings ignored the map model's angle
+  234d98 (270 and 174.37 degrees: backwards on Expert) and Expert's depth (size 0.818); up to 17 px. `nm_hud_course_maps`
+  now has turn and size; prepare_hud checks the fitted angle against the ROM's.
+- **Hot layout.** Sprites from NM_HUD_TIGHT_EARLY on have their own table (`nm_hud_tight` keeps its slot) and are placed
+  out of line at the end of nm_hud_place. Do not pass `&list` to a function early in nm_hud_place: the escape drops the
+  constant `corners` and costs 5 KB (15,692 bytes against a slot of 10,912). `practice_hud`'s slot is 0x2c0, full. HUD
+  banks are 60..63 (the lap font's colours fit nowhere; 60 is free in phases 20..24). VRAM 71,680 -> 139,264 bytes.
+- **Budget by the pack's cost model:** rolling start, banner fully on the screen with the hint: +0.8 ms a frame (0.25 of it
+  SH4, 98 rectangles), 0.93 with the panel; GO! +0.15; lap message +0.13 (64 ticks a lap). Peak 202 of 288 rectangles.
+  The Beginner's late frames (ticks 4589..4615) are no rolling start, but a lap message over them would add to them.
+
+Checks, all against the original: `m2segment ROM 13300 --inputs inputs-finish-fast.txt --trace-hud DIR 250`, `check_hud`
+(`tests/check_hud.c`, rules on the reference's variables), `trace_race_native ... --hud ROWS`, `tools/check_hud.py DIR
+PACK ROWS [--course N] [--preview-dir]`, `check_hud_tight PACK ROWS`. Fast race 10,200 frames: hint drawn 178, digits 180,
+GO! 32, banner 560 with its scroll word, LAP TIME 320, BEST LAP 128; 18 + 2 reference frames by pixel, nothing differs in
+the overlay. A run with the six chords (5,500 frames): +34 bit for bit, +52, +38, markers within 0.0165 px. Expert finish
+10,306 frames, Advanced 8,447: "2" on 1,516 and 218, markers within 0.0136 px. Tight rectangles 0 pixels different. No
+gameplay field moved: nm_race_scene_t has `accel` at its end, for the hint only.
+
+- **Standing-start lamps not done** (501248; needs new models). Camera-space 3D: from 5010a8 = 320 the object falls from
+  (0, 6.5, 15.2) to (0, 1.5, 5.2) ahead of the eye, turning +0x800 a tick about its axis (c234); c6a4 draws, at S 1.3, the
+  three-lamp bar 288cbf8 (166 polygons) turned about x by +38, and under 192 the board 231ee0[n] below it at y -0.88
+  (288cba8..be4, 20 polygons each, digit by n = ((5010a8 - 15) >> 6) + 1). +38 runs 1024 a tick to 231ed0[n]: 71b, c71b,
+  871b, 471b for n = 3..0, the bar's grey, red, yellow, green faces. 64 ticks after 0 the object breaks into four falling
+  pieces (c2c0, c4b4 with the same two models), gone at 192. The way in is the car pack (`append_player_parts.py`, like
+  the crew): car.dnm and car.dnt of every set, a new draw in camera space, and a whole recipe for the world palettes
+  that share car.dnt. Its sounds: c594 (9e29xx, ae216e, ae216f).
+- **Transmission cars not done** (25eb4). T(23af44[i]) Ry(+5a), 286fab0[i] (359 polygons), 2890550, 286fab8[i], wheels
+  7384, the unchosen car under the dim light 502210. The bodies are in the car pack, but gameplay/select_mode.c has no 3D
+  scene, and the select's 34 palette banks sit on the cars' 2..59: it needs a camera and light pass, and the car's
+  palettes moved or the select's.
+- **Open, not on the list:** the tile layers shake on an impact (0x100a000 words 8, 0, -4, 0, 4, -2, 2; b30c..; 42 frames
+  of the fast race, the whole HUD a few pixels sideways): not native. A manual car's map marker is 288b62c (13210[1]),
+  the export has only the automatic's 288b618. `hud_render.c`'s comment says the CONDITION panel is off by default;
+  local.cfg.mk has it on.
+- **Console (not run):** `elf/play` of the recipe. Beginner: the banner's edges at the screen sides (sprites at negative
+  x), the panel's rounded corners, AUTO DRIVE, ACCEL ON! with the pedal up, 3 2 1, GO!, a late-frame count of the rolling
+  start against the 3 of 23 October; each lap's message. All courses: START + D-pad, the map sizes held over a lap,
+  the markers' headings on Advanced and Expert, the "2" when leading.
