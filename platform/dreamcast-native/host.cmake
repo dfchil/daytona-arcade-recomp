@@ -4,43 +4,64 @@
 # default build does not read this file.
 set(DN ${CMAKE_SOURCE_DIR}/platform/dreamcast-native)
 
+# A C target of the port's: C11, its headers (implementation and headers have
+# separate roots on host and SH4).
+function(native_c_target target)
+    set_property(TARGET ${target} PROPERTY C_STANDARD 11)
+    target_include_directories(${target} PRIVATE ${DN}/include)
+endfunction()
+
+# The shared runtime again, with the hooks of M2_DC_NATIVE_HOST (call and return
+# observers, geometry inspection): `runtime` stays as the default build has it.
+get_target_property(NATIVE_RUNTIME_SOURCES runtime SOURCES)
+add_library(native_runtime STATIC ${NATIVE_RUNTIME_SOURCES})
+target_include_directories(native_runtime PUBLIC src)
+target_compile_definitions(native_runtime PUBLIC M2_DC_NATIVE_HOST M2_ROMSET="${M2_ROMSET}")
+target_link_libraries(native_runtime PUBLIC trace i960 ymfm)
+if(TARGET lzma7z)
+    target_link_libraries(native_runtime PUBLIC lzma7z)
+    target_compile_definitions(native_runtime PRIVATE M2_HAVE_7Z)
+endif()
+add_library(native_refcore STATIC src/refcore/i960_ref.cpp)
+target_link_libraries(native_refcore PUBLIC native_runtime)
+
+# The ROM set importer of the recipe: the sound ROMs are not needed.
+add_executable(m2import_silent ${DN}/tools/m2import_silent.cpp)
+target_link_libraries(m2import_silent PRIVATE native_runtime)
+
+# The recompiled game under the port's exports and checks, without the 68000
+# (recipes/build_assets.sh generates no code for it).
 if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN})
     file(GLOB GEN_SOURCES ${GEN_DIR}/*.cpp)
-    # Silent analysis/builds need neither sound ROMs nor generated 68000 code.
-    # Only GameLoop differs; the board, TGP and video use the shared runtime.
-    add_library(runtime_silent STATIC src/runtime/game_loop.cpp)
-    target_compile_definitions(runtime_silent PUBLIC M2_NO_SOUND)
-    target_link_libraries(runtime_silent PUBLIC runtime)
-    add_executable(m2segment tools/m2segment/main.cpp ${DN}/code/drive.c ${DN}/code/contact.c ${DN}/code/path.c ${DN}/code/road.c ${DN}/code/expert_actors.c ${GEN_SOURCES} ${TGP_GEN})
-    target_link_libraries(m2segment PRIVATE runtime_silent refcore)
+    add_executable(m2segment ${DN}/tools/m2segment.cpp ${DN}/tools/no_sound.cpp
+        ${DN}/code/drive.c ${DN}/code/contact.c ${DN}/code/path.c ${DN}/code/road.c
+        ${DN}/code/expert_actors.c ${GEN_SOURCES} ${TGP_GEN})
+    target_link_libraries(m2segment PRIVATE native_refcore)
+    target_include_directories(m2segment PRIVATE ${DN}/include)
     if(NOT MSVC)
         set_source_files_properties(${GEN_SOURCES} ${TGP_GEN} PROPERTIES COMPILE_OPTIONS "-Wno-unused-label")
     endif()
 endif()
-add_executable(test_runtime_memory tests/test_runtime_memory.cpp)
-target_link_libraries(test_runtime_memory PRIVATE runtime)
-add_test(NAME runtime_memory COMMAND test_runtime_memory)
 
-add_executable(test_paged_rom tests/test_paged_rom.cpp)
-target_include_directories(test_paged_rom PRIVATE src)
-add_test(NAME paged_rom COMMAND test_paged_rom ${CMAKE_CURRENT_BINARY_DIR})
+add_executable(test_native_host_hooks ${DN}/tests/test_host_hooks.cpp)
+target_link_libraries(test_native_host_hooks PRIVATE native_runtime)
+add_test(NAME native_host_hooks COMMAND test_native_host_hooks)
 
 add_executable(test_native_models ${DN}/tests/test_export_models.cpp)
 target_include_directories(test_native_models PRIVATE src)
+target_compile_definitions(test_native_models PRIVATE M2_DC_NATIVE_HOST)
 add_test(NAME native_models COMMAND test_native_models)
 add_executable(test_native_visibility ${DN}/tests/test_visibility.c ${DN}/code/visibility.c)
-set_property(TARGET test_native_visibility PROPERTY C_STANDARD 11)
-if(UNIX AND NOT APPLE)
-    target_link_libraries(test_native_visibility PRIVATE m)
-endif()
+native_c_target(test_native_visibility)
 add_test(NAME native_visibility COMMAND test_native_visibility)
 add_executable(test_native_road ${DN}/tests/test_road.c ${DN}/code/road.c)
+native_c_target(test_native_road)
 add_test(NAME native_road COMMAND test_native_road)
 add_executable(test_native_drive ${DN}/tests/test_drive.c ${DN}/code/drive.c)
-set_property(TARGET test_native_drive PROPERTY C_STANDARD 11)
+native_c_target(test_native_drive)
 add_test(NAME native_drive COMMAND test_native_drive)
 add_executable(test_native_contact ${DN}/tests/test_contact.c ${DN}/code/contact.c ${DN}/code/drive.c)
-set_property(TARGET test_native_contact PROPERTY C_STANDARD 11)
+native_c_target(test_native_contact)
 add_test(NAME native_contact COMMAND test_native_contact)
 set(NATIVE_RACE_TEST_ASSETS "" CACHE PATH "Owned prepared course0 packs for the autonomous native race check")
 set(NATIVE_RACE_TEST_HEADERS "" CACHE PATH "Owned generated intro_drive_data.h directory for the native race check")
@@ -49,51 +70,45 @@ if(NATIVE_RACE_TEST_ASSETS AND NATIVE_RACE_TEST_HEADERS)
     add_executable(test_native_race_movement ${DN}/tests/test_race_movement.c
         ${DN}/code/drive.c ${DN}/code/contact.c
         ${DN}/code/road.c ${DN}/code/path.c ${DN}/code/visibility.c)
-    set_property(TARGET test_native_race_movement PROPERTY C_STANDARD 11)
-    target_include_directories(test_native_race_movement PRIVATE ${DN}/include ${NATIVE_RACE_TEST_HEADERS})
+    native_c_target(test_native_race_movement)
+    target_include_directories(test_native_race_movement PRIVATE ${NATIVE_RACE_TEST_HEADERS})
     if(NATIVE_RACE_TEST_INTENTS)
         target_include_directories(test_native_race_movement PRIVATE ${NATIVE_RACE_TEST_INTENTS})
         target_compile_definitions(test_native_race_movement PRIVATE NATIVE_INTENT_DATA)
-    endif()
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(test_native_race_movement PRIVATE m)
     endif()
     add_test(NAME native_race_movement COMMAND test_native_race_movement
         ${NATIVE_RACE_TEST_ASSETS}/drive.dnd ${NATIVE_RACE_TEST_ASSETS}/course0.dnc
         ${NATIVE_RACE_TEST_ASSETS}/course0.dnr ${NATIVE_RACE_TEST_ASSETS})
 endif()
+add_executable(test_native_path ${DN}/tests/test_path.c ${DN}/code/path.c ${DN}/code/drive.c)
+native_c_target(test_native_path)
+add_test(NAME native_path COMMAND test_native_path)
+add_executable(test_native_slot_machine ${DN}/tests/test_slot_machine.c)
+native_c_target(test_native_slot_machine)
+add_test(NAME native_slot_machine COMMAND test_native_slot_machine)
+add_executable(test_native_wrong_way ${DN}/tests/test_wrong_way.c)
+native_c_target(test_native_wrong_way)
+add_test(NAME native_wrong_way COMMAND test_native_wrong_way)
+add_executable(test_native_contact_clear ${DN}/tests/test_contact_clear.c)
+native_c_target(test_native_contact_clear)
+add_test(NAME native_contact_clear COMMAND test_native_contact_clear)
+add_executable(check_native_meshpack ${DN}/tests/check_meshpack.c ${DN}/code/meshpack.c)
+native_c_target(check_native_meshpack)
+find_package(ZLIB REQUIRED)
+add_executable(check_native_material_pack ${DN}/tests/check_material_pack.c ${DN}/code/material_pack.c)
+native_c_target(check_native_material_pack)
+target_link_libraries(check_native_material_pack PRIVATE ZLIB::ZLIB)
 add_executable(test_native_practice ${DN}/tests/test_practice.c
     ${DN}/code/drive.c ${DN}/code/contact.c
     ${DN}/code/road.c ${DN}/code/path.c
     ${DN}/code/geometry.c ${DN}/code/meshpack.c
     ${DN}/code/material_pack.c ${DN}/code/visibility.c)
-set_property(TARGET test_native_practice PROPERTY C_STANDARD 11)
+native_c_target(test_native_practice)
 # Requires user-owned prepared packs, passed explicitly; no ROM test fixture.
-if(UNIX AND NOT APPLE)
-    target_link_libraries(test_native_practice PRIVATE m)
-endif()
-add_executable(test_native_path ${DN}/tests/test_path.c ${DN}/code/path.c ${DN}/code/drive.c)
-set_property(TARGET test_native_path PROPERTY C_STANDARD 11)
-add_test(NAME native_path COMMAND test_native_path)
-add_executable(test_native_slot_machine ${DN}/tests/test_slot_machine.c)
-set_property(TARGET test_native_slot_machine PROPERTY C_STANDARD 11)
-add_test(NAME native_slot_machine COMMAND test_native_slot_machine)
-add_executable(test_native_wrong_way ${DN}/tests/test_wrong_way.c)
-set_property(TARGET test_native_wrong_way PROPERTY C_STANDARD 11)
-add_test(NAME native_wrong_way COMMAND test_native_wrong_way)
-add_executable(test_native_contact_clear ${DN}/tests/test_contact_clear.c)
-set_property(TARGET test_native_contact_clear PROPERTY C_STANDARD 11)
-add_test(NAME native_contact_clear COMMAND test_native_contact_clear)
-add_executable(check_native_meshpack ${DN}/tests/check_meshpack.c ${DN}/code/meshpack.c)
-set_property(TARGET check_native_meshpack PROPERTY C_STANDARD 11)
-add_executable(check_native_material_pack ${DN}/tests/check_material_pack.c ${DN}/code/material_pack.c)
-set_property(TARGET check_native_material_pack PROPERTY C_STANDARD 11)
-find_package(ZLIB REQUIRED)
-target_link_libraries(check_native_material_pack PRIVATE ZLIB::ZLIB)
 target_link_libraries(test_native_practice PRIVATE ZLIB::ZLIB)
 add_executable(test_native_geometry ${DN}/tests/test_geometry.cpp
     ${DN}/code/geometry.c ${DN}/code/meshpack.c)
-set_property(TARGET test_native_geometry PROPERTY C_STANDARD 11)
+native_c_target(test_native_geometry)
 target_include_directories(test_native_geometry PRIVATE src)
 target_compile_options(test_native_geometry PRIVATE -ffp-contract=off)
 add_test(NAME native_geometry COMMAND test_native_geometry)
@@ -105,48 +120,24 @@ set(NATIVE_HUD_TEST_PACK "" CACHE PATH "Prepared HUD pack (hud_data.h, hud/) for
 set(NATIVE_HUD_TEST_ROWS "" CACHE STRING "HUD row files of recorded races (trace_race_native --hud) for the tight HUD geometry check")
 if(NATIVE_HUD_TEST_PACK AND NATIVE_HUD_TEST_ROWS)
     add_executable(check_native_hud_tight ${DN}/tests/check_hud_tight.c)
-    set_property(TARGET check_native_hud_tight PROPERTY C_STANDARD 11)
-    target_include_directories(check_native_hud_tight PRIVATE ${DN}/include ${NATIVE_HUD_TEST_PACK})
+    native_c_target(check_native_hud_tight)
+    target_include_directories(check_native_hud_tight PRIVATE ${NATIVE_HUD_TEST_PACK})
     target_compile_options(check_native_hud_tight PRIVATE -fno-fast-math -ffp-contract=off)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(check_native_hud_tight PRIVATE m)
-    endif()
     add_test(NAME native_hud_tight COMMAND check_native_hud_tight ${NATIVE_HUD_TEST_PACK} ${NATIVE_HUD_TEST_ROWS})
 endif()
 
-# Native implementation and headers have separate roots on host and SH4.
-foreach(native_target IN ITEMS m2segment test_native_visibility test_native_road
-        test_native_drive test_native_contact test_native_race_movement
-        test_native_practice test_native_path check_native_meshpack
-        check_native_material_pack test_native_geometry test_native_slot_machine
-        test_native_wrong_way test_native_contact_clear)
-    if(TARGET ${native_target})
-        target_include_directories(${native_target} PRIVATE ${DN}/include)
-    endif()
-endforeach()
+add_executable(test_native_assets ${DN}/tests/test_dreamcast_assets.cpp)
+target_link_libraries(test_native_assets PRIVATE native_runtime)
+add_test(NAME native_assets COMMAND test_native_assets)
 
-add_executable(test_dreamcast_budget tests/test_dreamcast_budget.cpp)
-target_include_directories(test_dreamcast_budget PRIVATE src)
-add_test(NAME dreamcast_budget COMMAND test_dreamcast_budget)
+add_executable(test_native_pvr_geometry ${DN}/tests/test_pvr_geometry.cpp)
+target_include_directories(test_native_pvr_geometry PRIVATE src)
+add_test(NAME native_pvr_geometry COMMAND test_native_pvr_geometry)
 
-add_executable(test_dreamcast_assets tests/test_dreamcast_assets.cpp)
-target_include_directories(test_dreamcast_assets PRIVATE src)
-target_link_libraries(test_dreamcast_assets PRIVATE runtime)
-add_test(NAME dreamcast_assets COMMAND test_dreamcast_assets)
+add_executable(test_native_system24 ${DN}/tests/test_system24.cpp)
+target_link_libraries(test_native_system24 PRIVATE native_runtime)
+add_test(NAME native_system24 COMMAND test_native_system24)
 
-add_executable(test_texture_pack tests/test_texture_pack.c)
-add_test(NAME texture_pack COMMAND test_texture_pack)
-
-add_executable(test_material_pack tests/test_material_pack.cpp)
-target_include_directories(test_material_pack PRIVATE src)
-add_test(NAME material_pack COMMAND test_material_pack)
-
-add_executable(test_pvr_geometry tests/test_pvr_geometry.cpp)
-target_include_directories(test_pvr_geometry PRIVATE src)
-add_test(NAME pvr_geometry COMMAND test_pvr_geometry)
-add_executable(test_dc_system24 tests/test_dc_system24.cpp)
-target_link_libraries(test_dc_system24 PRIVATE runtime)
-add_test(NAME dc_system24 COMMAND test_dc_system24)
 # Slot machine lockstep (platform/dreamcast-native/tests/test_slot_lockstep.py): the native race harness in production mode
 # against the original's runs with START presses. ROM output only, passed explicitly: INCLUDES the generated header
 # directories (intro_drive_data.h of work/intro, race_intent_data.h, race_start_data.h, race_record_data.h,
@@ -161,25 +152,19 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
         ${DN}/code/contact.c ${DN}/code/road.c ${DN}/code/path.c
         ${DN}/code/visibility.c ${DN}/code/meshpack.c ${DN}/code/render/scene/damage_bodies.c
         ${DN}/code/props.c ${DN}/code/props_scene.c ${DN}/code/expert_actors.c)
-    set_property(TARGET trace_race_native PROPERTY C_STANDARD 11)
-    target_include_directories(trace_race_native PRIVATE ${DN}/include ${NATIVE_SLOT_TEST_INCLUDES})
+    native_c_target(trace_race_native)
+    target_include_directories(trace_race_native PRIVATE ${NATIVE_SLOT_TEST_INCLUDES})
     target_compile_options(trace_race_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)
     target_compile_definitions(trace_race_native PRIVATE NM_TRACE_PARTS=1) # --parts (meshpack.c, damage_bodies.c)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(trace_race_native PRIVATE m)
-    endif()
     # Live-play robustness (platform/dreamcast-native/tests/fuzz_race_native.c): seeded random races with abusive pad input
     # (grass, spins, walls, wrong way, START at the slot machine, time out) through the production tick of
     # code/practice.c; the original never rejects a tick, so any reject fails, naming the step and the state.
     add_executable(fuzz_race_native ${DN}/tests/fuzz_race_native.c ${DN}/code/drive.c
         ${DN}/code/contact.c ${DN}/code/road.c ${DN}/code/path.c
         ${DN}/code/visibility.c)
-    set_property(TARGET fuzz_race_native PROPERTY C_STANDARD 11)
-    target_include_directories(fuzz_race_native PRIVATE ${DN}/include ${NATIVE_SLOT_TEST_INCLUDES})
+    native_c_target(fuzz_race_native)
+    target_include_directories(fuzz_race_native PRIVATE ${NATIVE_SLOT_TEST_INCLUDES})
     target_compile_options(fuzz_race_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(fuzz_race_native PRIVATE m)
-    endif()
     # Seeds 1-300 (289: a contact leaves the player backwards, speed index -1, NaN drag; one race in three aims at
     # the pit lane at every lap's end: about 400 pit stops), plus seed 435: a race finished on profile 195 (the
     # finish entry's path cursor reads the route's guard records).
@@ -223,15 +208,12 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
             ${DN}/code/visibility.c ${DN}/code/meshpack.c ${DN}/code/render/scene/damage_bodies.c
             ${NATIVE_SH4ZAM_DIR}/source/sw/shz_xmtrx_sw.c ${NATIVE_SH4ZAM_DIR}/source/shz_xmtrx.c
             ${NATIVE_SH4ZAM_DIR}/source/shz_matrix.c)
-        set_property(TARGET trace_race_native_shz PROPERTY C_STANDARD 11)
+        native_c_target(trace_race_native_shz)
         set_property(TARGET trace_race_native_shz PROPERTY C_EXTENSIONS ON)
-        target_include_directories(trace_race_native_shz PRIVATE ${DN}/include ${NATIVE_SLOT_TEST_INCLUDES}
+        target_include_directories(trace_race_native_shz PRIVATE ${NATIVE_SLOT_TEST_INCLUDES}
             ${NATIVE_SH4ZAM_DIR}/include)
         target_compile_options(trace_race_native_shz PRIVATE -O2 -fno-fast-math -ffp-contract=off)
         target_compile_definitions(trace_race_native_shz PRIVATE NM_TRACE_PARTS=1 NM_PIT_CREW_SHZ=1)
-        if(UNIX AND NOT APPLE)
-            target_link_libraries(trace_race_native_shz PRIVATE m)
-        endif()
         add_test(NAME native_pit_render_shz
             COMMAND Python3::Interpreter ${DN}/tests/test_pit_render.py
                     $<TARGET_FILE:trace_race_native_shz> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_PIT_TEST_TRACES}" "${NATIVE_PIT_TEST_LOGS}")
@@ -243,8 +225,7 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # game start and select (trace_race_native --frontend) on every row and field, collision tracking words included.
     set(NATIVE_FRONTEND_TEST_TRACES "" CACHE STRING "Dirs with frontend-*.trace and race-*.trace (';')")
     add_executable(trace_frontend_native ${DN}/tests/trace_frontend_native.c)
-    set_property(TARGET trace_frontend_native PROPERTY C_STANDARD 11)
-    target_include_directories(trace_frontend_native PRIVATE ${DN}/include)
+    native_c_target(trace_frontend_native)
     add_test(NAME native_frontend_lockstep
         COMMAND Python3::Interpreter ${DN}/tests/test_frontend_lockstep.py
                 $<TARGET_FILE:trace_frontend_native> $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS}
@@ -264,12 +245,8 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     set(NATIVE_DAMAGE_TEST_LOGS "" CACHE PATH "Dir with the damage display-list logs log-E.bin, log-V.bin")
     add_executable(player_parts_check ${DN}/tests/player_parts_check.c ${DN}/code/drive.c
         ${DN}/code/road.c)
-    set_property(TARGET player_parts_check PROPERTY C_STANDARD 11)
-    target_include_directories(player_parts_check PRIVATE ${DN}/include)
+    native_c_target(player_parts_check)
     target_compile_options(player_parts_check PRIVATE -O2 -fno-fast-math -ffp-contract=off)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(player_parts_check PRIVATE m)
-    endif()
     add_test(NAME native_damage_render
         COMMAND Python3::Interpreter ${DN}/tests/test_damage_render.py
                 $<TARGET_FILE:trace_race_native> $<TARGET_FILE:player_parts_check> ${NATIVE_SLOT_TEST_ASSETS}
@@ -281,12 +258,8 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     set(NATIVE_FX_TEST_LOGS "" CACHE STRING "Dirs with the effects logs fx-{A,C,E,F,G,H,V,fast}.fx (';')")
     set(NATIVE_FX_TEST_ROM "" CACHE PATH "Dir with the daytona93 images program.bin, main_data.bin")
     add_executable(car_effects_check ${DN}/tests/car_effects_check.c ${DN}/code/drive.c)
-    set_property(TARGET car_effects_check PROPERTY C_STANDARD 11)
-    target_include_directories(car_effects_check PRIVATE ${DN}/include)
+    native_c_target(car_effects_check)
     target_compile_options(car_effects_check PRIVATE -O2 -fno-fast-math -ffp-contract=off)
-    if(UNIX AND NOT APPLE)
-        target_link_libraries(car_effects_check PRIVATE m)
-    endif()
     add_test(NAME native_effects_render
         COMMAND Python3::Interpreter ${DN}/tests/test_effects_render.py
                 $<TARGET_FILE:car_effects_check> $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS}

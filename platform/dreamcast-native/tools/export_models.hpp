@@ -6,7 +6,7 @@
 #pragma once
 #include "runtime/geo.h"
 #include "runtime/video.h"
-#include "../../../tools/common/dreamcast_assets.h"
+#include "dreamcast_assets.h"
 #include "../include/lighting.h"
 #include <algorithm>
 #include <array>
@@ -125,7 +125,7 @@ inline std::vector<ModelFace> decode_model(const rt::Geo::geo_state &state,
         return address & 0x800000
             ? rt::GeoPtr16{r.texture_ram, 0x10000, address & 0xffff}
             : rt::GeoPtr16{r.texture_rom, r.texture_rom_mask + 1,
-                          address & r.texture_rom_mask, r.texture_pages};
+                          address & r.texture_rom_mask};
     };
     expect(source.opcode >> 23); expect(source.texture_points); expect(source.texture_headers);
     auto p0 = point(), p1 = point();

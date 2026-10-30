@@ -15,11 +15,7 @@
 #include "runtime/gen_support.h"
 #include "runtime/lockstep.h"
 #include "runtime/m2_board.h"
-#ifndef M2_NO_SOUND
 #include "runtime/sound_board.h"
-#else
-namespace snd { class SoundBoard; }
-#endif
 
 #include <cstdint>
 #include <memory>
@@ -67,12 +63,9 @@ public:
     // images_dir: the importer's output (build/rom_cache/daytona93).
     // Disable only when a frontend supplies its own native audio engine and
     // consumes board().take_sound_bytes(); no reference sound board is built.
-    // rom_cache_bytes: fixed cache per ROM (five images), 0 keeps the desktop's
-    // resident images. Streaming never changes the guest's read semantics.
-    explicit GameLoop(const std::string &images_dir, bool sound_enabled = true, size_t rom_cache_bytes = 0,
-                      bool external_3d = false);
+    explicit GameLoop(const std::string &images_dir, bool sound_enabled = true);
     // Images already loaded (rt::import_rom_set: straight from the ROM zip).
-    explicit GameLoop(M2Board::Images images, bool sound_enabled = true, bool external_3d = false);
+    explicit GameLoop(M2Board::Images images, bool sound_enabled = true);
 
     // Run until the next screen is composed. `inputs` are latched by the I/O
     // board at the start of this frame's vblank.
@@ -124,19 +117,15 @@ public:
         return width > kWidth ? (width - kWidth) / 2 : 0;
     }
     M2Board &board() { return *board_; }
+#ifdef M2_DC_NATIVE_HOST
     void set_call_observer(Cpu::CallObserver observer, void *context) {
         cpu_->on_call = observer; cpu_->on_call_ctx = context;
     }
     void set_return_observer(Cpu::ReturnObserver observer, void *context) {
         cpu_->on_return = observer; cpu_->on_return_ctx = context;
     }
-    snd::SoundBoard *sound() {
-#ifndef M2_NO_SOUND
-        return sound_.get();
-#else
-        return nullptr;
 #endif
-    } // null without the sound ROMs
+    snd::SoundBoard *sound() { return sound_.get(); } // null without the sound ROMs
     static constexpr double kFrameHz = 16000000.0 / (656.0 * 424.0); // the board's video timing
     uint64_t frames() const { return frames_; }
     uint64_t instructions() const { return ls_->count; }
@@ -149,9 +138,7 @@ private:
     std::unique_ptr<Cpu> cpu_;
     std::unique_ptr<Lockstep> ls_;
     std::unique_ptr<gen::Env> env_;
-#ifndef M2_NO_SOUND
     std::unique_ptr<snd::SoundBoard> sound_;
-#endif
     std::vector<uint8_t> pending_sound_bytes_;
     FrameProfiler::Clock sound_profile_clock_ = nullptr;
     bool sound_frame_pending_ = false;

@@ -7,7 +7,7 @@
 // Output is ROM-run-derived evidence; keep it under ignored build/ directories.
 #pragma once
 #include "runtime/game_loop.h"
-#include "../../../tools/common/dreamcast_assets.h"
+#include "dreamcast_assets.h"
 
 #include <cinttypes>
 #include <cstdio>

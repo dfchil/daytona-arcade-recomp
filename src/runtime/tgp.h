@@ -62,11 +62,6 @@ public:
         if (tail_ - head_ == buf_.size()) grow();
         buf_[tail_++ & mask_] = v;
     }
-    std::vector<uint32_t> contents() const { // host diagnostics: the queued words, oldest first
-        std::vector<uint32_t> out;
-        for (uint32_t i = head_; i != tail_; ++i) out.push_back(buf_[i & mask_]);
-        return out;
-    }
 
 private:
     void grow() {
@@ -117,7 +112,7 @@ struct Tgp {
 
     [[noreturn]] void fatal(uint16_t at, const char *what) {
         char buf[160];
-        ::snprintf(buf, sizeof buf, "TGP %03x: %s", at, what);
+        std::snprintf(buf, sizeof buf, "TGP %03x: %s", at, what);
         throw TgpFatal(buf);
     }
 

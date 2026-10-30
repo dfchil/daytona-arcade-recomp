@@ -66,7 +66,7 @@ mkdir -p $OUT/logs $W/bin $OUT/sfx
 print -r -- "-- AICAforge tools ($AF) and prepare_sfx"
 { make -C $AF authoring
   cc -std=c11 -O2 -c -I$AF/driver/format/include $AF/driver/format/src/codec.c -o $W/bin/codec.o
-  c++ -std=c++20 -O2 -I$REPO/src -I$AF/driver/format/include $DN/tools/prepare_sfx.cpp \
+  c++ -std=c++20 -O2 -DM2_DC_NATIVE_HOST -I$REPO/src -I$AF/driver/format/include $DN/tools/prepare_sfx.cpp \
       $REPO/src/runtime/native_sound_sequencer.cpp $W/bin/codec.o -o $W/bin/prepare_sfx
 } > $OUT/logs/sfx-tools.log 2>&1 || { tail -20 $OUT/logs/sfx-tools.log; exit 1; }
 VGM=$AF/dependencies/AICAforge/build/afx_vgm

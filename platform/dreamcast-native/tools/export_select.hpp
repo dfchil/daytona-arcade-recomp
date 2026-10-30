@@ -23,7 +23,7 @@
 // the select's frame centre +34/+38 of that frame), and the transmission screen's small map's box
 // (small_map.txt: the chosen course's map at 0.644 of the course screen's 0.9).
 #pragma once
-#include "../../../tools/common/dreamcast_assets.h"
+#include "dreamcast_assets.h"
 #include "runtime/game_loop.h"
 
 #include <algorithm>

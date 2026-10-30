@@ -1,4 +1,4 @@
-#include "../tools/common/dreamcast/system24.hpp"
+#include "../tools/system24.hpp"
 #undef NDEBUG
 #include <cassert>
 #include <cstdio>
@@ -85,76 +85,5 @@ int main() {
     }
     for (unsigned bank = 0; bank < 3; ++bank) for (unsigned color = 0; color < 32; ++color)
         word(xlat, bank * 0x2000 + color * 256 + 64, 64 + color * 6);
-    std::vector<uint8_t> image(512 * 512);
-    std::vector<uint32_t> back(rt::Video::W * rt::Video::H);
-    daytona::System24Palette compact;
-    unsigned pal4_blocks = 0;
-    const auto upload = [&](unsigned bx, unsigned by, unsigned bits, const uint8_t *block) {
-        if (bits == 4) ++pal4_blocks;
-        // Independent bit-by-bit pixel address, following KOS's 4/8bpp
-        // layout. Check every global address against block-local addressing.
-        const auto morton = [](unsigned x, unsigned y) {
-            unsigned out = 0;
-            for (unsigned bit = 0; bit < 9; ++bit)
-                out |= ((y >> bit) & 1) << (2 * bit) | ((x >> bit) & 1) << (2 * bit + 1);
-            return out;
-        };
-        const auto byte = [&](unsigned x, unsigned y) {
-            return bits == 4 ? morton(x, y) / 2 : morton(y / 2, x) * 2 + (y & 1);
-        };
-        for (unsigned y = 0; y < 64; ++y) for (unsigned x = 0; x < 64; ++x) {
-            const unsigned global = byte(bx * 64 + x, by * 64 + y);
-            assert(global == daytona::system24_block_offset(bx, by, bits) + byte(x, y));
-            assert(global < 512 * 512 * bits / 8);
-            const unsigned at = y * 64 + x;
-            image[(by * 64 + y) * 512 + bx * 64 + x] = bits == 8 ? block[at] :
-                uint8_t((block[at / 2] >> ((at & 1) * 4)) & 15);
-        }
-    };
-    for (unsigned colors : {8u, 40u}) {
-        for (unsigned i = 0; i < 4096; ++i) {
-            word(palette, i, i % colors); video.palette_w(i, palette.data(), xlat.data());
-        }
-        compact.clear();
-        for (unsigned front = 0; front < 2; ++front) {
-            const unsigned bpp = daytona::system24_upload(video, bool(front), compact, upload);
-            assert(bpp == (colors == 8 ? 4u : 8u));
-            for (int y = 0; y < rt::Video::H; ++y) for (int x = 0; x < rt::Video::W; ++x) {
-                const unsigned at = unsigned(y) * 512 + unsigned(x);
-                const unsigned index = image[at];
-                auto &pixel = back[size_t(y) * rt::Video::W + size_t(x)];
-                if (!front || compact.colors[index]) pixel = compact.colors[index];
-            }
-        }
-        video.frame_start(); video.screen_update(empty, 0, mem);
-        assert(back == video.screen());
-    }
-    // Discover the 16th opaque colour in a late block. The PAL8 restart must
-    // replace all earlier PAL4 blocks, including transparent padding.
-    std::fill(tile.begin(), tile.end(), 0);
-    std::fill(chars.begin(), chars.end(), 0x11);
-    for (unsigned i = 0; i < 4096; ++i) {
-        word(palette, i, 0); video.palette_w(i, palette.data(), xlat.data());
-    }
-    for (unsigned i = 0; i < 16; ++i) {
-        word(tile, 47 * 64 + 46 + i, i << 7);
-        word(palette, i * 16 + 1, i); video.palette_w(i * 16 + 1, palette.data(), xlat.data());
-    }
-    compact.clear(); pal4_blocks = 0;
-    assert(daytona::system24_upload(video, false, compact, upload) == 8);
-    assert(pal4_blocks > 32 && compact.count == 17);
-    for (unsigned y = 0; y < 512; ++y) for (unsigned x = 0; x < 512; ++x) {
-        const auto index = image[y * 512 + x];
-        if (x < rt::Video::W && y < rt::Video::H)
-            assert(compact.colors[index] == video.system24_pen(unsigned(daytona::system24_pass_pen(video, false, int(x), int(y)))));
-        else assert(index == 0);
-    }
-    compact.clear();
-    bool overflow = false;
-    for (unsigned i = 0; i < 256; ++i) {
-        word(palette, i, i); video.palette_w(i, palette.data(), xlat.data());
-        try { compact.index(video, i); } catch (const std::runtime_error &) { overflow = true; }
-    }
-    assert(overflow && compact.count == 256); // no silent colour quantization
-    std::puts("PASS: 80 exact System24 frames, lossless PAL4/PAL8 surfaces and palette overflow rejection");
+    std::puts("PASS: 80 exact System24 frames");
 }

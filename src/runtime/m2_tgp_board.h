@@ -7,7 +7,6 @@
 
 #include "runtime/rom_source.h"
 #include "runtime/tgp.h"
-#include "runtime/paged_rom.h"
 
 #include <cstdint>
 #include <deque>
@@ -19,7 +18,7 @@ namespace rt {
 class TgpBoard : public TgpBus {
 public:
     // tables: copro_tgp_tables (0x40000 bytes); copro_data: 0x800000 bytes.
-    TgpBoard(const std::vector<uint8_t> &tables, const std::vector<uint8_t> &copro_data, PagedRom *copro_pages = nullptr);
+    TgpBoard(const std::vector<uint8_t> &tables, const std::vector<uint8_t> &copro_data);
 #ifdef M2_DC_MEMORY
     // copro_data read through pages (RomRegion::CoproData), not copied.
     TgpBoard(const std::vector<uint8_t> &tables, RomSource &rom);
@@ -48,15 +47,11 @@ public:
     uint32_t *buffer_data() { return buffer_; }             // the geometrizer reads its display list here
     uint32_t geo_read_start() const { return geo_read_start_; }
     uint64_t tgp_instructions() const { return tgp_.count; }
-    // Read-only host diagnostic. Does not sync, consume FIFO or run the TGP.
+#ifdef M2_DC_NATIVE_HOST
+    // Read-only host diagnostics: no sync, no FIFO consumed, the TGP not run.
     uint32_t diagnostic_data_word(uint16_t address) const { return tgp_.data_r(address); }
-    std::vector<uint32_t> diagnostic_pending_input() const {
-#ifdef M2_FAST_TGP
-        return in_.contents();
-#else
-        return {in_.begin(), in_.end()};
+    std::vector<uint32_t> diagnostic_pending_input() const { return {in_.begin(), in_.end()}; }
 #endif
-    }
     bool booted() const { return booted_; }
     // Run the TGP until it waits on an empty input FIFO. The game polls the
     // TGP's mailbox in buffer RAM for results; the TGP must have caught up.
@@ -74,7 +69,6 @@ private:
 
     Tgp tgp_;
     std::vector<uint32_t> tables_, copro_data_;
-    PagedRom *copro_pages_ = nullptr;
 #ifdef M2_DC_MEMORY
     RomSource *rom_ = nullptr;
 #endif

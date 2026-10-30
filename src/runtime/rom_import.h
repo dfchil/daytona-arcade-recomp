@@ -30,9 +30,7 @@ struct RomCheck {
 std::vector<RomCheck> check_rom_set(const std::string &zip_path);
 
 // Load and lay out the images. Throws ZipError naming the first problem.
-// Silent frontends may omit sound regions; all required game ROMs still
-// receive the same size and CRC checks.
-M2Board::Images import_rom_set(const std::string &zip_path, bool sound_enabled = true);
+M2Board::Images import_rom_set(const std::string &zip_path);
 
 // The MAME name of the set this build was recompiled from.
 const char *rom_set_name();

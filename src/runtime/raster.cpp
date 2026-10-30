@@ -21,8 +21,6 @@
 #include <limits>
 #include <numeric>
 #include "compat/bit_cast.h"
-#include <stdexcept>
-
 namespace rt {
 
 namespace {
@@ -113,9 +111,9 @@ struct Raster::Extra {
 #ifdef M2_DC_MEMORY
 // The Dreamcast: the CPU rasterizer's buffers (1.25 MB) only once it renders
 // (the PVR draws the 3D there).
-Raster::Raster(bool) {
+Raster::Raster() {
 #else
-Raster::Raster(bool allocate_target) : dest_(allocate_target ? 512 * 512 : 0), fill_(allocate_target ? 512 * 512 : 0) {
+Raster::Raster() : dest_(512 * 512), fill_(512 * 512) {
 #endif
     // MAME video_start
     for (int i = 0; i < 256; i++) {
@@ -127,7 +125,7 @@ Raster::Raster(bool allocate_target) : dest_(allocate_target ? 512 * 512 : 0), f
 void Raster::set_wide_margin(int margin) {
     margin_ = std::max(margin, 0);
     const int stride = std::max(512, 496 + 2 * margin_);
-    if (stride != stride_ || dest_.empty()) {
+    if (stride != stride_) {
         stride_ = stride;
         dest_.assign(size_t(stride_) * 512, 0u);
         fill_.assign(size_t(stride_) * 512, u8(0));
@@ -135,7 +133,6 @@ void Raster::set_wide_margin(int margin) {
 }
 
 uint64_t Raster::hash(int minx, int maxx, int miny, int maxy) const {
-    if (dest_.empty()) throw std::runtime_error("no CPU raster target in GPU-only mode");
     uint64_t h = 0xcbf29ce484222325ULL;
     for (int y = miny; y <= maxy; y++)
         for (int x = minx; x <= maxx; x++) {
@@ -150,7 +147,6 @@ uint64_t Raster::hash(int minx, int maxx, int miny, int maxy) const {
 
 void Raster::render(const std::vector<GeoPoly> &polys, int windows, const VideoMem &mem, int crtc_x, int crtc_y,
                     int render_x, int render_y, int clip_minx, int clip_maxx, int clip_miny, int clip_maxy) {
-    if (dest_.empty()) set_wide_margin(margin_);
     mem_ = &mem;
 #ifdef M2_DC_MEMORY
     if (dest_.empty()) {
@@ -395,8 +391,8 @@ void Raster::render_triangle(const int *clip, int renderer, const Extra &o, cons
     }
     const int32_t v1y = round_coordinate(v1->y);
     const int32_t v3y = round_coordinate(v3->y);
-    const int32_t v1yclip = std::max<int32_t>(v1y, clip[2]);
-    const int32_t v3yclip = std::min<int32_t>(v3y, clip[3] + 1);
+    const int32_t v1yclip = std::max(v1y, clip[2]);
+    const int32_t v3yclip = std::min(v3y, clip[3] + 1);
     if (v3yclip - v1yclip <= 0) return;
 
     const float dxdy_v1v2 = (v2->y == v1->y) ? 0.0f : (v2->x - v1->x) / (v2->y - v1->y);
@@ -425,8 +421,8 @@ void Raster::render_triangle(const int *clip, int renderer, const Extra &o, cons
         const float stopx = fully < v2->y ? v1->x + (fully - v1->y) * dxdy_v1v2 : v2->x + (fully - v2->y) * dxdy_v2v3;
         int32_t istartx = round_coordinate(startx), istopx = round_coordinate(stopx);
         if (istartx > istopx) std::swap(istartx, istopx);
-        istartx = std::max<int32_t>(istartx, clip[0]);
-        istopx = std::min<int32_t>(istopx, clip[1] + 1);
+        istartx = std::max(istartx, clip[0]);
+        istopx = std::min(istopx, clip[1] + 1);
         if (istartx >= istopx) istartx = istopx = 0;
         const float fullstartx = float(istartx) + 0.5f;
         float start[3], dpdx[3];
@@ -448,8 +444,8 @@ void Raster::render_polygon(const int *clip, int renderer, const Extra &o, const
     }
     const int32_t miny = round_coordinate(v[minv].y);
     const int32_t maxy = round_coordinate(v[maxv].y);
-    const int32_t minyclip = std::max<int32_t>(miny, clip[2]);
-    const int32_t maxyclip = std::min<int32_t>(maxy, clip[3] + 1);
+    const int32_t minyclip = std::max(miny, clip[2]);
+    const int32_t maxyclip = std::min(maxy, clip[3] + 1);
     if (maxyclip - minyclip <= 0) return;
 
     struct poly_edge {
@@ -497,8 +493,8 @@ void Raster::render_polygon(const int *clip, int renderer, const Extra &o, const
         const float stopx = redge->v1->x + (fully - redge->v1->y) * redge->dxdy;
         int32_t istartx = round_coordinate(startx), istopx = round_coordinate(stopx);
         if (istartx > istopx) std::swap(istartx, istopx);
-        istartx = std::max<int32_t>(istartx, clip[0]);
-        istopx = std::min<int32_t>(istopx, clip[1] + 1);
+        istartx = std::max(istartx, clip[0]);
+        istopx = std::min(istopx, clip[1] + 1);
         float start[3], dpdx[3];
         const float ldy = fully - ledge->v1->y;
         const float rdy = fully - redge->v1->y;
@@ -662,7 +658,7 @@ void Raster::draw_tex_span(int32_t y, int32_t x0, int32_t x1, const float *start
         if (fill[x] > 0) continue;
         float const z = 1.0F / ooz;
         s32 const mml = -o.texlod + fast_log2(z);
-        s32 const level = std::clamp<s32>(mml >> 7, 0, max_level);
+        s32 const level = std::clamp(mml >> 7, 0, max_level);
         s32 const u = to_s32(uoz * z * 256.0F);
         s32 const v = to_s32(voz * z * 256.0F);
         u32 t = fetch_bilinear_texel<Translucent>(o, level, u, v);
@@ -672,7 +668,7 @@ void Raster::draw_tex_span(int32_t y, int32_t x0, int32_t x1, const float *start
             t = LERP(t, t2, unsigned(frac));
         } else if (o.utex && mml < 0) {
             u32 const t2 = fetch_bilinear_texel<Translucent>(o, -1, u, v);
-            s32 const frac = std::min<s32>(-mml >> o.utexminlod, 127);
+            s32 const frac = std::min(-mml >> o.utexminlod, 127);
             t = LERP(t, t2, unsigned(frac));
         }
         if (Translucent) {

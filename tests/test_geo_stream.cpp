@@ -61,12 +61,11 @@ void reset(rt::Geo &geo, unsigned trial, unsigned index, bool triangle) {
 } // namespace
 
 int main() {
-    std::vector<uint32_t> polygons(32);
-    std::vector<uint16_t> textures(64);
-    for (unsigned i = 0; i < textures.size(); ++i) textures[i] = uint16_t(i * 7);
+    std::vector<uint8_t> polygons(128), textures(128);
+    for (unsigned i = 0; i < textures.size(); ++i) textures[i] = uint8_t(i * 7);
     std::array<uint32_t, 0x8000> buffer{};
     auto scalar = std::make_unique<rt::Geo>(polygons, textures, buffer.data());
-    auto batch = std::make_unique<rt::Geo>(std::move(polygons), std::move(textures), buffer.data());
+    auto batch = std::make_unique<rt::Geo>(polygons, textures, buffer.data());
     constexpr unsigned cases = 6000;
     unsigned kept = 0;
     const unsigned slots[] = {0, 1, 2, 5, 11, 14};

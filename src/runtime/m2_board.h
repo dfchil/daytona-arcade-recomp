@@ -16,7 +16,6 @@
 #include "runtime/cpu.h"
 #include "runtime/geo.h"
 #include "runtime/lockstep.h"
-#include "runtime/paged_rom.h"
 #include "runtime/m2_tgp_board.h"
 #include "runtime/video.h"
 #include "runtime/scenery.h"
@@ -63,12 +62,7 @@ private:
 class M2Board : public Bus {
 public:
     struct Images {
-        std::vector<uint8_t> program, main_data, copro_tables, copro_data;
-        // Native words keep Geo from expanding these ROM images into a second
-        // 32 MiB allocation after M2Board has handed ownership to it.
-        std::vector<uint32_t> polygons;
-        std::vector<uint16_t> textures;
-        std::unique_ptr<PagedRom> program_pages, main_pages, copro_pages, polygon_pages, texture_pages;
+        std::vector<uint8_t> program, main_data, copro_tables, copro_data, polygons, textures;
         std::vector<uint8_t> sound_program, pcm1, pcm2; // sound board (68000 program, MultiPCM samples)
 #ifdef M2_DC_MEMORY
         // The Dreamcast: program, main_data, polygons, textures and copro_data
@@ -80,7 +74,7 @@ public:
         uint8_t *texture_ram = nullptr, *frame_buffer_ram = nullptr;
 #endif
     };
-    explicit M2Board(Images images, bool external_3d = false);
+    explicit M2Board(Images images);
 
     // The CPU and scheduler (free-run Lockstep) the board raises interrupts on.
     void attach(Cpu &cpu, Lockstep &ls);
@@ -103,7 +97,9 @@ public:
     uint64_t frame() const { return frame_; }
 
     Video &video() { return *video_; }
-    Geo &geometry() { return *geo_; } // Host inspection; not a target runtime API.
+#ifdef M2_DC_NATIVE_HOST
+    Geo &geometry() { return *geo_; } // host inspection
+#endif
     // Widescreen (enhancement): pixels added to each side; 0 = the original screen.
     void set_wide_margin(int pixels);
     // Draw mode (enhancement): draw the screen every (1 + skip)th frame; the
@@ -129,18 +125,6 @@ public:
 #ifdef M2_DC_SPIN_SKIP
     uint64_t spin_skipped() const { return spin_skipped_; } // instructions skipped in the frame wait (read_byte)
 #endif
-    // Borrowed cache handles, in program/main/copro/polygon/texture order.
-    // Resident images have null handles. Profiling never changes guest state.
-    std::array<PagedRom *, 5> rom_caches() const {
-        return {img_.program_pages.get(), img_.main_pages.get(), img_.copro_pages.get(),
-                img_.polygon_pages.get(), img_.texture_pages.get()};
-    }
-    uint64_t rom_page_misses() const {
-        uint64_t count = 0;
-        for (const auto *rom : rom_caches())
-            if (rom) count += rom->misses();
-        return count;
-    }
 
 private:
     SceneryState scenery_;
@@ -166,15 +150,8 @@ private:
     void map_rom(uint32_t start, uint32_t end, RomRegion region, uint32_t offset);
     const uint8_t *rom_page(const Page &p) { return img_.rom->page_fast(p.region, p.rom_offset >> kPageBits); }
 #else
-    // Allocate page descriptors only for mapped 1 MiB banks. A flat 4 GiB
-    // page table alone occupied 8 MiB on SH4.
-    const Page &page(uint32_t addr) const {
-        static const Page unmapped;
-        const auto &bank = pages_[addr >> 20];
-        return bank ? bank[(addr >> kPageBits) & 255] : unmapped;
-    }
+    Page &page(uint32_t addr) { return pages_[addr >> kPageBits]; }
 #endif
-    const uint8_t *rom_base(const Page &p, uint32_t addr);
     void map(uint32_t start, uint32_t end, Kind k, uint8_t *base, uint32_t mirror = 0, bool burst = true);
 
     // Device dword access: data in its byte lanes, mask = lanes accessed.
@@ -194,7 +171,7 @@ private:
     std::vector<std::unique_ptr<Page[]>> chunks_;
     static Page unmapped_; // what page() gives outside the map; never written
 #else
-    std::array<std::unique_ptr<Page[]>, 4096> pages_;
+    std::vector<Page> pages_;
 #endif
 
     TgpBoard tgp_;

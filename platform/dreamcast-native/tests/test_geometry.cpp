@@ -1,4 +1,4 @@
-#include "../../../tools/common/dreamcast/pvr_geometry.hpp"
+#include "pvr_geometry.hpp"
 extern "C" {
 #include "../include/geometry.h"
 #include "../include/meshpack.h"

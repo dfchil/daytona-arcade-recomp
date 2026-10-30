@@ -7,7 +7,7 @@
 #include "../include/race_scene.h"
 #include "../include/result_actor.h"
 #include "../include/name_entry.h"
-#include "../../../tools/common/dreamcast/system24.hpp"
+#include "system24.hpp"
 
 namespace daytona::native {
 /* Destructive ONLY to this host diagnostic's final reference state, after

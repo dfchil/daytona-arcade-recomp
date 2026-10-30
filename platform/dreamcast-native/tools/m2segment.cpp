@@ -1,37 +1,34 @@
-// m2segment: run a deterministic scenario and report its PVR texture working
-// set by named stage. Optional texture export writes local ROM-derived assets;
-// keep those under ignored build/staging directories and never distribute them.
+// m2segment: the recompiled game under the native port's exports and checks.
+// It runs a deterministic scenario, silently, and writes what the asset recipe
+// converts (recipes/build_assets.sh) or compares native code with the original
+// i960 and TGP. Outputs are ROM-derived: keep them under ignored build
+// directories and never distribute them. Built with -DM2_DREAMCAST_NATIVE=ON.
 //
-// m2segment IMAGES_DIR FRAMES [--inputs FILE] [--stage NAME:START-END]...
+// m2segment IMAGES_DIR FRAMES [--inputs FILE] [options, see usage()]
 #include "runtime/game_loop.h"
-#include "runtime/rom_prefetch.h"
-#include "../common/dreamcast_budget.h"
-#include "../common/dreamcast_assets.h"
-#include "../common/input_script.h"
-#include "../common/nvram.h"
-#include "../common/dreamcast/material_pack.hpp"
-#include "../common/dreamcast/system24.hpp"
-#include "../../platform/dreamcast-native/tools/export_scene.hpp"
-#include "../../platform/dreamcast-native/tools/export_models.hpp"
-#include "../../platform/dreamcast-native/tools/export_name_exit.hpp"
-#include "../../platform/dreamcast-native/tools/export_course.hpp"
-#include "../../platform/dreamcast-native/tools/export_objects.hpp"
-#include "../../platform/dreamcast-native/tools/check_road.hpp"
-#include "../../platform/dreamcast-native/tools/check_contact.hpp"
-#include "../../platform/dreamcast-native/tools/check_path.hpp"
-#include "../../platform/dreamcast-native/tools/check_race.hpp"
-#include "../../platform/dreamcast-native/tools/trace_race.hpp"
-#include "../../platform/dreamcast-native/tools/trace_frontend.hpp"
-#include "../../platform/dreamcast-native/tools/export_select.hpp"
-#include "../../platform/dreamcast-native/tools/trace_hud.hpp"
-#include "../../platform/dreamcast-native/tools/check_visibility.hpp"
-#include "../../platform/dreamcast-native/tools/check_follow_camera.hpp"
-#include "../../platform/dreamcast-native/tools/check_expert_actors.hpp"
-#include "../../platform/dreamcast-native/tools/export_sky.hpp"
+#include "dreamcast_assets.h"
+#include "../../../tools/common/input_script.h"
+#include "../../../tools/common/nvram.h"
+#include "export_scene.hpp"
+#include "export_models.hpp"
+#include "export_name_exit.hpp"
+#include "export_course.hpp"
+#include "export_objects.hpp"
+#include "check_road.hpp"
+#include "check_contact.hpp"
+#include "check_path.hpp"
+#include "check_race.hpp"
+#include "trace_race.hpp"
+#include "trace_frontend.hpp"
+#include "export_select.hpp"
+#include "trace_hud.hpp"
+#include "check_visibility.hpp"
+#include "check_follow_camera.hpp"
+#include "check_expert_actors.hpp"
+#include "export_sky.hpp"
 
 #include <cinttypes>
 #include <array>
-#include <chrono>
 #include <cerrno>
 #include <cstring>
 #include <cstdio>
@@ -48,10 +45,25 @@ namespace {
 struct Stage {
     std::string name;
     uint64_t start = 0, end = 0;
-    tools::dreamcast::StageUsage usage;
-    std::array<tools::dreamcast::RomUsage, 5> rom_usage;
-    uint64_t peak_rom_pages = 0;
 };
+
+std::vector<uint8_t> read_image(const std::string &path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) throw std::runtime_error("cannot open " + path + " (run the importer first)");
+    return {std::istreambuf_iterator<char>(f), {}};
+}
+
+// The game's images without the sound ROMs: no sound board is built here.
+rt::M2Board::Images load_images(const std::string &dir) {
+    rt::M2Board::Images images;
+    images.program = read_image(dir + "/program.bin");
+    images.main_data = read_image(dir + "/main_data.bin");
+    images.copro_tables = read_image(dir + "/copro_tables.bin");
+    images.copro_data = read_image(dir + "/copro_data.bin");
+    images.polygons = read_image(dir + "/polygons.bin");
+    images.textures = read_image(dir + "/textures.bin");
+    return images;
+}
 
 uint64_t number(const std::string &text, const char *what) {
     char *end = nullptr;
@@ -69,7 +81,7 @@ Stage parse_stage(const char *text) {
     if (colon == std::string::npos || dash == std::string::npos || !colon || dash == colon + 1 || dash + 1 == value.size())
         throw std::runtime_error("stage must be NAME:START-END");
     Stage stage{value.substr(0, colon), number(value.substr(colon + 1, dash - colon - 1), "stage start"),
-                number(value.substr(dash + 1), "stage end"), {}, {}, 0};
+                number(value.substr(dash + 1), "stage end")};
     if (stage.end < stage.start) throw std::runtime_error("stage end precedes its start");
     return stage;
 }
@@ -121,11 +133,8 @@ void usage() {
     std::fprintf(stderr, "--export-result-label-colors NEW_FILE runs the result source oracle and exports its shared5454 palette/current colour translation.\n");
     std::fprintf(stderr, "--export-name-label-colors NEW_FILE exports the name5454+5460 palette/current colour translation after its source checks.\n");
     std::fprintf(stderr, "--nvram DIR starts from the settings EEPROM and backup RAM in DIR (ioboard_eeprom.bin, backup_ram.bin; tools/common/nvram.h), e.g. operator settings written by platform/dreamcast-native/tools/settings_eeprom.py; a missing file stays the board's erased default. --save-nvram DIR writes them as the run left them (an existing DIR).\n");
-    std::fprintf(stderr, "usage: m2segment IMAGES_DIR FRAMES [--inputs FILE] [--nvram DIR] [--save-nvram DIR] [--stage NAME:START-END]... [--rom-cache-kib N] [--verify-streaming] [--profile-cache] [--profile-rom] [--profile-system24] [--export-rom-pages NEW_FILE] [--rom-pages-stage NAME] [--load-rom-pages FILE] [--export-textures NEW_DIR] [--export-system24 NEW_DIR] [--catalog NEW_DIR] [--check-materials PACK]\n");
-}
-
-void megabytes(const char *name, uint64_t bytes) {
-    std::printf("  %-18s %7.3f MiB\n", name, double(bytes) / double(tools::dreamcast::kMiB));
+    std::fprintf(stderr, "--catalog NEW_DIR samples a frame every 120 as frame_N.tga, and logs phase and updater changes.\n");
+    std::fprintf(stderr, "usage: m2segment IMAGES_DIR FRAMES [--inputs FILE] [--nvram DIR] [--save-nvram DIR] [the options above]\n");
 }
 
 } // namespace
@@ -136,7 +145,7 @@ int main(int argc, char **argv) {
         const std::string images = argv[1];
         const uint64_t frames = number(argv[2], "frame count");
         if (!frames) throw std::runtime_error("frame count must be positive");
-        std::string inputs, texture_output, material_pack, system24_output, catalog, native_scene, select_output;
+        std::string inputs, catalog, native_scene, select_output;
         std::string video_dump, nvram_dir, save_nvram_dir;
         std::string native_models, native_cells, native_drive, native_windows, native_sky, native_intro_cars;
         std::string native_contact, contact_math;
@@ -155,11 +164,6 @@ int main(int argc, char **argv) {
         bool check_native_road = false;
         std::string visibility_math, follow_camera_math, wheel_math, expert_math, expert_contact;
         bool check_live_drive = false;
-        std::string rom_pages_output, rom_pages_input, rom_pages_stage = "all";
-        size_t cache_bytes = 0;
-        bool verify_streaming = false, profile_cache = false, profile_rom = false;
-        bool profile_system24 = false;
-        std::vector<Stage> stages;
         Stage probe_range;
         daytona::native::SceneProbe scene_probe;
         daytona::native::TitleCheck title_check;
@@ -196,22 +200,7 @@ int main(int argc, char **argv) {
             else if (!std::strcmp(argv[i], "--export-name-label-colors") && i+1<argc) {
                 name_label_colors=argv[++i];check_native_race=true;
             }
-            else if (!std::strcmp(argv[i], "--stage") && i + 1 < argc) stages.push_back(parse_stage(argv[++i]));
-            else if (!std::strcmp(argv[i], "--rom-cache-kib") && i + 1 < argc) {
-                const uint64_t kib = number(argv[++i], "ROM cache size");
-                if (!kib || kib > 32768 || kib % 4) throw std::runtime_error("ROM cache must be 4..32768 KiB in multiples of 4");
-                cache_bytes = size_t(kib * 1024);
-            }
-            else if (!std::strcmp(argv[i], "--verify-streaming")) verify_streaming = true;
-            else if (!std::strcmp(argv[i], "--profile-cache")) profile_cache = true;
-            else if (!std::strcmp(argv[i], "--profile-rom")) profile_rom = true;
-            else if (!std::strcmp(argv[i], "--profile-system24")) profile_system24 = true;
-            else if (!std::strcmp(argv[i], "--export-rom-pages") && i + 1 < argc) { rom_pages_output = argv[++i]; profile_rom = true; }
-            else if (!std::strcmp(argv[i], "--rom-pages-stage") && i + 1 < argc) rom_pages_stage = argv[++i];
-            else if (!std::strcmp(argv[i], "--load-rom-pages") && i + 1 < argc) rom_pages_input = argv[++i];
-            else if (!std::strcmp(argv[i], "--export-textures") && i + 1 < argc) texture_output = argv[++i];
             else if (!std::strcmp(argv[i], "--dump-video") && i + 1 < argc) video_dump = argv[++i];
-            else if (!std::strcmp(argv[i], "--export-system24") && i + 1 < argc) system24_output = argv[++i];
             else if (!std::strcmp(argv[i], "--catalog") && i + 1 < argc) catalog = argv[++i];
             else if (!std::strcmp(argv[i], "--export-native-2d") && i + 1 < argc) native_scene = argv[++i];
             else if (!std::strcmp(argv[i], "--export-native-select") && i + 1 < argc) select_output = argv[++i];
@@ -270,10 +259,8 @@ int main(int argc, char **argv) {
             }
             else if (!std::strcmp(argv[i], "--probe-native-2d") && i + 1 < argc) probe_range = parse_stage(argv[++i]);
             else if (!std::strcmp(argv[i], "--check-native-title") && i + 1 < argc) title_check.load(argv[++i]);
-            else if (!std::strcmp(argv[i], "--check-materials") && i + 1 < argc) material_pack = argv[++i];
             else { usage(); return 2; }
         }
-        stages.insert(stages.begin(), {"all", 0, frames - 1, {}, {}, 0});
         if (check_live_drive && native_drive.empty()) throw std::runtime_error("live drive check requires --check-native-drive PACK");
         if (trace_attract && race_trace_output.empty())
             throw std::runtime_error("--trace-attract needs --trace-race");
@@ -302,20 +289,9 @@ int main(int argc, char **argv) {
         if (!catalog.empty() && !std::filesystem::create_directory(catalog))
             throw std::runtime_error("catalog directory already exists; choose a new directory");
 
-        std::printf("Historical prototype PVR allowances (not the native target's measured budget):\n");
-        megabytes("total", tools::dreamcast::kPvrVramBytes);
-        megabytes("double scanout", tools::dreamcast::kScanoutBytes);
-        megabytes("TA vertex/OPB/tiles", tools::dreamcast::kTaBytes);
-        megabytes("System 24 composite", tools::dreamcast::kSystem24Bytes);
-        megabytes("UI", tools::dreamcast::kUiBytes);
-        megabytes("allocation reserve", tools::dreamcast::kReserveBytes);
-        megabytes("texture cache", tools::dreamcast::kTextureCacheBytes);
-
         tools::Script script;
         if (!inputs.empty()) script.load(inputs);
-        if (verify_streaming && !cache_bytes) throw std::runtime_error("--verify-streaming requires --rom-cache-kib");
-        if (profile_rom && !cache_bytes) throw std::runtime_error("--profile-rom requires --rom-cache-kib");
-        rt::GameLoop game(images, false, cache_bytes);
+        rt::GameLoop game(load_images(images), false);
         if (!nvram_dir.empty()) tools::load_nvram(game, nvram_dir);
         std::unique_ptr<daytona::native::LiveDriveCheck> live_drive;
         if (check_live_drive) {
@@ -329,34 +305,6 @@ int main(int argc, char **argv) {
             game.set_call_observer(daytona::native::LiveDriveCheck::observe,live_drive.get());
             game.set_return_observer(daytona::native::LiveDriveCheck::observe_return,live_drive.get());
         }
-        if (!rom_pages_input.empty()) {
-            if (!cache_bytes) throw std::runtime_error("--load-rom-pages requires --rom-cache-kib");
-            std::printf("rom_pinned_bytes=%zu\n", rt::load_rom_pages(rom_pages_input, game.board().rom_caches()));
-        }
-        if (profile_cache) {
-            if (!cache_bytes) throw std::runtime_error("--profile-cache requires --rom-cache-kib");
-            const auto clock = +[]() -> uint64_t {
-                return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now().time_since_epoch()).count());
-            };
-            game.set_profile_clock(clock);
-            for (auto *rom : game.board().rom_caches()) if (rom) rom->set_profile_clock(clock);
-        }
-        std::unique_ptr<rt::GameLoop> resident;
-        if (verify_streaming) resident = std::make_unique<rt::GameLoop>(images, false);
-        if (resident) {
-            // Every program-ROM page and its bank alias, including final words.
-            // Exercise bus reads/fetches even when the scenario never uses them.
-            for (uint32_t a = 0; a < 0x200000; a += 4096)
-                for (uint32_t offset : {0u, 4092u}) {
-                    if (game.board().fetch(a + offset) != resident->board().fetch(a + offset))
-                        throw std::runtime_error("paged/resident program fetch differs");
-                    if (a >= 0x20000 && a < 0x40000 &&
-                        game.board().read_dword(0x200000 + a + offset) != resident->board().read_dword(0x200000 + a + offset))
-                        throw std::runtime_error("paged/resident program bank alias differs");
-                }
-        }
-        unsigned geometry_samples = 0;
         daytona::native::ReflectionGeometryCheck reflection_geometry;
         reflection_geometry.board=&game.board();
         if(check_reflection) {
@@ -401,16 +349,6 @@ int main(int argc, char **argv) {
             if (!(sound_trace = std::fopen(sound_trace_output.c_str(), "w"))) throw std::runtime_error("cannot create sound trace");
             std::fputs("# sound-trace v1: frame active next course remaining clock flags : UART bytes\n", sound_trace);
         }
-        // Host-only final-frame source delta. No target-side shadow buffers.
-        const auto system24_source = [&]() {
-            std::vector<uint32_t> words;
-            words.reserve((0x10000 + 0x80000) / 4 + 4096);
-            for (uint32_t a = 0; a < 0x10000; a += 4) words.push_back(game.board().read_dword(0x01000000 + a));
-            for (uint32_t a = 0; a < 0x80000; a += 4) words.push_back(game.board().read_dword(0x01080000 + a));
-            for (unsigned pen = 0; pen < 4096; ++pen) words.push_back(game.board().video().system24_pen(pen));
-            return words;
-        };
-        std::vector<uint32_t> previous_system24;
         unsigned previous_catalog_phase = 256;
         std::array<uint32_t,4> previous_catalog_updates{};
         const auto inspect_poses = [&](const char *phase) {
@@ -434,15 +372,7 @@ int main(int argc, char **argv) {
                 board.read_dword(camera+0x7c),board.read_dword(camera+0x80));
         };
         for (uint64_t frame = 0; frame < frames; ++frame) {
-            const auto caches = game.board().rom_caches();
-            uint64_t misses_before[5]{}, ticks_before[5]{};
-            if (profile_cache) for (unsigned i = 0; i < caches.size(); ++i) if (caches[i]) {
-                misses_before[i] = caches[i]->misses();
-                ticks_before[i] = caches[i]->read_ticks();
-            }
             const rt::Inputs input = script.at(game.board().frame());
-            if (profile_rom) for (auto *rom : caches) if (rom) rom->start_access_sample();
-            if (profile_system24 && frame + 1 == frames) previous_system24 = system24_source();
             if (inspect_vehicles && frame+1 == frames) inspect_poses("before");
             if (!native_models.empty() && frame + 1 == frames) {
                 auto &geo = game.board().geometry();
@@ -533,13 +463,6 @@ int main(int argc, char **argv) {
                 observed_geo.object_observer=reflection_geometry.next;
                 observed_geo.object_observer_data=reflection_geometry.next_data;
             }
-            if (resident) {
-                resident->run_frame(input);
-                if (game.instructions() != resident->instructions() || game.interrupts() != resident->interrupts() ||
-                    game.board().tgp().tgp_instructions() != resident->board().tgp().tgp_instructions() ||
-                    game.board().video().screen_hash() != resident->board().video().screen_hash())
-                    throw std::runtime_error("paged/resident runtime divergence at frame " + std::to_string(frame));
-            }
             const rt::Video &video = game.board().video();
             if (!catalog.empty()) {
                 const unsigned phase = game.board().read_byte(0x5010a4);
@@ -577,26 +500,6 @@ int main(int argc, char **argv) {
                     {unsigned(video.width()), rt::Video::H, false, video.screen()});
                 std::printf("catalog_frame=%" PRIu64 " polygons=%zu windows=%d\n",
                             frame + 1, video.gpu_polys().size(), video.gpu_windows());
-            }
-            const bool first_geometry = geometry_samples < 4 && !video.gpu_polys().empty();
-            if (first_geometry) ++geometry_samples;
-            if (profile_cache && (frame == 0 || (frame + 1) % 60 == 0 || first_geometry)) {
-                const auto &p = game.last_profile();
-                std::printf("frame=%" PRIu64 " core_us=%" PRIu64 " geometry_us=%" PRIu64 " video_us=%" PRIu64 "\n",
-                            frame + 1, p.core(), p.geometry, p.video);
-                static const char *names[] = {"program", "main", "copro", "polygon", "texture"};
-                for (unsigned i = 0; i < caches.size(); ++i) if (caches[i])
-                    std::printf("  rom=%s misses=%" PRIu64 " read_us=%" PRIu64 "\n", names[i],
-                                caches[i]->misses() - misses_before[i], caches[i]->read_ticks() - ticks_before[i]);
-            }
-            for (Stage &stage : stages) if (frame >= stage.start && frame <= stage.end) {
-                stage.usage.add_frame(video.gpu_polys(), video.gpu_windows());
-                if (profile_rom) {
-                    uint64_t pages = 0;
-                    for (unsigned i = 0; i < caches.size(); ++i) if (caches[i])
-                        pages += stage.rom_usage[i].add_frame(caches[i]->accessed_pages());
-                    stage.peak_rom_pages = std::max(stage.peak_rom_pages, pages);
-                }
             }
         }
 
@@ -653,110 +556,6 @@ int main(int argc, char **argv) {
                 std::printf("%s%u", i ? "," : "", game.board().read_byte(0x5016c1+i));
             std::puts(" coverage=end-of-frame-selection-not-complete-draw");
         }
-        for (const Stage &stage : stages) {
-            const auto &u = stage.usage;
-            std::printf("stage=%s frames=%" PRIu64 " range=%" PRIu64 "-%" PRIu64
-                        " peak_sources=%.3fMiB stage_sources=%.3fMiB source_count=%zu materials=%zu"
-                        " peak_polygons=%u peak_triangles=%u cache=%s\n",
-                        stage.name.c_str(), u.frames(), stage.start, stage.end,
-                        double(u.peak_source_bytes()) / double(tools::dreamcast::kMiB),
-                        double(u.stage_source_bytes()) / double(tools::dreamcast::kMiB), u.source_count(), u.material_count(),
-                        u.peak_polygons(), u.peak_triangles(), u.fits_texture_cache() ? "fits" : "stream");
-            if (profile_rom) {
-                uint64_t union_pages = 0;
-                static const char *names[] = {"program", "main", "copro", "polygon", "texture"};
-                for (unsigned i = 0; i < stage.rom_usage.size(); ++i) {
-                    const auto &r = stage.rom_usage[i];
-                    union_pages += r.union_pages();
-                    std::printf("  rom=%s peak_frame_pages=%" PRIu64 " stage_pages=%" PRIu64 " contiguous_runs=%" PRIu64 "\n",
-                                names[i], r.peak_pages(), r.union_pages(), r.contiguous_runs());
-                }
-                std::printf("  rom_peak_frame=%.3fMiB rom_stage_union=%.3fMiB page_bytes=%zu coverage=replay-only\n",
-                            double(stage.peak_rom_pages * rt::PagedRom::kPageBytes) / tools::dreamcast::kMiB,
-                            double(union_pages * rt::PagedRom::kPageBytes) / tools::dreamcast::kMiB,
-                            rt::PagedRom::kPageBytes);
-            }
-        }
-
-        if (profile_system24) {
-            const auto &video = game.board().video();
-            const auto current = system24_source();
-            std::array<unsigned, 16> tile_changes{};
-            unsigned char_changes = 0, pen_changes = 0;
-            for (size_t i = 0; i < current.size(); ++i) if (current[i] != previous_system24[i]) {
-                if (i < 0x10000 / 4) ++tile_changes[i / (0x1000 / 4)];
-                else if (i < (0x10000 + 0x80000) / 4) ++char_changes;
-                else ++pen_changes;
-            }
-            std::printf("system24_delta char_dwords=%u palette_pens=%u tile_dwords_per_4KiB=", char_changes, pen_changes);
-            for (unsigned i = 0; i < tile_changes.size(); ++i) std::printf("%s%u", i ? "," : "", tile_changes[i]);
-            std::puts(" coverage=last-frame-endpoints-only");
-            std::set<uint32_t> all_pens, layer_colors, layer_alpha_colors;
-            std::set<unsigned> source_banks;
-            for (unsigned pen = 0; pen < 4096; ++pen) all_pens.insert(video.system24_pen(pen));
-            for (unsigned layer = 0; layer < 4; ++layer)
-                for (unsigned y = 0; y < 512; ++y) for (unsigned x = 0; x < 512; ++x) {
-                    const unsigned pen = video.system24_pixel(int(layer), x, y);
-                    source_banks.insert(pen >> 4);
-                    const auto color = video.system24_pen(pen);
-                    layer_colors.insert(color);
-                    layer_alpha_colors.insert(color & ((pen & 15) ? 0xffffffffu : 0x00ffffffu));
-                }
-            std::set<std::array<uint32_t, 16>> pal4_banks;
-            for (unsigned bank : source_banks) {
-                std::array<uint32_t, 16> entries;
-                for (unsigned i = 0; i < 16; ++i)
-                    entries[i] = video.system24_pen(bank * 16 + i) & (i ? 0xffffffffu : 0x00ffffffu);
-                pal4_banks.insert(entries);
-            }
-            std::printf("system24_source all_palette_colors=%zu all_layer_colors=%zu layer_alpha_colors=%zu source_banks=%zu exact_pal4_banks=%zu pal4_raw_layer_bytes=%u coverage=selected-frame-only\n",
-                all_pens.size(), layer_colors.size(), layer_alpha_colors.size(), source_banks.size(), pal4_banks.size(), 4 * 512 * 512 / 2);
-            unsigned rectangles[2]{};
-            for (unsigned front = 0; front < 2; ++front)
-                daytona::system24_rectangles(video, bool(front), [&](const auto &) { ++rectangles[front]; });
-            std::printf("system24_rectangles back=%u front=%u ta_bytes=%u coverage=selected-frame-only\n",
-                rectangles[0], rectangles[1], (rectangles[0] + rectangles[1]) * 160);
-            std::set<uint32_t> back, front, colors;
-            std::set<unsigned> banks;
-            std::array<int16_t, rt::Video::W> back_row, front_row;
-            for (int y = 0; y < rt::Video::H; ++y) {
-              daytona::system24_row(video, false, 0, y, rt::Video::W, back_row.data());
-              daytona::system24_row(video, true, 0, y, rt::Video::W, front_row.data());
-              for (int x = 0; x < rt::Video::W; ++x) {
-                const auto pens = daytona::system24_pens(video, x, y);
-                if (pens.back != back_row[x] || pens.front != front_row[x])
-                    throw std::runtime_error("System24 span differs from pixel reference");
-                back.insert(video.system24_pen(unsigned(pens.back)));
-                banks.insert(unsigned(pens.back) >> 4);
-                if (pens.front >= 0) {
-                    front.insert(video.system24_pen(unsigned(pens.front)));
-                    banks.insert(unsigned(pens.front) >> 4);
-                }
-              }
-            }
-            colors = back; colors.insert(front.begin(), front.end());
-            std::printf("system24_frame=%" PRIu64 " back_colors=%zu front_colors=%zu combined_colors=%zu palette_banks=%zu span_parity=exact coverage=selected-frame-only\n",
-                game.frames(), back.size(), front.size(), colors.size(), banks.size());
-        }
-        if (!rom_pages_output.empty()) {
-            const auto stage = std::find_if(stages.begin(), stages.end(), [&](const auto &s) { return s.name == rom_pages_stage; });
-            if (stage == stages.end()) throw std::runtime_error("unknown ROM export stage " + rom_pages_stage);
-            size_t bytes = 0;
-            for (const auto &usage : stage->rom_usage) bytes += usage.union_pages() * rt::PagedRom::kPageBytes;
-            if (bytes > 1024 * 1024) throw std::runtime_error("ROM stage exceeds 1 MiB pinned budget; choose a narrower measured stage");
-            if (std::filesystem::exists(rom_pages_output)) throw std::runtime_error("ROM page output already exists");
-            std::ofstream out(rom_pages_output);
-            out << "DRP1\n";
-            for (const auto &usage : stage->rom_usage) {
-                out << usage.union_pages();
-                for (size_t i = 0; i < usage.pages().size(); ++i) if (usage.pages()[i]) out << ' ' << i;
-                out << '\n';
-            }
-            out.close();
-            if (!out) throw std::runtime_error("cannot write ROM page manifest");
-            std::printf("rom_page_manifest=%s pinned_bytes=%zu coverage=replay-only\n", rom_pages_output.c_str(), bytes);
-        }
-        if (!texture_output.empty()) tools::dreamcast::export_textures(texture_output, game.board().video());
         if (!video_dump.empty()) {
             // Raw video tables as the board holds them after the last frame.
             if (!std::filesystem::create_directory(video_dump))
@@ -774,36 +573,11 @@ int main(int argc, char **argv) {
             std::printf("video_dump=%s frames=%" PRIu64 " (local ROM-derived tables, do not distribute)\n", video_dump.c_str(), frames);
         }
         if (!native_windows.empty()) window_export.write(native_windows,game.board().video());
-        if (!system24_output.empty()) tools::dreamcast::export_system24(system24_output, game.board().video());
         if (!native_scene.empty()) daytona::native::export_scene(native_scene, game.board().video());
         if (select_export) select_export->finish();
-        if (!material_pack.empty()) {
-            std::ifstream in(material_pack, std::ios::binary | std::ios::ate);
-            const auto size = in.tellg();
-            if (!in || size < 64 || size > DAYTONA_PACK_MAX_BYTES) throw std::runtime_error("invalid material pack size");
-            std::vector<uint8_t> bytes(static_cast<size_t>(size));
-            in.seekg(0);
-            if (!in.read(reinterpret_cast<char *>(bytes.data()), size) || !daytona_pack_valid(bytes.data(), bytes.size()) || bytes[3] != '2')
-                throw std::runtime_error("expected validated DTP2 with exact material proofs");
-            daytona::PreparedMaterials materials;
-            if (!materials.set(bytes.data() + dtp_u32(bytes.data() + 20), dtp_u32(bytes.data() + 24), dtp_u32(bytes.data() + 8)))
-                throw std::runtime_error("invalid material proofs");
-            const auto &video = game.board().video();
-            unsigned matches = 0, textured = 0;
-            for (const auto &poly : video.gpu_polys()) {
-                if (poly.window > video.gpu_windows() || poly.num_vertices < 3 || poly.num_vertices > 8 || !(poly.texheader[0] & 0x4000)) continue;
-                ++textured;
-                matches += materials.find(poly, video.gpu_mem()) >= 0;
-            }
-            std::printf("prepared_material_matches=%u textured_polygons=%u frame=%" PRIu64 " coverage=selected-frame-only\n", matches, textured, game.frames());
-            std::printf("material_variants=%u shared_sources=%u source_checks=%" PRIu64 "\n",
-                materials.size(), materials.source_count(), materials.source_checks());
-        }
-
         std::printf("native_frames=%" PRIu64 " i960_instructions=%" PRIu64 " tgp_instructions=%" PRIu64
-                    " screen_hash=%016" PRIx64 " rom_cache_total=%zuKiB rom_page_misses=%" PRIu64 " parity=%s\n",
-                    game.frames(), game.instructions(), game.board().tgp().tgp_instructions(), game.board().video().screen_hash(),
-                    cache_bytes * 5 / 1024, game.board().rom_page_misses(), resident ? "all-frames-match" : "not-compared");
+                    " screen_hash=%016" PRIx64 "\n",
+                    game.frames(), game.instructions(), game.board().tgp().tgp_instructions(), game.board().video().screen_hash());
         // The oracle uses the reference TGP after the scenario; do not count
         // those diagnostic instructions/page reads as game-frame work.
         if (!native_sky.empty()) daytona::native::export_sky(native_sky,game.board());

@@ -17,10 +17,9 @@
 //           build does not use -ffast-math.
 //
 // Values are passed as raw register bit patterns (uint32_t), as the i960 holds
-// them. Scope limits (see the design document's manual correction):
-//   - all invalid conversions here return0x80000000. The KB manual confirms
-//     that masked NaN result, but specifies signed saturation for magnitude
-//     overflow; this blanket SoftFloat behavior is not a complete KB model;
+// them. Results that are not confirmed against the i960 manual or a PCB:
+//   - an invalid conversion (NaN or out of int32 range) returns 0x80000000,
+//     SoftFloat's Intel (8086-SSE) "integer indefinite";
 //   - where the i960 records exception flags in AC, and whether Daytona reads
 //     them (MAME never sets them; the traces show them clear).
 #pragma once

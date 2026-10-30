@@ -5,7 +5,7 @@
 #pragma once
 
 #include "runtime/video.h"
-#include "runtime/material.h"
+#include "material.h"
 
 #include <array>
 #include <filesystem>

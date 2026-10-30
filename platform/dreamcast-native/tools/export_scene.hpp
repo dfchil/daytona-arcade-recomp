@@ -1,8 +1,8 @@
 // Host only: translate a 2D reference state to source art and native rectangles.
 // No board registers or machine runtime are needed by the resulting scene.
 #pragma once
-#include "../../../tools/common/dreamcast_assets.h"
-#include "../../../tools/common/dreamcast/system24.hpp"
+#include "dreamcast_assets.h"
+#include "system24.hpp"
 #include "../include/title.h"
 
 namespace daytona::native {

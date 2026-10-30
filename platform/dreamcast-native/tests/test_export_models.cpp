@@ -19,8 +19,7 @@
 
 static uint64_t translation_checks;
 static void check_lighting() {
-    std::vector<uint32_t> polygons(256);
-    std::vector<uint16_t> textures(256);
+    std::vector<uint8_t> polygons(256 * 4), textures(256 * 2);
     std::array<uint32_t, 0x8000> buffer{};
     auto geo = std::make_unique<rt::Geo>(polygons, textures, buffer.data());
     auto &s = geo->geo_;
@@ -244,9 +243,11 @@ int main() {
     for (uint32_t bank : {0u, 0x800000u, 0x1000000u})
     for (bool ram_texture : {false, true})
     for (bool exact_count : {false, true}) {
-        std::vector<uint32_t> polygons(256);
-        std::vector<uint16_t> textures(256);
-        for (unsigned i = 0; i < textures.size(); ++i) textures[i] = i * 7;
+        std::vector<uint8_t> polygons(256 * 4), textures(256 * 2);
+        for (unsigned i = 0; i < 256; ++i) {
+            const uint16_t texel = uint16_t(i * 7);
+            std::memcpy(&textures[i * 2], &texel, 2);
+        }
         std::array<uint32_t, 0x8000> buffer{};
         auto geo = std::make_unique<rt::Geo>(polygons, textures, buffer.data());
         auto &s = geo->geo_;

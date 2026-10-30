@@ -1,4 +1,4 @@
-#include "../tools/common/dreamcast_assets.h"
+#include "../tools/dreamcast_assets.h"
 
 #undef NDEBUG
 #include <cassert>

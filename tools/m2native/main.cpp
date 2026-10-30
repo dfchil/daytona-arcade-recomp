@@ -28,18 +28,6 @@ std::vector<uint8_t> load(const std::string &path) {
     if (!f) throw std::runtime_error("cannot open " + path);
     return {std::istreambuf_iterator<char>(f), {}};
 }
-
-template <typename T>
-std::vector<T> load_words(const std::string &path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f) throw std::runtime_error("cannot open " + path);
-    const std::streamsize bytes = f.tellg();
-    if (bytes < 0 || bytes % std::streamsize(sizeof(T))) throw std::runtime_error("bad word image " + path);
-    std::vector<T> out(size_t(bytes) / sizeof(T));
-    f.seekg(0);
-    if (bytes && !f.read(reinterpret_cast<char *>(out.data()), bytes)) throw std::runtime_error("cannot read " + path);
-    return out;
-}
 } // namespace
 
 int main(int argc, char **argv) {
@@ -64,8 +52,7 @@ int main(int argc, char **argv) {
         std::unique_ptr<rt::Geo> geom;
         std::unique_ptr<GeoCheck> geocheck;
         if (argc == 5) {
-            geom = std::make_unique<rt::Geo>(load_words<uint32_t>(dir + "/polygons.bin"),
-                                              load_words<uint16_t>(dir + "/textures.bin"), board.buffer_data());
+            geom = std::make_unique<rt::Geo>(load(dir + "/polygons.bin"), load(dir + "/textures.bin"), board.buffer_data());
             geocheck = std::make_unique<GeoCheck>(argv[4], *geom, board, bus, ls);
         }
 

@@ -1,4 +1,4 @@
-#include "../tools/common/dreamcast/pvr_geometry.hpp"
+#include "pvr_geometry.hpp"
 #undef NDEBUG
 #include <cassert>
 #include <limits>

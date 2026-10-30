@@ -2,11 +2,11 @@
 // 3a48[course], 2800020 + 0x20 * course). Execute the authored initializer here, never on Dreamcast. The eight
 // ROM tile maps become ordinary source art.
 #pragma once
-#include "../../../tools/common/dreamcast_assets.h"
+#include "dreamcast_assets.h"
 #include "runtime/m2_board.h"
 #include "refcore/i960_ref.h"
 #include "../include/render/scene/sky.h"
-#include "../../../tools/common/dreamcast/system24.hpp"
+#include "system24.hpp"
 
 namespace daytona::native {
 inline void export_sky(const std::filesystem::path &directory, rt::M2Board &board) {

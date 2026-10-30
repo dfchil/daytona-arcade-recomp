@@ -5,7 +5,7 @@
 #                                                [--host-build DIR] [--keep] [--jobs N] [--face-group N]
 #
 # ROM      daytona93 ROM set (.zip or .7z, MAME layout; the sound ROMs are not needed), or a directory that already
-#          holds the imported images (program.bin, main_data.bin, ... as written by m2import).
+#          holds the imported images (program.bin, main_data.bin, ... as written by m2import_silent or m2import).
 # OUTDIR   new or partly built output directory (each finished step leaves OUTDIR/stamps/STEP; a rerun skips those).
 # --music ARCHIVE  the soundtrack: vgmrips' Daytona USA pack (not in the ROM set; a browser download, see build_music.sh,
 #          which this runs as the step "music", about 15 s; it needs platform/dreamcast-native/scripts/fetch_aicaflow.sh run once). Every asset
@@ -209,10 +209,10 @@ DESC_host_configure="CMake configure of the host tools (OUTDIR/host)"
 host_configure() {
   local gen=(); command -v ninja >/dev/null && gen=(-G Ninja)
   cmake -S $REPO -B $H $gen -DCMAKE_BUILD_TYPE=Release -DM2_ROMSET=daytona93 -DM2_DREAMCAST_NATIVE=ON
-  cmake --build $H --parallel $JOBS --target m2import m2recomp m2tgprecomp
+  cmake --build $H --parallel $JOBS --target m2import_silent m2recomp m2tgprecomp
 }
-DESC_rom_import="m2import ROM -> OUTDIR/rom/daytona93 (silent images)"
-rom_import() { fresh $ROMDIR; $H/m2import $ROM $ROMDIR --no-sound; }
+DESC_rom_import="m2import_silent ROM -> OUTDIR/rom/daytona93 (silent images)"
+rom_import() { fresh $ROMDIR; $H/m2import_silent $ROM $ROMDIR; }
 DESC_host_recompile="m2recomp/m2tgprecomp: the game's i960 and TGP code to C++ (OUTDIR/host/gen)"
 host_recompile() {
   fresh $H/gen/daytona93 $H/gen/daytona93_tgp; mkdir -p $H/gen/daytona93 $H/gen/daytona93_tgp

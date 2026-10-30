@@ -101,16 +101,19 @@ public:
     void (*on_take)(void *ctx, int vector, uint32_t ip, bool pending) = nullptr;
     void *on_take_ctx = nullptr;
 
-    // Optional read-only diagnostic, before any call/interrupt-entry mutation.
-    // m_IP is the return address, not the call instruction. Never drive emulation
-    // from this observer or read side-effecting device registers through bus.
+#ifdef M2_DC_NATIVE_HOST
+    // Read-only diagnostics for platform/dreamcast-native's host tools, before
+    // any call/interrupt-entry mutation. m_IP is the return address, not the
+    // call instruction. Never drive emulation from an observer, or read
+    // side-effecting device registers through bus.
     using CallObserver = void (*)(void *, const Cpu &, uint32_t target, int type);
     CallObserver on_call = nullptr;
     void *on_call_ctx = nullptr;
-    // Read-only normal-return diagnostic, after restoring caller registers.
+    // Normal returns, after restoring the caller's registers.
     using ReturnObserver = void (*)(void *, const Cpu &, uint32_t source);
     ReturnObserver on_return = nullptr;
     void *on_return_ctx = nullptr;
+#endif
 
     // Services called by recompiled code.
     uint32_t i960_read_dword_unaligned(uint32_t address);

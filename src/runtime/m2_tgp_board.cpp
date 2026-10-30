@@ -30,15 +30,14 @@ uint32_t crc32_words(const std::vector<uint32_t> &w) {
 
 std::vector<uint32_t> words(const std::vector<uint8_t> &b) {
     std::vector<uint32_t> w(b.size() / 4);
-    if (!w.empty()) std::memcpy(w.data(), b.data(), w.size() * 4);
+    std::memcpy(w.data(), b.data(), w.size() * 4);
     return w;
 }
 } // namespace
 
-TgpBoard::TgpBoard(const std::vector<uint8_t> &tables, const std::vector<uint8_t> &copro_data, PagedRom *copro_pages)
-    : tables_(words(tables)), copro_data_(words(copro_data)), copro_pages_(copro_pages) {
-    if (tables_.size() != 0x10000 || (copro_pages_ ? copro_pages_->size() != 0x800000 : copro_data_.size() != 0x200000))
-        throw TgpFatal("bad TGP table or copro data image");
+TgpBoard::TgpBoard(const std::vector<uint8_t> &tables, const std::vector<uint8_t> &copro_data)
+    : tables_(words(tables)), copro_data_(words(copro_data)) {
+    if (tables_.size() != 0x10000 || copro_data_.size() != 0x200000) throw TgpFatal("bad TGP table or copro data image");
     tgp_.bus = this;
 #ifdef M2_FAST_TGP
     tgp_.in_fifo = &in_;
@@ -123,8 +122,7 @@ uint32_t TgpBoard::mem_r(uint32_t adr) {
 #ifdef M2_DC_MEMORY
     if (adr & 0x800000) return rom_->dword(RomRegion::CoproData, (adr & 0x1fffff) * 4);
 #else
-    if (adr & 0x800000) return copro_pages_ ? copro_pages_->read<uint32_t>(size_t(adr & 0x1fffff) * 4)
-                                          : copro_data_[adr & (copro_data_.size() - 1)];
+    if (adr & 0x800000) return copro_data_[adr & (copro_data_.size() - 1)];
 #endif
     if (adr & 0x400000) return buffer_[adr & 0x7fff];
     return 0;
@@ -234,7 +232,7 @@ void TgpBoardModel::write(uint32_t addr, uint32_t data, uint32_t mask) {
 
 void TgpBoardModel::measured_mismatch(uint32_t addr, uint32_t ours, uint32_t mame) {
     char b[96];
-    ::snprintf(b, sizeof b, "%08x: ours %08x, MAME %08x (TGP at %llu instructions)", addr, ours, mame,
+    std::snprintf(b, sizeof b, "%08x: ours %08x, MAME %08x (TGP at %llu instructions)", addr, ours, mame,
                   (unsigned long long)b_.tgp_instructions());
     static FILE *log = std::getenv("M2NATIVE_MISMATCH_LOG") ? std::fopen(std::getenv("M2NATIVE_MISMATCH_LOG"), "w") : nullptr;
     if (log) std::fprintf(log, "%s\n", b);
