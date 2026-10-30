@@ -97,18 +97,24 @@ native_c_target(test_native_contact_clear)
 add_test(NAME native_contact_clear COMMAND test_native_contact_clear)
 add_executable(check_native_meshpack ${DN}/tests/check_meshpack.c ${DN}/code/meshpack.c)
 native_c_target(check_native_meshpack)
-find_package(ZLIB REQUIRED)
-add_executable(check_native_material_pack ${DN}/tests/check_material_pack.c ${DN}/code/material_pack.c)
-native_c_target(check_native_material_pack)
-target_link_libraries(check_native_material_pack PRIVATE ZLIB::ZLIB)
-add_executable(test_native_practice ${DN}/tests/test_practice.c
-    ${DN}/code/drive.c ${DN}/code/contact.c
-    ${DN}/code/road.c ${DN}/code/path.c
-    ${DN}/code/geometry.c ${DN}/code/meshpack.c
-    ${DN}/code/material_pack.c ${DN}/code/visibility.c)
-native_c_target(test_native_practice)
-# Requires user-owned prepared packs, passed explicitly; no ROM test fixture.
-target_link_libraries(test_native_practice PRIVATE ZLIB::ZLIB)
+# material_pack.c inflates DNT3 textures through zlib (the console has KOS's).
+# The recipe needs check_native_material_pack; without zlib the targets are left out.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    add_executable(check_native_material_pack ${DN}/tests/check_material_pack.c ${DN}/code/material_pack.c)
+    native_c_target(check_native_material_pack)
+    target_link_libraries(check_native_material_pack PRIVATE ZLIB::ZLIB)
+    add_executable(test_native_practice ${DN}/tests/test_practice.c
+        ${DN}/code/drive.c ${DN}/code/contact.c
+        ${DN}/code/road.c ${DN}/code/path.c
+        ${DN}/code/geometry.c ${DN}/code/meshpack.c
+        ${DN}/code/material_pack.c ${DN}/code/visibility.c)
+    native_c_target(test_native_practice)
+    # Requires user-owned prepared packs, passed explicitly; no ROM test fixture.
+    target_link_libraries(test_native_practice PRIVATE ZLIB::ZLIB)
+else()
+    message(STATUS "zlib not found: skipping check_native_material_pack and test_native_practice")
+endif()
 add_executable(test_native_geometry ${DN}/tests/test_geometry.cpp
     ${DN}/code/geometry.c ${DN}/code/meshpack.c)
 native_c_target(test_native_geometry)
@@ -288,9 +294,11 @@ if(Python3_FOUND)
         COMMAND Python3::Interpreter ${DN}/tools/check_camera.py --self-test)
     add_test(NAME native_material_decode
         COMMAND Python3::Interpreter ${DN}/tests/test_material_decode.py)
-    add_test(NAME native_material_pack
-        COMMAND Python3::Interpreter ${DN}/tests/test_prepare_materials.py
-                $<TARGET_FILE:check_native_material_pack>)
+    if(TARGET check_native_material_pack)
+        add_test(NAME native_material_pack
+            COMMAND Python3::Interpreter ${DN}/tests/test_prepare_materials.py
+                    $<TARGET_FILE:check_native_material_pack>)
+    endif()
     # The model renderer's PVR stream against the host reference renderer
     # (platform/dreamcast-native/tests/reference_stream.h) over a recorded script, stages 3 and 5.
     set(NATIVE_STREAM_TEST_ASSETS "" CACHE PATH "Prepared car/world packs for the native stream reference check")
