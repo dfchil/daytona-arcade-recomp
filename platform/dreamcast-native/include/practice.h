@@ -194,6 +194,8 @@ int nm_practice_run(const char *root);
 /* Title owns no course data. After releasing its PVR assets, it calls this
  * to rebuild the existing live-race presentation and replace its mode. */
 int nm_practice_restart_from_title(void);
+/* The results' last iteration has run: the pool takes what the game leaves, the frame counter its count. */
+void nm_practice_game_over(void);
 int nm_practice_attract_start(void);
 /* The next attract scene loads in the title's frames (scene_loader.h): started at the title's start, still
  * loading, and its end after the title's release (the rest at once, then its palettes). */

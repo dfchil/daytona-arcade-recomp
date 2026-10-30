@@ -53,6 +53,7 @@
 #include "race_camera.h"
 #include "settings.h"
 #include "frontend.h"
+#include "game_chain.h"
 #include "course_assets.h"
 #include "clock_scene.h"
 #include "props_scene.h"
@@ -114,8 +115,10 @@ static uint32_t bits(float value) { uint32_t out;memcpy(&out,&value,4);return ou
  * runs one iteration per F row with that row's inputs. Out: the carried pool, the chosen course and
  * transmission, and 5010b0 of the race's phase20 tick (two iterations after the select's last). */
 static nm_intro_scene_t frontend_attract;
+/* entered: the attract ran in trace_attract_native (--enter): the pool holds what the game start left and the select
+ * starts after the credit's iteration ENTERED_CREDIT. */
 static int frontend_from_trace(const char *path,nm_entity_pool_t *pool,unsigned *course,unsigned *transmission,
-        uint32_t *counter_base) {
+        uint32_t *counter_base,int entered,uint32_t entered_credit) {
     FILE *in=fopen(path,"r");
     if(!in) { fprintf(stderr,"cannot open front-end trace %s\n",path);return 0; }
     static char line[4096];
@@ -123,7 +126,10 @@ static int frontend_from_trace(const char *path,nm_entity_pool_t *pool,unsigned 
     while(fgets(line,sizeof(line),in)) {
         if(line[0]!='F' || line[1]!=' ') continue;
         const long long b0=need(line,"b0"),active=need(line,"active"),next=need(line,"phase");
-        if(!phase) {
+        if(!phase && entered) {
+            if((uint32_t)b0!=entered_credit) continue;
+            start=b0;nm_select_enter(&select);counter=(uint32_t)start+2u;phase=18;
+        } else if(!phase) {
             if(active!=3 || next!=12) continue;
             /* The credit's iteration: an ordinary cinematic tick; tick k's state is iteration k+3's. */
             start=b0;
@@ -154,6 +160,22 @@ static int frontend_from_trace(const char *path,nm_entity_pool_t *pool,unsigned 
         "phase20 tick 5010b0 %u\n",start,(unsigned)(counter-(uint32_t)start-2u),*course,*transmission,
         pool->leading_lap,(unsigned)*counter_base);
     return 1;
+}
+
+/* --leave: 5010b0 of the game's last iteration, the F row of phases 29/30 that selects phase 2, from AFTER on (a name
+ * entry's length is the player's); 0: no such row. */
+static uint32_t frontend_game_over(const char *path,uint32_t after) {
+    FILE *in=fopen(path,"r");
+    if(!in) return 0;
+    static char line[4096];
+    uint32_t found=0;
+    while(!found && fgets(line,sizeof(line),in)) {
+        if(line[0]!='F' || line[1]!=' ') continue;
+        const long long b0=need(line,"b0"),active=need(line,"active");
+        if((uint32_t)b0>=after && need(line,"phase")==2 && (active==29 || active==30)) found=(uint32_t)b0;
+    }
+    fclose(in);
+    return found;
 }
 
 /* practice_race_detail() of code/practice.c: the shared camera pass (race_camera.h) with the tick's view buttons. */
@@ -238,6 +260,7 @@ static int16_t reflection_heading(const nm_player_t *car) {
 static int32_t phase_timer;
 static uint32_t record_notification;
 static int podium_cars;
+static int left_podium; /* a podium scene ran: its cars are the pool's first entities */
 
 /* --parts: the player's part list after every race tick as code/render/scene/practice.c submits it
  * (nm_practice_render_player_car): per drawn part its model and view-space matrix; the body slot names the body
@@ -457,6 +480,11 @@ int main(int argc,char **argv) {
      *                             words of every car, the leading lap and the frame counter base, and
      *                             the transmission the select chose. Replaces carry mode's reference
      *                             words and --start-lap with what the native attract and select compute.
+     *   --enter STATE             with --frontend: the game after trace_attract_native's --leave (tests/game_chain.h):
+     *                             the pool of the scenes before it, the select from the iteration after its credit.
+     *                             The trace is that run's whole front-end trace; --course must be the course chosen.
+     *   --leave NEW_STATE         after the run, through phase 29: what the game leaves (tests/game_chain.h), for
+     *                             trace_attract_native --enter. Without --enter: the pool from power-on.
      *   --transmission manual|automatic  the transmission 501464 the race was selected with, as a
      *                             NATIVE_TRANSMISSION build supplies it: the grid's body variant
      *                             (e5ac), the player's gear rule (d89c) and the 1210c field get it,
@@ -474,6 +502,7 @@ int main(int argc,char **argv) {
     const char *frontend_file=NULL;
     long wheel_phase=-1,leading_lap=0,poke_row=-1;uint32_t poke_speed=0;int transmission_option=-1,difficulty_option=-1;
     long course=0;uint32_t counter_base=NM_SLOT_MACHINE_COUNTER_BASE;
+    const char *enter_file=NULL,*leave_file=NULL;
     while(argc>=9 && argv[argc-2][0]=='-') {
         if(!strcmp(argv[argc-2],"--script-header")) script_header=argv[argc-1];
         else if(!strcmp(argv[argc-2],"--checkpoints")) checkpoint_file=argv[argc-1];
@@ -486,6 +515,8 @@ int main(int argc,char **argv) {
         else if(!strcmp(argv[argc-2],"--wheel-phase")) wheel_phase=strtol(argv[argc-1],NULL,0)&0xffff;
         else if(!strcmp(argv[argc-2],"--start-lap")) leading_lap=strtol(argv[argc-1],NULL,0);
         else if(!strcmp(argv[argc-2],"--frontend")) frontend_file=argv[argc-1];
+        else if(!strcmp(argv[argc-2],"--enter")) enter_file=argv[argc-1];
+        else if(!strcmp(argv[argc-2],"--leave")) leave_file=argv[argc-1];
         else if(!strcmp(argv[argc-2],"--counter-base"))
             counter_base=strcmp(argv[argc-1],"auto") ? (uint32_t)strtoul(argv[argc-1],NULL,10) : UINT32_MAX;
         else if(!strcmp(argv[argc-2],"--course")) {
@@ -629,13 +660,21 @@ int main(int argc,char **argv) {
     }
     marks.count=road.profile_count-1;marks.values=calloc(road.profile_count,1);assert(marks.values);
     static nm_entity_pool_t frontend_pool;uint32_t frontend_counter=0;
+    static nm_game_chain_t chain;
+    nm_frontend_pool_reset(&frontend_pool);
+    if(enter_file) {
+        if(!frontend_file || !nm_chain_read(enter_file,&chain)) { fputs("--enter needs --frontend and a state file\n",stderr);return 2; }
+        frontend_pool=chain.pool;record_notification=chain.notification;
+    }
     if(frontend_file) {
         unsigned chosen_course=0,chosen=0;
-        if(carry || seeded || !frontend_from_trace(frontend_file,&frontend_pool,&chosen_course,&chosen,&frontend_counter)) return 2;
-        /* The attract runs on the loaded packs, course 0's; a front end into another course would need both. */
-        if(chosen_course!=0 || course!=0) {
-            fprintf(stderr,"front end chose course %u: the harness runs the front end with course 0 only\n",chosen_course);return 2;
+        if(carry || seeded || !frontend_from_trace(frontend_file,&frontend_pool,&chosen_course,&chosen,&frontend_counter,
+            enter_file!=NULL,chain.counter)) return 2;
+        /* The attract runs on the loaded packs, course 0's; a front end into another course goes through --enter. */
+        if(chosen_course!=(unsigned)course) {
+            fprintf(stderr,"front end chose course %u, not --course %ld\n",chosen_course,course);return 2;
         }
+        if(!enter_file && course!=0) { fputs("this harness runs the attract on course 0 only: use --enter\n",stderr);return 2; }
         if(transmission_option>=0 && (unsigned)transmission_option!=chosen) {
             fputs("front end chose another transmission than --transmission\n",stderr);return 2;
         }
@@ -668,7 +707,8 @@ int main(int argc,char **argv) {
     /* practice_reset_session(): the settings' difficulty (factory NORMAL), variant = the transmission. */
     const unsigned difficulty=difficulty_option>=0 ? (unsigned)difficulty_option :
         reference_inputs ? rows[0].difficulty : NM_DIFFICULTY_NORMAL;
-    if(!nm_race_scene_start(&race,math,&contact,&road,paths,difficulty,transmission,&marks,road.profile_count,tables->pit)) {
+    if(!nm_race_scene_start_carried(&race,math,&contact,&road,paths,difficulty,transmission,&marks,road.profile_count,tables->pit,
+            frontend_pool.raced ? &frontend_pool.player : NULL)) {
         fputs("native race start rejected\n",stderr);return 1;
     }
 #ifdef NM_RACE_VIEW_DATA
@@ -926,9 +966,10 @@ int main(int argc,char **argv) {
                     }
                     advanced=nm_intro_scene_start_stages(&presentation,graph->stages,graph->count,1u<<28,graph->overrun,
                         math,&road,paths);
+                    if(advanced) nm_frontend_podium_start(&presentation,&race);
                     presentation.object_clock=race.ticks+NM_PODIUM_CLOCK_OFFSET; /* code/practice.c */
                     presentation.phase_clock=race.counter_base+presentation.object_clock+1u; /* code/practice.c */
-                    podium_cars=1;podium_live=1;
+                    podium_cars=1;podium_live=1;left_podium=1;
                 } else if(advanced && podium.cinematic && !podium.entered)
                     advanced=nm_intro_scene_step(&presentation,math,&contact,&road,paths);
                 if(advanced && podium.cinematic && !podium.entered) {
@@ -1030,6 +1071,21 @@ int main(int argc,char **argv) {
         }
         fputs("#endif\n",h);
         if(fclose(h)) return 2;
+    }
+    if(leave_file) {
+        /* The race's and the results' iterations, then phase 29's; a name entry runs no scene of this harness: its
+         * iterations come from the trace, and with no record the count must be the trace's. */
+        if(status || race.phase!=29) { printf("--leave: the run did not reach phase 29 (phase %u)\n",race.phase);return 1; }
+        chain.magic=NM_CHAIN_MAGIC;chain.course=(uint32_t)course;chain.pool=frontend_pool;
+        chain.notification=record_notification;
+        chain.counter=race.counter_base+(uint32_t)tick-1u+1u;
+        const uint32_t over=frontend_file ? frontend_game_over(frontend_file,chain.counter) : 0;
+        if(over && !record_notification && over!=chain.counter) {
+            printf("--leave: the game ends at 5010b0 %u here, %u in the trace\n",(unsigned)chain.counter,(unsigned)over);return 1;
+        }
+        if(over) chain.counter=over;
+        nm_frontend_pool_from_game(&chain.pool,&race,&presentation.cells,left_podium ? &presentation : NULL);
+        if(!nm_chain_write(leave_file,&chain)) { fputs("cannot write --leave (it must be new)\n",stderr);return 2; }
     }
     const int failed=ferror(out);
     if(hud_out && fclose(hud_out)) { fputs("cannot write native HUD rows\n",stderr);return 2; }

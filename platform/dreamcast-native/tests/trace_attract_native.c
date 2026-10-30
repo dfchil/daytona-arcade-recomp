@@ -7,6 +7,11 @@
  * (nm_attract_carry_t).
  *
  * usage: trace_attract_native ASSET_DIR NEW_OUTPUT LOOPS [--course C] [--clock CLOCK_OUT REFERENCE_TRACE]
+ *            [--enter STATE] [--credit FRONTEND_TRACE --leave NEW_STATE]
+ *   --enter: the loop after a game (trace_race_native --leave, tests/game_chain.h) instead of power-on: its frame
+ *   counter, course and pool. --credit: the original's next credit in the front-end trace (the first game start after
+ *   the entry, m2segment --trace-frontend) ends the run: the credit's iteration runs as any other, the game start
+ *   (phases 12, 17) on the scene it found, and --leave writes the state for trace_race_native --enter.
  *   One T row a tick (and one for the scene start, ticks=0) with the 5010b0 the original shows after the pass that
  *   made that state (scene= object_clock + ticks: its tick reads object_clock + ticks + 1 before the increment), the loop's course, the latched phase, the stage, the camera's
  *   key tick (ctick, 5014a0), the view matrix (501560), the cell bitmaps (501520 draw, 501540 near) and the scene
@@ -24,6 +29,7 @@
 #include "clock_scene.h"
 #include "vr_demo.h"
 #include "frontend.h"
+#include "game_chain.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -175,8 +181,37 @@ static void demo_row(FILE *out, long n, uint32_t counter, unsigned phase) {
     }
 }
 
-/* What the scenes leave each other (vr_demo.h). */
-static nm_attract_carry_t carry;
+/* What the scenes leave each other (frontend_pool.h). */
+static nm_entity_pool_t pool;
+/* --credit: 5010b0 and the active phase of the iteration that saw it; UINT32_MAX: no credit. */
+static uint32_t credit_counter = UINT32_MAX;
+static unsigned credit_phase;
+static const char *leave_file;
+static int credit_find(const char *path, uint32_t after) {
+    FILE *in = fopen(path, "r");
+    if (!in) return 0;
+    static char line[4096];
+    while (fgets(line, sizeof(line), in)) {
+        if (line[0] != 'F' || line[1] != ' ') continue;
+        const char *b0 = strstr(line, " b0="), *next = strstr(line, " phase="), *active = strstr(line, " active=");
+        if (!b0 || !next || !active) break;
+        if ((uint32_t)strtoul(b0 + 4, NULL, 10) <= after || strtoul(next + 7, NULL, 10) != 12) continue;
+        credit_counter = (uint32_t)strtoul(b0 + 4, NULL, 10);
+        credit_phase = (unsigned)strtoul(active + 8, NULL, 10);
+        break;
+    }
+    fclose(in);
+    return credit_counter != UINT32_MAX;
+}
+static uint32_t entered_notification;
+static int leave(unsigned course) {
+    static nm_game_chain_t chain;
+    chain.magic = NM_CHAIN_MAGIC; chain.counter = credit_counter; chain.course = course; chain.pool = pool;
+    chain.notification = entered_notification;
+    if (!nm_chain_write(leave_file, &chain)) { fputs("cannot write --leave (it must be new)\n", stderr); return 1; }
+    printf("credit at 5010b0 %" PRIu32 " in phase %u, course %u\n", credit_counter, credit_phase, course);
+    return 0;
+}
 
 /* The demo after a cinematic of COUNT cars: phase 6 at 5010b0 COUNTER, then its 834 ticks, each with the camera pass. */
 static int run_demo(FILE *out, long *n, unsigned course, unsigned count, uint32_t counter) {
@@ -189,9 +224,8 @@ static int run_demo(FILE *out, long *n, unsigned course, unsigned count, uint32_
         NULL,
 #endif
         nm_race_crash_keys, nm_race_crash_times, NM_RACE_CRASH_KEYS, tables->tunnel};
-    static nm_entity_pool_t pool;
-    nm_frontend_pool_from_intro(&pool, &scene);
-    if (!nm_demo_start(&demo_race, &demo, math, &contact, &road, paths, count, carry.view, nm_race_view_presets,
+    nm_frontend_pool_from_intro(&pool, &scene, &road);
+    if (!nm_demo_start(&demo_race, &demo, math, &contact, &road, paths, count, pool.view, nm_race_view_presets,
             &marks, road.profile_count, &pool, counter & 3u)) { fprintf(stderr, "course %u: demo start refused\n", course); return 0; }
     const char *first = nm_demo_view_start(&demo_race, &demo_view, math, &scenery, &cameras, &pool);
     if (first) { fprintf(stderr, "course %u: demo start camera pass: %s\n", course, first); return 0; }
@@ -200,14 +234,24 @@ static int run_demo(FILE *out, long *n, unsigned course, unsigned count, uint32_
         const uint32_t b0 = counter + 1u + t;
         if (!nm_demo_step(&demo_race, &demo, math, &nm_intro_speeds, &contact, &road, paths, &marks, road.profile_count,
                 b0 & 3u, (uint8_t)(b0 & 1u), nm_intro_crash_sequences[0].rows, nm_intro_crash_sequences[0].count,
-                t + 1 < NM_DEMO_TICKS ? course : nm_attract_next_course(course))) {
+                t + 1 < NM_DEMO_TICKS || b0 == credit_counter ? course : nm_attract_next_course(course))) {
             fprintf(stderr, "course %u: demo tick %u refused (car %u)\n", course, t, demo_race.shared.updating); return 0;
         }
         const char *why = nm_race_camera_pass(&demo_race, &demo_view, math, &scenery, &cameras, 0);
         if (why) { fprintf(stderr, "course %u: demo tick %u camera pass: %s\n", course, t, why); return 0; }
         demo_row(out, (*n)++, b0, 7);
+        if (b0 == credit_counter) {
+            if (credit_phase != 7) { fprintf(stderr, "the credit at 5010b0 %" PRIu32 " is in phase %u, here 7\n", b0, credit_phase); return 0; }
+            if (!nm_demo_game_start(&demo_race, math, &nm_intro_speeds, &contact, &road, paths, &marks, road.profile_count,
+                    b0 + 1u, nm_intro_crash_sequences[0].rows, nm_intro_crash_sequences[0].count)) {
+                fprintf(stderr, "course %u: the demo's game start refused\n", course); return 0;
+            }
+            nm_frontend_pool_from_race(&pool, &demo_race, &demo_view.cells);
+            return 2;
+        }
     }
-    nm_attract_carry_from_race(&carry, &demo_race);
+    if (!nm_demo_field_off(&demo_race, math, &road, 8, counter + 1u + NM_DEMO_TICKS)) { fprintf(stderr, "course %u: phase 8 refused\n", course); return 0; }
+    nm_frontend_pool_from_race(&pool, &demo_race, &demo_view.cells);
     return 1;
 }
 
@@ -219,13 +263,17 @@ int main(int argc, char **argv) {
     const char *assets = argv[1];
     const long loops = strtol(argv[3], NULL, 10);
     unsigned course = 0;
+    const char *enter_file = NULL, *credit_file = NULL;
     for (int i = 4; i < argc; ++i) {
         if (!strcmp(argv[i], "--course") && i + 1 < argc) course = (unsigned)strtoul(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--clock") && i + 2 < argc) {
             if (!(clock_out = fopen(argv[++i], "wx")) || !reference_frames(argv[++i])) {
                 fputs("--clock: cannot create the output or read the reference trace\n", stderr); return 2;
             }
-        } else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
+        } else if (!strcmp(argv[i], "--enter") && i + 1 < argc) enter_file = argv[++i];
+        else if (!strcmp(argv[i], "--credit") && i + 1 < argc) credit_file = argv[++i];
+        else if (!strcmp(argv[i], "--leave") && i + 1 < argc) leave_file = argv[++i];
+        else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
     }
     char path[1024];
     if (!nm_course_asset(path, sizeof(path), assets, 0, NM_COURSE_DRIVE, 0) || !(math = nm_drive_load(path))) {
@@ -234,8 +282,16 @@ int main(int argc, char **argv) {
     FILE *out = fopen(argv[2], "wx");
     if (!out) { fputs("cannot create the output (it must be new)\n", stderr); return 2; }
     fputs("# attract-trace v1 side=native\n", out);
-    nm_attract_carry_reset(&carry);
+    nm_frontend_pool_reset(&pool);
     uint32_t counter = 1; /* 5010b0 after power-on's phase 0 iteration */
+    if (enter_file) {
+        static nm_game_chain_t chain;
+        if (!nm_chain_read(enter_file, &chain)) { fputs("--enter: cannot read the state\n", stderr); return 2; }
+        pool = chain.pool; counter = chain.counter; course = chain.course; entered_notification = chain.notification;
+    }
+    if (credit_file && (!leave_file || !credit_find(credit_file, counter))) {
+        fputs("--credit needs --leave and a credit in the trace\n", stderr); return 2;
+    }
     long n = 0;
     for (long loop = 0; loop < loops; ++loop) {
         const nm_podium_course_t *graph = course < 3 ? nm_attract_courses + course : NULL;
@@ -246,7 +302,7 @@ int main(int argc, char **argv) {
             !nm_intro_scene_detail(&scene, math, &scenery)) { fprintf(stderr, "course %u: attract start refused\n", course); return 1; }
         scene.object_clock = counter + 1u;
         scene.phase_clock = scene.object_clock - 3u; /* 503690/503692: 5010b0 - ticks - 3 (the first loop: 0) */
-        if (!nm_attract_carry_into_cinematic(&scene, &carry, &road)) { fprintf(stderr, "course %u: carry refused\n", course); return 1; }
+        if (!nm_attract_carry_into_cinematic(&scene, &pool, &road)) { fprintf(stderr, "course %u: carry refused\n", course); return 1; }
         nm_intro_scene_light(&scene, nm_race_course_starts[course].tunnel);
         row(out, n++, course, 3);
         while (scene.ticks < NM_ATTRACT_TICKS) {
@@ -257,12 +313,27 @@ int main(int argc, char **argv) {
             }
             row(out, n++, course, phase);
             clock_row(scene.object_clock + scene.ticks);
+            if (scene.object_clock + scene.ticks == credit_counter) {
+                if (credit_phase != phase) { fprintf(stderr, "the credit at 5010b0 %" PRIu32 " is in phase %u, here %u\n", credit_counter, credit_phase, phase); return 1; }
+                if (!nm_frontend_game_start(&scene, math, &contact, &road, paths, &pool)) { fprintf(stderr, "course %u: game start refused\n", course); return 1; }
+                fclose(out); unload();
+                return leave(course);
+            }
         }
         printf("loop %ld: course %u, 5010b0 %" PRIu32 "..%" PRIu32 ", %" PRIu32 " stage transitions, %" PRIu32 " collision pairs, %" PRIu32 " responses\n",
             loop, course, scene.object_clock, scene.object_clock + scene.ticks, scene.transitions, scene.collision_pairs,
             scene.collision_responses);
-        if (!run_demo(out, &n, course, scene.count, scene.object_clock + scene.ticks + 1u)) return 1;
+        const int demo_ran = run_demo(out, &n, course, scene.count, scene.object_clock + scene.ticks + 1u);
+        if (!demo_ran) return 1;
+        if (demo_ran == 2) { fclose(out); unload(); return leave(course); }
         counter = scene.object_clock + scene.ticks + NM_ATTRACT_DEMO_ITERATIONS; /* phases 6, 7 and 8 */
+        /* The title: its objects leave the pool as it is, and phases 12, 17 find every car off (the original's pool
+         * over phases 8 to 18 of a credit in the title: no entity word changes). 2058 stepped the course. */
+        if (credit_counter != UINT32_MAX && credit_counter > counter && credit_counter <= counter + NM_ATTRACT_TITLE_TICKS) {
+            if (credit_phase != 9) { fprintf(stderr, "the credit at 5010b0 %" PRIu32 " is in phase %u, here 9\n", credit_counter, credit_phase); return 1; }
+            fclose(out); unload();
+            return leave(nm_attract_next_course(course));
+        }
         counter += NM_ATTRACT_TITLE_TICKS + 1u;                                  /* phases 9 and 10 */
         course = nm_attract_next_course(course);
     }

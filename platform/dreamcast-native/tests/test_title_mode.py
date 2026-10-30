@@ -1,5 +1,5 @@
 """Title mode (the original's phase 9) and the attract loop's entry (phase 2): queue title frames for 386 ticks,
-then phase 2; START or A is a credit (the select, cold pool); both triggers and START the settings."""
+then phase 2; START or A is a credit (the select); both triggers and START the settings."""
 from pathlib import Path
 import subprocess
 import tempfile

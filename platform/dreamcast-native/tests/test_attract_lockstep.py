@@ -36,7 +36,7 @@ Rows accepted on evidence, counted apart:
     bitmaps are a subset of the native's (partly written) while everything else is equal;
   - a demo row sampled mid-pass: the board's frame ended after the cars' updaters, before the field pass and the
     camera: every field that differs is the native row's before (the collision words, the camera, the view).
-The scenes' carried state (vr_demo.h nm_attract_carry_t: rank keys, laps, the leading lap, the view) is native.
+The scenes' carried state (frontend_pool.h: rank keys, laps, the leading lap, the view) is native.
 Also printed: where each stretch begins and ends in both (5010b0 of the first and last cinematic tick of each
 course). Exits 1 on any difference, 77 when a file is missing."""
 import argparse

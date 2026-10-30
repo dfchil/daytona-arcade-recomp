@@ -43,6 +43,7 @@ int nm_results_update(nm_practice_scene_t *scene,uint32_t elapsed_us) {
              * entry is linked, whether or not LTO inlines this function and sees it. */
             enj_state_flag_shutdown(NULL);
 #else
+            nm_practice_game_over(); /* what the game leaves the scenes after it (frontend.h) */
             if(!nm_name_mode_start(scene->asset_root,scene->math,scene->name_notification,
                                   scene->name_record,scene->race.cars[0].car.lap.best_ticks,
                                   scene->race.cars[0].car.lap.completed,&scene->failed)) {

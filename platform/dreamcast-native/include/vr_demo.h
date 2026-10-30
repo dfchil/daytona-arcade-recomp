@@ -34,8 +34,8 @@ typedef struct {
     uint16_t counter;
 } nm_demo_t;
 
-/* What the attract's scenes leave each other in the original's 44 entities and its globals (the entities are never
- * cleared), beyond the race entry's part (frontend_pool.h). Measured on the attract trace (courses 0, 2, 1):
+/* What the attract's scenes read of the original's 44 entities and its globals (the entities are never cleared),
+ * beyond the race entry's part: nm_entity_pool_t (frontend_pool.h). Measured on the attract trace (courses 0, 2, 1):
  *  - +60, the rank key: the cinematic updaters of Beginner and Advanced (d290, d230) do not write it; its cars keep
  *    the V.R. demo's before (power-on: 0), and the demo's grid reset (e3f4 clears +34.. below it) keeps the
  *    cinematic's;
@@ -44,31 +44,21 @@ typedef struct {
  *  - 5014ba, the sort pass's leading lap: the demo's into the cinematic after it;
  *  - 501710, the view: the last demo's into the next demo's camera reset (637c).
  * The native cinematic counts laps from one more (intro_math.h): its lap byte is the original's + 1. */
-typedef struct {
-    int16_t rank_key[44];
-    int8_t leading_lap; /* the original's count */
-    uint8_t view;
-} nm_attract_carry_t;
 
-static inline void nm_attract_carry_reset(nm_attract_carry_t *c) {
-    nm_memset(c,0,sizeof(*c));c->leading_lap=-1;
-}
 /* After nm_intro_scene_start_attract (before its first tick). Its phase clock (503690/503692 = 5010b0 - ticks - 3)
  * is the caller's. */
-static inline int nm_attract_carry_into_cinematic(nm_intro_scene_t *s,const nm_attract_carry_t *c,
+static inline int nm_attract_carry_into_cinematic(nm_intro_scene_t *s,const nm_entity_pool_t *pool,
         const nm_road_pack_t *road) {
-    if(!s || !c || !road || !road->grid) return 0;
+    if(!s || !pool || !road || !road->grid) return 0;
     for(unsigned i=0;i<44;++i) { /* every entity: a later stage spawns more cars (their spawn keeps both words) */
-        s->cars[i].rank_key=c->rank_key[i];
+        s->cars[i].rank_key=pool->rank_key[i];
         if(i && i<road->grid_count) s->cars[i].lap.lap=(uint8_t)(road->grid[i].lap+1);
+        s->collision_motion[i]=pool->motion[i];s->collision_relative[i]=pool->relative[i];s->collision_side[i]=pool->side[i];
     }
-    s->traffic_lap=(int8_t)(c->leading_lap+1);
+    s->traffic_lap=(int8_t)(pool->leading_lap+1);
+    s->cars[0].boundary.damage.sequence_counter=pool->crash_counter;
+    for(unsigned i=0;i<44;++i) s->cars[i].checkpoints.clock=pool->clock;
     return 1;
-}
-/* After the demo (or a race: not measured). */
-static inline void nm_attract_carry_from_race(nm_attract_carry_t *c,const nm_race_scene_t *r) {
-    for(unsigned i=0;i<r->count && i<44;++i) c->rank_key[i]=r->cars[i].car.rank_key;
-    c->leading_lap=r->order.lap;c->view=(uint8_t)(r->view&3u);
 }
 
 /* The presentation half of the phase-6 iteration: the race view's state in VIEW (the race's presentation
@@ -107,7 +97,9 @@ static inline int nm_demo_start(nm_race_scene_t *s, nm_demo_t *demo, const nm_dr
     s->start_stage=-1;s->view=(uint8_t)view;s->view_presets=presets;
     nm_tunnel_light_reset(&s->scene_light,nm_race_light_normal_default);
     for(unsigned id=0;id<count;++id) {
-        nm_race_car_t *c=s->cars+id;c->remembered=255;c->car.boundary.damage.flags=0x80000000;
+        nm_race_car_t *c=s->cars+id;c->remembered=255;
+        if(!id && pool && pool->raced) nm_player_carried(&c->car,&pool->player);
+        c->car.boundary.damage.flags=0x80000000;
         if(!nm_race_car_grid_reset(c,math,contact,road,paths+road->grid[id].route,id,0)) return 0;
         c->effects.height.sampled_tick=(uint16_t)(0u-5u);
         c->next=(uint16_t)((id+1)%count);c->previous=(uint16_t)((id+count-1)%count);
@@ -124,9 +116,16 @@ static inline int nm_demo_start(nm_race_scene_t *s, nm_demo_t *demo, const nm_dr
             nm_race_car_t *c=s->cars+id;
             c->collision_motion=pool->motion[id];c->relative=pool->relative[id];c->collision_side=pool->side[id];
             c->car.rank_key=pool->rank_key[id];
+            c->remembered=pool->remembered[id];c->rank=pool->rank[id];
+        }
+        for(unsigned id=count;id<44;++id) { /* as nm_frontend_race_entry */
+            nm_player_t *car=&s->cars[id].car;
+            car->boundary.ground.position[0]=pool->position[id][0];car->boundary.ground.position[2]=pool->position[id][1];
+            car->lateral.current=pool->lateral[id];
         }
         nm_memcpy(s->order.rank,pool->rank_order,sizeof(s->order.rank));nm_memcpy(s->order.track,pool->track_order,sizeof(s->order.track));
         s->order.lap=pool->leading_lap;
+        s->shared.crash_counter=pool->crash_counter;s->shared.clock=pool->clock;
     }
     s->shared.flags=UINT32_C(1)<<6;
     if(collision_phase>=4 || !nm_race_interactions_step(s->cars,s->count,&s->shared,&s->order,s->cooldowns,&s->passing,
@@ -185,7 +184,7 @@ static inline int nm_demo_player_step(nm_race_car_t *cars, unsigned count, nm_ra
         uint8_t variant, int8_t restored) {
     if(!cars || !shared || !math || !speed || !contact || !road || !road->profiles || !path || !marks ||
        !marks->values || count<3 || count>44 || cars[0].next>=count ||
-       (cars[0].remembered!=255 && cars[0].remembered>=count) ||
+       (cars[0].remembered!=255 && cars[0].remembered>=44) ||
        (uint16_t)cars[0].car.phase[0]>=road->profile_count || (uint16_t)cars[0].car.phase[0]>=marks->count ||
        cars[0].route!=path->route || path->slot!=road->slot || contact->slot!=road->slot) return 0;
     nm_race_car_t *const me=cars;
@@ -288,5 +287,47 @@ static inline int nm_demo_step(nm_race_scene_t *s, nm_demo_t *demo, const nm_dri
     s->course=(uint8_t)course;
     ++s->ticks;
     return 1;
+}
+
+/* Phases 8 (20d4, the demo's natural end) and 17 (2b0c, a credit in it): the handler switches every object off (flags
+ * bit 31); the field object 1210c stays on and runs once more over the switched-off field: the travel of the cars in
+ * its 14-car window becomes zero. Its later passes change nothing (the original's pool over phases 8 to 18). */
+static inline int nm_demo_field_off(nm_race_scene_t *s, const nm_drive_params_t *math, const nm_road_pack_t *road,
+        unsigned phase, uint32_t iteration) {
+    for(unsigned id=0;id<44;++id) s->cars[id].car.boundary.damage.flags&=UINT32_C(0x7fffffff);
+    s->shared.flags=UINT32_C(1)<<phase;
+    if(!nm_race_interactions_step(s->cars,s->count,&s->shared,&s->order,s->cooldowns,&s->passing,&s->collisions,
+        math,road,0,iteration&3u,0,0)) return 0;
+    ++s->ticks;
+    return 1;
+}
+
+/* The two iterations after the one in which phase 7's handler saw the credit (2028 -> 20bc: that iteration is an
+ * ordinary demo tick, nm_demo_step): the game start over the demo, as frontend.h's over the cinematic.
+ *  - phase 12 (2834): every object still runs, with the flags 1<<12: the player's c9c4 takes only its e078 (its mask
+ *    19f800fc excludes bit 12), the opponents' cde0 has no mask and moves them as before; then 1210c.
+ *  - phase 17: nm_demo_field_off.
+ * ITERATION: 5010b0 of the phase-12 iteration. The race entry then reads the pool as the demo's cars left it. */
+static inline int nm_demo_game_start(nm_race_scene_t *s, const nm_drive_params_t *math,
+        const nm_intro_speed_params_t *speed, const nm_contact_pack_t *contact, const nm_road_pack_t *road,
+        const nm_path_pack_t paths[8], nm_road_marks_t *marks, unsigned mark_capacity, uint32_t iteration,
+        const nm_crash_row_t *rows, unsigned row_count) {
+    if(!s || !math || !speed || !contact || !road || !paths || !marks || !marks->values || s->count<3 || s->count>44 ||
+       !s->view_presets || mark_capacity<road->profile_count) return 0;
+    const nm_road_marks_t opponent_marks={marks->values,mark_capacity,marks->timer};
+    s->shared.flags=UINT32_C(1)<<12;
+    s->shared.tick=(uint16_t)s->ticks;
+    if(!nm_demo_player_step(s->cars,s->count,&s->shared,math,speed,contact,road,paths+s->cars[0].route,
+        &opponent_marks,(uint8_t)(iteration&1u),(int8_t)s->view_presets[s->view].mode)) return 0;
+    for(unsigned id=1;id<s->count;++id) {
+        s->shared.updating=(uint8_t)id;
+        if(!nm_race_opponent_step_inplace(s->cars,s->count,id,&s->shared,math,speed,contact,road,
+            paths+s->cars[id].route,&opponent_marks,rows,row_count)) return 0;
+    }
+    s->shared.updating=(uint8_t)s->count;
+    if(!nm_race_interactions_step(s->cars,s->count,&s->shared,&s->order,s->cooldowns,&s->passing,&s->collisions,
+        math,road,0,iteration&3u,0,0)) return 0;
+    ++s->ticks;
+    return nm_demo_field_off(s,math,road,17,iteration+1u);
 }
 #endif

@@ -21,8 +21,7 @@ the same run) of the inputs recipes/inputs/frontend-X.txt (ROM output, never com
    collision words of all 40 cars, the leading lap 5014ba, the frame counter base, the transmission). Native row i
    pairs with reference row n = 4+i (FIRST_ROW 5); on every row, every field of every car row (player and the 39
    opponents: pose, speed, decisions, flags, damage, and the collision tracking words sx/sz/tx/tz/cside/crel that
-   the cold-start lockstep tests skip; the player's steering word str on rows 0-4 aside: the cinematic's value
-   for car 0 until the first tick rewrites it, not kept by the native cinematic) and the race timeline (the lap display word aside, as in
+   the cold-start lockstep tests skip) and the race timeline (the lap display word aside, as in
    test_manual_lockstep.py) must be equal. Not compared: body/tilt of the
    opponents (presentation, test_damage_lockstep.py), and the reference rows sampled mid-tick at the race's load
    (native rows 2-4).
@@ -39,9 +38,6 @@ TIMELINE = [k for k in TIMELINE if k != 'display']
 SELECT_RUNS = 'ABCDE'
 RACE_RUNS = 'ABE'
 MID_TICK = (2, 3, 4)
-# The player entity's +b0 before the race's first tick rewrites it: the cinematic's steering word of car 0, which the
-# native cinematic does not keep (frontend.h nm_frontend_race_entry). Rows 0-4 only.
-PLAYER_START = {'str'}
 RACE_TICKS = '3000'
 
 
@@ -59,7 +55,7 @@ def compare_race(reference, native):
             b = native_c[i] if car == 0 else native_o.get((i, car))
             if a is None or b is None:
                 return paired, fields, f'row {i}: car {car} missing on one side'
-            skip = NOT_COMPARED | (OPPONENT_PRESENTATION if car else set()) | (PLAYER_START if not car and i < FIRST else set())
+            skip = NOT_COMPARED | (OPPONENT_PRESENTATION if car else set())
             keys = [k for k in a if k in b and k not in skip]
             fields += len(keys)
             differ = [(k, a[k], b[k]) for k in keys if a[k] != b[k]]

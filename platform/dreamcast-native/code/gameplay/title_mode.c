@@ -11,8 +11,8 @@
 #include <stdio.h>
 
 /* The title is the original's phase 9 (2338): 386 iterations after phase 8's one, then phase 10 (one)
- * returns to phase 2 (nm_attract_mode_start). START in it is a credit (1108 -> 2818): the select, with
- * a cold pool (the original's would hold what the V.R. demo before left: not measured).
+ * returns to phase 2 (nm_attract_mode_start). START in it is a credit (1108 -> 2818): the select, the race
+ * inheriting the pool the V.R. demo before left (NM_CREDIT_TITLE, 0: nothing moves it in phases 8 to 18).
  * The next attract scene (its course's packs: the original steps the course before the title) loads in the
  * title's frames (nm_practice_attract_preload); should it not be loaded at the title's last tick, the title goes on
  * until it is, adding no iteration (as the original's phase 2 holds its frame while it loads), then cuts to it. */

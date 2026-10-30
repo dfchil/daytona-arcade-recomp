@@ -179,6 +179,7 @@ static unsigned nm_attract_next_course(unsigned course) { static const unsigned 
 static unsigned practice_attract_course;
 static uint32_t counter;
 static void nm_frontend_counter_set(uint32_t value) {counter=value;}
+#define nm_frontend_pool_from_intro(pool,intro,road) ((void)0) /* frontend.h: the pool, not this check's */
 static int nm_practice_attract_start(void) {++attract;return 1;}
 static int nm_attract_mode_start(void) {++loops;return nm_practice_attract_start();}
 static int nm_practice_restart_from_title(void) {++race;return 1;}

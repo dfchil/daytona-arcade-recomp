@@ -18,8 +18,7 @@
 int nm_practice_race_from_select(unsigned course, unsigned transmission);
 
 static nm_select_t select_state;
-static nm_entity_pool_t pool;
-static int carried, pending;
+static int pending;
 static uint32_t counter;
 static nm_frame_clock_t frame_clock;
 static uint32_t remainder_us;
@@ -98,15 +97,12 @@ static void update(void *unused) {
     if(!nm_select_render_enqueue(&select_state,counter)) enj_state_flag_shutdown(NULL);
 }
 
-int nm_select_mode_start(int from_attract, uint32_t credit_counter) {
+int nm_select_mode_start(int scene, uint32_t credit_counter) {
     root=nm_practice_root();
     if(!root) return 0;
-    nm_memset(&pool,0,sizeof(pool));carried=0;pending=0;
+    pending=0;
     counter=credit_counter;
-    if(from_attract) {
-        if(!nm_practice_game_start(&pool)) { puts("FAIL: native game start (phases 12/17) rejected");return 0; }
-        carried=1;
-    }
+    if(!nm_practice_game_start(scene,credit_counter)) { puts("FAIL: native game start (phases 12/17) rejected");return 0; }
     counter+=2;            /* phases 12 and 17 */
     nm_select_enter(&select_state);
     wanted=0;stick_armed=1;confirm_pending=0;trigger_armed=0;previous_steer=0;
@@ -114,7 +110,7 @@ int nm_select_mode_start(int from_attract, uint32_t credit_counter) {
     if(!nm_select_render_load(root)) return 0;
     nm_sound_command(NM_MUSIC_GAME_START); /* 2850: phase 12 */
     nm_sound_settle();
-    printf("Native game start: credit at 5010b0 %lu, %s pool\n",(unsigned long)credit_counter,carried ? "attract" : "cold");
+    printf("Native game start: credit at 5010b0 %lu, scene %d\n",(unsigned long)credit_counter,scene);
     static enj_mode_t mode={.name="Course and transmission select",.mode_updater=update};
     enj_mode_set(&mode);return 1;
 }
@@ -129,13 +125,13 @@ int nm_select_attract_button(unsigned start, unsigned ltrigger, unsigned rtrigge
 
 int nm_select_credit(uint32_t credit_counter) {
     nm_practice_render_release();
-    return nm_select_mode_start(1,credit_counter);
+    return nm_select_mode_start(NM_CREDIT_CINEMATIC,credit_counter);
 }
 
-int nm_select_race_state(const nm_entity_pool_t **state, uint32_t *counter_base) {
+int nm_select_race_state(uint32_t *counter_base) {
     if(!pending) return 0;
     pending=0;
     /* The race tick 0 is the phase20 iteration: two after the select's last (phase 19 in between). */
-    *state=carried ? &pool : NULL;*counter_base=counter+2u;
+    *counter_base=counter+2u;
     return 1;
 }

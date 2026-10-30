@@ -370,7 +370,7 @@ static inline int nm_race_opponent_step_inplace(nm_race_car_t *cars, unsigned co
         const nm_road_marks_t *marks, const nm_crash_row_t *rows, unsigned row_count) {
     if(!cars || !shared || !math || !speed || !contact || !road || !road->profiles || !path ||
        !marks || !marks->values || count<2 || count>44 || !id || id>=count ||
-       cars[id].next>=count || (cars[id].remembered!=255 && cars[id].remembered>=count) ||
+       cars[id].next>=count || (cars[id].remembered!=255 && cars[id].remembered>=44) ||
        (uint16_t)cars[id].car.phase[0]>=road->profile_count ||
        (uint16_t)cars[id].car.phase[0]>=marks->count || cars[id].car.scenery_cell>=512 ||
        cars[id].route!=path->route || contact->slot!=road->slot || path->slot!=road->slot) return 0;

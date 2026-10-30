@@ -267,7 +267,7 @@ static inline void nm_hud_radar(nm_hud_t *hud, const nm_hud_cars_t *c) {
 }
 
 /* One gameplay tick. `race` and `cars` are the state after the tick. */
-static inline void nm_hud_tick(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
+static __attribute__((noinline, unused)) void nm_hud_tick(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
     hud->beep=0;
     if(race->active_phase==21) hud->lap_ticks=0; /* 34a8..34b0 */
     if(race->active_phase==22 && !(c->start_flags&1u) && hud->extension_ticks>0) {

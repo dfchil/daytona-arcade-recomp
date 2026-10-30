@@ -29,6 +29,7 @@ static unsigned releases,shutdowns,labels,glyphs,names;
 static int render_ok=1,glyph_ok=1,probe_pending,name_ok=1;
 static unsigned pending;
 static void nm_practice_render_release(void) { assert(!pending); ++releases; }
+void nm_practice_game_over(void) {} /* the pool and the frame counter (frontend.h) */
 /* audio/sound.h: every counted command is also handed to sound. */
 static unsigned sound_commands;
 static uint32_t sound_hash=UINT32_C(2166136261);

@@ -85,10 +85,9 @@ static enj_mode_t practice_mode={.name="Native driving practice",.mode_updater=p
  * 5010b0 = intro.object_clock + intro.ticks (include/attract.h). */
 static const uint32_t attract_tick_limit=NM_ATTRACT_TICKS;
 static int practice_credit_pending;
-/* What the attract's scenes leave each other (vr_demo.h): reset at power-on (nm_practice_run), from each demo's
- * end into the next cinematic and demo. The attract after a game keeps the last demo's (the race's is not
- * measured). */
-static nm_attract_carry_t practice_attract_carry;
+/* The carried part of the original's car pool (frontend_pool.h): from power-on (nm_practice_run), each scene's exit
+ * stores its cars, each scene's start reads it. */
+static nm_entity_pool_t practice_pool;
 static int practice_demo_start(void);
 /* 501460 of the attract loop: the course of the next (or running) cinematic. Course 0 from power-on, the next
  * one (attract.h nm_attract_next_course) at the end of each cinematic (the original's: at the V.R. demo's end,
@@ -271,9 +270,9 @@ int nm_practice_results_tick(nm_practice_scene_t *scene,unsigned results_phase,
     return 1;
 }
 
-static int practice_reset_session(void) {
+static int practice_reset_session(const nm_player_t *previous) {
     practice.results.mode=practice.results.ticks=0;practice.results.timer=practice.results.penalty=0;practice.results.scroll=0;
-    practice.results.show_labels=0;practice.results.after_podium=0;
+    practice.results.show_labels=0;practice.results.after_podium=0;practice.results.podium_ticks=0;
     practice.results.announcement_cursor=practice.results.commands=0;practice.results.command_hash=UINT32_C(2166136261);
     practice_record_published=0;practice.podium=(nm_podium_t){0};
 #ifndef NATIVE_RACE_SCRIPT
@@ -288,8 +287,8 @@ static int practice_reset_session(void) {
     practice_cameras.pit_views=tables->pit_views;
 #endif
     /* e5ac: the grid's body list 286fab0[501464]. */
-    if(!nm_race_scene_start(&practice.race,practice.math,&practice.contact,&practice.road,
-        practice.intro_paths,practice_difficulty,practice.transmission,&practice.marks,practice.road.profile_count,tables->pit)) return 0;
+    if(!nm_race_scene_start_carried(&practice.race,practice.math,&practice.contact,&practice.road,
+        practice.intro_paths,practice_difficulty,practice.transmission,&practice.marks,practice.road.profile_count,tables->pit,previous)) return 0;
 #ifdef NM_RACE_VIEW_DATA
     practice.race.view_presets=nm_race_view_presets; /* VR1..VR4 (race_view.h) */
 #endif
@@ -322,7 +321,7 @@ static int practice_reset_attract(void) {
     const nm_podium_course_t *graph=nm_attract_courses+practice.course; /* 2865a60[501460] */
     if(practice.course>2 || !graph->stages ||
        !nm_intro_scene_start_attract(&practice.intro,graph->stages,graph->count,practice.math,&practice.road,practice.intro_paths) ||
-       !nm_attract_carry_into_cinematic(&practice.intro,&practice_attract_carry,&practice.road)) return 0;
+       !nm_attract_carry_into_cinematic(&practice.intro,&practice_pool,&practice.road)) return 0;
     nm_intro_scene_light(&practice.intro,nm_race_course_starts[practice.course].tunnel); /* the course's tunnel ranges */
     if(!nm_intro_scene_detail(&practice.intro,practice.math,&practice.scenery)) return 0;
     practice.race_bodies=0;
@@ -405,9 +404,28 @@ static int practice_render_load_populated(const nm_player_t *const *players,unsi
 }
 
 const char *nm_practice_root(void) { return practice.failed ? NULL : practice_root; }
-/* The game start's two iterations on the live cinematic (gameplay/select_mode.h). */
-int nm_practice_game_start(nm_entity_pool_t *pool) {
-    return nm_frontend_game_start(&practice.intro,practice.math,&practice.contact,&practice.road,practice.intro_paths,pool);
+/* The game start's two iterations on the live scene (gameplay/select_mode.h): the pool as they leave it. */
+int nm_practice_game_start(int scene,uint32_t counter) {
+    if(scene==NM_CREDIT_CINEMATIC)
+        return nm_frontend_game_start(&practice.intro,practice.math,&practice.contact,&practice.road,practice.intro_paths,&practice_pool);
+#ifdef NM_RACE_VIEW_DATA
+    if(scene==NM_CREDIT_DEMO) {
+        if(!nm_demo_game_start(&practice.race,practice.math,&nm_intro_speeds,&practice.contact,&practice.road,
+            practice.intro_paths,&practice.marks,practice.road.profile_count,counter+1u,
+            nm_intro_crash_sequences[0].rows,nm_intro_crash_sequences[0].count)) return 0;
+        nm_frontend_pool_from_race(&practice_pool,&practice.race,&practice.intro.cells);
+    }
+#else
+    (void)counter;
+#endif
+    return 1;
+}
+
+/* gameplay/results.c: the results' last iteration has run (phase 29 follows, in the name mode). */
+void nm_practice_game_over(void) {
+    nm_frontend_pool_from_game(&practice_pool,&practice.race,&practice.intro.cells,
+        practice.results.after_podium ? &practice.intro : NULL);
+    nm_frontend_counter_set(practice.race.counter_base+practice.race.ticks+practice.results.podium_ticks+practice.results.ticks-1u);
 }
 
 static int practice_race_load(const char *stage);
@@ -468,14 +486,13 @@ static int practice_race_load(const char *stage) {
     if(!practice_course_load(practice_race_course)) goto fail;
     practice_attract_course=practice_race_course; /* 501460 stays the raced course: the attract after the game */
     stage="race session";
-    /* Through the select: the start state the front end carried (frontend.h; a cold pool from the title). */
-    const nm_entity_pool_t *pool=NULL;uint32_t counter_base=0;
-    const int selected=nm_select_race_state(&pool,&counter_base);
-    if(!practice_reset_session()) goto fail;
-    if(pool) { if(!nm_frontend_race_entry(&practice.race,pool,counter_base)) goto fail; }
-    else if(selected) practice.race.counter_base=counter_base;
+    /* Through the select: the start state the scenes before carried (frontend.h). */
+    uint32_t counter_base=0;
+    const int selected=nm_select_race_state(&counter_base);
+    if(!practice_reset_session(selected && practice_pool.raced ? &practice_pool.player : NULL)) goto fail;
+    if(selected && !nm_frontend_race_entry(&practice.race,&practice_pool,counter_base)) goto fail;
     stage="race initial follow-view/detail selection";
-    if(!practice_race_detail() || (pool && !nm_frontend_race_guided(&practice.race,practice.intro.view,pool))) goto fail;
+    if(!practice_race_detail() || (selected && !nm_frontend_race_guided(&practice.race,practice.intro.view,&practice_pool))) goto fail;
     stage="race presentation";
     for(unsigned i=0;i<practice.race.count;++i) players[i]=&practice.race.cars[i].car;
     if(!practice_render_load_populated(players,practice.race.count,&stage)) goto fail;
@@ -562,7 +579,7 @@ int nm_practice_attract_start(void) {
     practice.intro.object_clock=nm_frontend_counter()+1u;practice_credit_pending=0;
     practice.intro.phase_clock=practice.intro.object_clock-3u; /* 503690/503692 (vr_demo.h; the first loop's 0) */
     /* The 2D layer of phase 2 (5010b0 = the counter now) and of the scene start (phase 3's first iteration). */
-    nm_attract_2d_phase2(practice.course,nm_game_records(practice.course),practice_attract_carry.view);
+    nm_attract_2d_phase2(practice.course,nm_game_records(practice.course),practice_pool.view);
     nm_attract_2d_cinematic(3,practice.intro.object_clock,0);
     enj_mode_set(&practice_mode);return 1;
 fail:
@@ -579,6 +596,7 @@ static __attribute__((noinline)) int practice_attract_update(uint32_t elapsed_us
          * is followed by the next course's cinematic. */
         if(DAYTONA_RACE_TICK_LIMIT) { nm_practice_render_release();enj_state_flag_shutdown(NULL);return 0; }
         if(practice_demo_start() || practice.failed) return 0;
+        nm_frontend_pool_from_intro(&practice_pool,&practice.intro,&practice.road);
         nm_frontend_counter_set(practice.intro.object_clock+practice.intro.ticks+NM_ATTRACT_DEMO_ITERATIONS);
         practice_attract_course=nm_attract_next_course(practice.course);
         nm_practice_render_release();
@@ -872,7 +890,7 @@ static void practice_update(void *unused) {
         if(!practice.attract_active) practice_view_buttons(c);
         /* B alone: the session reset; START held + B is the inspector's toggle (code/render/scene/practice.c). */
         if (!practice.attract_active && c->button.B == ENJ_BUTTON_DOWN_THIS_FRAME && !(c->button.START&1)) {
-            practice.failed = !practice_reset_session();
+            practice.failed = !practice_reset_session(NULL);
             if(!practice.failed) practice.failed=!practice_race_detail();
         }
         break;
@@ -949,6 +967,7 @@ static void practice_update(void *unused) {
                 const nm_podium_course_t *podium=practice.course<3 ? nm_podium_courses+practice.course : NULL;
                 advanced=podium && podium->stages && nm_intro_scene_start_stages(&practice.intro,podium->stages,
                     podium->count,1u<<28,podium->overrun,practice.math,&practice.road,practice.intro_paths);
+                if(advanced) nm_frontend_podium_start(&practice.intro,&practice.race);
                 practice.intro.object_clock=practice.race.ticks+NM_PODIUM_CLOCK_OFFSET; /* 5010b0 - podium ticks */
                 practice.intro.phase_clock=practice.race.counter_base+practice.intro.object_clock+1u; /* 503690/503692 */
                 practice.attract_active=1;
@@ -968,7 +987,7 @@ static void practice_update(void *unused) {
                     (unsigned long)practice.intro.ticks,(unsigned long)practice.intro.collision_pairs,
                     (unsigned long)practice.intro.collision_responses);
             }
-            if(advanced) practice.race.phase=practice.podium.phase;
+            if(advanced) { practice.race.phase=practice.podium.phase;++practice.results.podium_ticks; }
             /* bc00 row 4 (timer 10): bit 3, bc60 queues 9e2d4f through 19bf4 (no gate). */
             if(advanced && practice.podium.phase==28 && practice.podium.timer==10) nm_sound_command(UINT32_C(0x9e2d4f));
 #ifdef NATIVE_RACE_CHECKPOINTS
@@ -1905,8 +1924,8 @@ static void practice_diag_print(void) {
  * race phases' only). Its own mode: practice_update and the race's code stay as they are. Each tick: the demo's
  * objects (nm_demo_step), then what the race's tick runs of the presentation that the demo's phase runs too (the
  * windows' reflection, the props, the camera row with the view presets, the spin smoke). No sound: the original's
- * demo sends none. START or A: the credit (a cold pool, as from the title; the original's game start would run
- * phases 12/17 on the demo's cars); both triggers and START: the settings. */
+ * demo sends none. START or A: the credit (that tick runs, then the game start on the demo's cars, phases 12/17);
+ * both triggers and START: the settings. */
 #ifdef NM_RACE_VIEW_DATA
 static nm_demo_t practice_demo;
 static uint32_t practice_demo_counter; /* 5010b0 of the phase-6 iteration */
@@ -1922,16 +1941,21 @@ static void practice_demo_end(void) {
         (unsigned long)practice_demo_longest_us,(unsigned long)(practice_demo_reg_ns/n/1000u),
         (unsigned long)(practice_demo_reg_max_ns/1000u),(unsigned long)(practice_demo_rnd_ns/n/1000u),
         (unsigned long)(practice_demo_rnd_max_ns/1000u));
-    nm_attract_carry_from_race(&practice_attract_carry,&practice.race);
+    /* Phase 8: the objects off, the field pass over them, then what the demo leaves. */
+    if(!nm_demo_field_off(&practice.race,practice.math,&practice.road,8,practice_demo_counter+1u+NM_DEMO_TICKS)) {
+        practice_reject_step="demo";practice.failed=1;practice_report_reject();return;
+    }
+    nm_frontend_pool_from_race(&practice_pool,&practice.race,&practice.intro.cells);
     nm_attract_2d_off();
     nm_frontend_counter_set(practice_demo_counter-1u+NM_ATTRACT_DEMO_ITERATIONS); /* phases 6, 7 and 8 */
     practice_attract_course=nm_attract_next_course(practice.course);
     nm_practice_render_release();
     if(!nm_title_mode_start()) enj_state_flag_shutdown(NULL);
 }
-static __attribute__((noinline)) int practice_demo_tick(void) {
+/* credit: 2028 saw one in this iteration and goes to 2818 before its timer and 2058, so the course stays. */
+static __attribute__((noinline)) int practice_demo_tick(int credit) {
     const uint32_t frame=practice_demo_counter+1u+practice.race.ticks; /* this iteration's 5010b0 */
-    const int last=practice.race.ticks+1u>=NM_DEMO_TICKS;
+    const int last=!credit && practice.race.ticks+1u>=NM_DEMO_TICKS;
     if(!nm_demo_step(&practice.race,&practice_demo,practice.math,&nm_intro_speeds,&practice.contact,&practice.road,
         practice.intro_paths,&practice.marks,practice.road.profile_count,frame&3u,(uint8_t)(frame&1u),
         nm_intro_crash_sequences[0].rows,nm_intro_crash_sequences[0].count,
@@ -1982,10 +2006,10 @@ static void practice_demo_update(void *unused) {
         if(c->button.START==ENJ_BUTTON_DOWN_THIS_FRAME || c->button.A==ENJ_BUTTON_DOWN_THIS_FRAME) {
             if(nm_select_attract_button(c->button.START==ENJ_BUTTON_DOWN_THIS_FRAME,c->ltrigger,c->rtrigger)) return;
             const uint32_t credit=practice_demo_counter+1u+practice.race.ticks;
-            nm_attract_carry_from_race(&practice_attract_carry,&practice.race);
+            if(!practice_demo_tick(1)) { practice.failed=1;practice_report_reject();return; }
             nm_attract_2d_off();
             nm_practice_render_release();
-            if(!nm_select_mode_start(0,credit)) enj_state_flag_shutdown(NULL);
+            if(!nm_select_mode_start(NM_CREDIT_DEMO,credit)) enj_state_flag_shutdown(NULL);
             return;
         }
         break;
@@ -1995,7 +2019,7 @@ static void practice_demo_update(void *unused) {
     if(elapsed>4*NM_PRACTICE_TICK_US) { practice.state.dropped_us+=elapsed-4*NM_PRACTICE_TICK_US;elapsed=4*NM_PRACTICE_TICK_US; }
     practice.state.remainder_us+=(uint32_t)elapsed;
     while(practice.state.remainder_us>=NM_PRACTICE_TICK_US && practice.race.ticks<NM_DEMO_TICKS) {
-        if(!practice_demo_tick()) {
+        if(!practice_demo_tick(0)) {
             practice.failed=1;practice_report_reject();return;
         }
         practice.state.remainder_us-=NM_PRACTICE_TICK_US;
@@ -2022,19 +2046,18 @@ static enj_mode_t practice_demo_mode={.name="Native V.R. demo",.mode_updater=pra
 #endif
 /* 1: the demo runs (its mode is set); 0 with practice.failed clear: this build counts it instead. */
 static int practice_demo_start(void) {
-    static nm_entity_pool_t pool;
     const nm_race_course_start_t *tables=nm_race_course_starts+practice.course;
     if(practice.course>2 || !tables->tracks || practice.road.slot!=practice.course) return 0;
     practice_demo_counter=practice.intro.object_clock+practice.intro.ticks+1u;
-    nm_frontend_pool_from_intro(&pool,&practice.intro);
+    nm_frontend_pool_from_intro(&practice_pool,&practice.intro,&practice.road);
     const unsigned count=practice.intro.count;
     practice_cameras.tracks=tables->tracks;practice_cameras.tunnel=tables->tunnel;practice_cameras.pit_views=tables->pit_views;
     const char *stage="demo start";
     if(!nm_demo_start(&practice.race,&practice_demo,practice.math,&practice.contact,&practice.road,practice.intro_paths,
-        count,practice_attract_carry.view,nm_race_view_presets,&practice.marks,practice.road.profile_count,&pool,
+        count,practice_pool.view,nm_race_view_presets,&practice.marks,practice.road.profile_count,&practice_pool,
         practice_demo_counter&3u)) goto fail;
     practice.race.counter_base=practice_demo_counter+1u; /* the clock actors' 5010b0: counter_base + ticks - 1 */
-    stage=nm_demo_view_start(&practice.race,&practice.intro,practice.math,&practice.scenery,&practice_cameras,&pool);
+    stage=nm_demo_view_start(&practice.race,&practice.intro,practice.math,&practice.scenery,&practice_cameras,&practice_pool);
     if(stage) goto fail;
     nm_attract_2d_demo(6,practice_demo_counter);
     practice.attract_active=0;practice.race_bodies=0;practice_view_held=0;
@@ -2052,7 +2075,7 @@ static int practice_demo_start(void) { return 0; }
 #endif
 int nm_practice_run(const char *root) {
     practice.asset_root=root;
-    nm_attract_carry_reset(&practice_attract_carry);
+    nm_frontend_pool_reset(&practice_pool);
     practice_root=root;
     if (!enj_mode_push(&practice_mode)) return 1;
     nm_sound_init(root); /* Failure is reported there; the game then runs silent. */

@@ -166,15 +166,28 @@ static inline int nm_race_scene_results_field(nm_race_scene_t *s,const nm_drive_
         &s->collisions,math,road,inhibit,collision_phase,record_flags,curve);
 }
 
+/* Entity 0 at the start of a scene on the race's objects, after a race (the entity is never cleared): what the last
+ * race left, but the wheels' masks +1ba..+1c0, which the player's start c940 zeroes in phase 2 (c990..c99c). Its
+ * grid reset e20c runs next. So stay the axle loads +194/+198, the wheels' surfaces +1a8..+1b4 and heights
+ * 501100..50110c, +1f0, +22c, +248, +24c, +25c, +260, +264..+26c and +270, each read before it is written in the next
+ * race; the demo's player runs on none of them. */
+static inline void nm_player_carried(nm_player_t *s,const nm_player_t *previous) {
+    const nm_checkpoints_t checkpoints=s->checkpoints; /* the scene's own, set before */
+    NM_COPY(s,previous);
+    s->checkpoints=checkpoints;
+    nm_memset(s->boundary.ground.mask,0,sizeof(s->boundary.ground.mask));
+}
+
 /* Cold race entry using authored grid data (road slot 0..2: Beginner, Expert, Advanced). Not an attract->race transition:
  * fields retained across arcade scene changes still need their real owners.
  * Failure leaves the scene unusable; caller must not run a partial entry. */
 /* pit: the race header's nm_race_pit (pit.h), bound for the pit stop; NULL only for callers that never
- * reach the pit lane's trigger row (a pit entry then rejects the tick). */
-static inline int nm_race_scene_start(nm_race_scene_t *s,const nm_drive_params_t *math,
+ * reach the pit lane's trigger row (a pit entry then rejects the tick). previous: entity 0 as the last race left it
+ * (nm_player_carried), NULL for the first game. */
+static inline int nm_race_scene_start_carried(nm_race_scene_t *s,const nm_drive_params_t *math,
         const nm_contact_pack_t *contact,const nm_road_pack_t *road,
         const nm_path_pack_t paths[8],unsigned difficulty,unsigned model_variant,
-        nm_road_marks_t *marks,unsigned mark_capacity,const nm_pit_data_t *pit) {
+        nm_road_marks_t *marks,unsigned mark_capacity,const nm_pit_data_t *pit,const nm_player_t *previous) {
     nm_race_settings_t settings;
     if(!s || !math || !contact || !road || !paths || !marks || !marks->values ||
        road->slot>2 || contact->slot!=road->slot || !road->grid || road->grid_count<3 || road->grid_count>44 ||
@@ -201,7 +214,12 @@ static inline int nm_race_scene_start(nm_race_scene_t *s,const nm_drive_params_t
     s->cars[0].car.checkpoints=(nm_checkpoints_t){.visited=1,
         .required=UINT32_MAX>>(31-road->checkpoint_count),.total_laps=settings.total_laps};
     for(unsigned id=0;id<s->count;++id) {
-        nm_race_car_t *c=s->cars+id;c->remembered=255;c->car.boundary.damage.flags=0x80000000;
+        nm_race_car_t *c=s->cars+id;c->remembered=255;
+        if(!id && previous) {
+            nm_player_carried(&c->car,previous);
+            c->car.gear=0;c->car.surface_phase=0; /* c7ec: c840, c858 */
+        }
+        c->car.boundary.damage.flags=0x80000000;
         const nm_path_pack_t *path=paths+road->grid[id].route;
         if(!nm_race_car_grid_reset(c,math,contact,road,path,id,model_variant)) return 0;
         /* cb60 ages its height sample by the board frame counter, and the grid
@@ -240,6 +258,13 @@ static inline int nm_race_scene_start(nm_race_scene_t *s,const nm_drive_params_t
     nm_memcpy(s->cars[0].car.camera_angles,math->camera_reset_angles,sizeof(s->cars[0].car.camera_angles));
     s->passing=(nm_traffic_pass_t){s->cars[0].next,s->cars[0].previous,0};
     return nm_traffic_order_init(s->order.rank,s->order.track,s->count);
+}
+/* A cold start: no race before it (the recorded races, the tests). */
+static inline int nm_race_scene_start(nm_race_scene_t *s,const nm_drive_params_t *math,
+        const nm_contact_pack_t *contact,const nm_road_pack_t *road,
+        const nm_path_pack_t paths[8],unsigned difficulty,unsigned model_variant,
+        nm_road_marks_t *marks,unsigned mark_capacity,const nm_pit_data_t *pit) {
+    return nm_race_scene_start_carried(s,math,contact,road,paths,difficulty,model_variant,marks,mark_capacity,pit,NULL);
 }
 
 /* One fixed gameplay tick; caller supplies latched controls and current visible

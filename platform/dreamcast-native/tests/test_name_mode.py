@@ -46,6 +46,9 @@ static unsigned title_starts;
 static int labels_ok=1;
 static int nm_title_mode_start(void) { ++title_starts;return 1; }
 static int nm_attract_mode_start(void) { ++title_starts;return 1; } /* phase 29/30 -> 2: the attract */
+static uint32_t frontend_counter;
+static uint32_t nm_frontend_counter(void) { return frontend_counter; }
+static void nm_frontend_counter_set(uint32_t counter) { frontend_counter=counter; }
 /* audio/sound.h */
 static void nm_sound_command(uint32_t command) { (void)command; }
 static void nm_sound_update(void) {}

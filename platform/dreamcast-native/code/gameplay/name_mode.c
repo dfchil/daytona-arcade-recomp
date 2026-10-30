@@ -1,6 +1,7 @@
 #include <enDjinn/enj_enDjinn.h>
 #include "gameplay/name_mode.h"
 #include "gameplay/title_mode.h"
+#include "gameplay/select_mode.h"
 #include "gameplay/name_scene.h"
 #include "render/ui/name_render.h"
 #include "render/ui/name_labels.h"
@@ -41,7 +42,9 @@ static void stop(void) {
         (unsigned long)frame,committed,(unsigned long)commands,*failure);
     /* The record and its name are in place: the VMU write runs in the background (include/game_save.h). */
     if(!quitting && !*failure) nm_game_save_request();
-    /* Phase 29/30 -> 2 (4c00..4d5c): the attract loop again. */
+    /* Phase 29/30 -> 2 (4c00..4d5c): the attract loop again. 5010b0: phase 29's iteration, then one a frame of
+     * phase 30 (nm_practice_game_over left the results' last). */
+    nm_frontend_counter_set(nm_frontend_counter()+1u+frame);
     if(!quitting && !*failure && nm_attract_mode_start()) return;
     if(!quitting) { *failure=1;enj_state_flag_shutdown(NULL); }
 }

@@ -4,8 +4,8 @@ Compiles the mode's body with the real select logic (include/select.h) and stubs
 the sound, then plays it: the game start takes two iterations (phases 12, 17), stick and D-pad steps move the
 choice (the wheel fed is 0/64/127 and 0/127), START, A and the right trigger confirm with one accelerator edge
 each, a confirm outside the choosing states is dropped, the race entry is handed the chosen course and
-transmission at the select's last iteration, and the carried pool and counter reach the race entry (once). The
-attract's buttons open the settings (both triggers and START) or give the credit. A course without data in the
+transmission at the select's last iteration, and the game start's scene and the counter reach their owners (once).
+The attract's buttons open the settings (both triggers and START) or give the credit. A course without data in the
 build races course 0 (NATIVE_COURSES 7u since Expert: every course carries its own; the harness builds with 5u to
 cover that path)."""
 from pathlib import Path
@@ -58,10 +58,11 @@ static unsigned render_loads,render_releases,enqueued;
 static int nm_select_render_load(const char *r) { (void)r;++render_loads;return 1; }
 static int nm_select_render_release(void) { ++render_releases;return 1; }
 static int nm_select_render_enqueue(const nm_select_t *s,uint32_t c) { (void)s;(void)c;++enqueued;return 1; }
-/* The pool type (frontend_pool.h) and the scene side, stubbed. */
-typedef struct { int marker; } nm_entity_pool_t;
+/* The scene side, stubbed. */
+enum { NM_CREDIT_TITLE=0, NM_CREDIT_CINEMATIC=1, NM_CREDIT_DEMO=2 };
 static unsigned game_start_calls,render_releases_scene,settings_starts;
-static int nm_practice_game_start(nm_entity_pool_t *pool) { ++game_start_calls;pool->marker=77;return 1; }
+static int game_start_scene=-1;static uint32_t game_start_counter;
+static int nm_practice_game_start(int scene,uint32_t c) { ++game_start_calls;game_start_scene=scene;game_start_counter=c;return 1; }
 static void nm_practice_render_release(void) { ++render_releases_scene; }
 static int nm_settings_mode_start(void) { ++settings_starts;return 1; }
 static unsigned race_course=99,race_transmission=99,races;
@@ -83,6 +84,7 @@ int main(void) {
     assert(nm_select_attract_button(1,200,0)==0 && nm_select_attract_button(0,255,255)==0 && settings_starts==1);
     /* Attract credit at 5010b0 1109 (the race_to_end run): phases 12 and 17, then the select. */
     assert(nm_select_credit(1109) && render_releases_scene==2 && game_start_calls==1 && render_loads==1 && game_starts==1 && counter==1111);
+    assert(game_start_scene==NM_CREDIT_CINEMATIC && game_start_counter==1109);
     assert(select_state.phase==18 && select_state.state==0 && select_state.phase_timer==1599);
     now_us=1;active->mode_updater(NULL); /* first call: no time yet */
     frame_ticks(5);assert(select_state.state==1 && select_state.slot==0);
@@ -105,18 +107,21 @@ int main(void) {
     assert(frame_ticks(1000) && races==1 && render_releases==1 && race_course==2 && race_transmission==1 && !shutdowns);
     /* A course without data (Expert, 1) races course 0. */
     assert(nm_select_course_raced(1)==0 && nm_select_course_raced(0)==0 && nm_select_course_raced(2)==2);
-    const nm_entity_pool_t *carried=NULL;uint32_t base=0;
-    assert(nm_select_race_state(&carried,&base) && carried && carried->marker==77 && base==counter+2);
+    uint32_t base=0;
+    assert(nm_select_race_state(&base) && base==counter+2);
     /* Consumed: a later race (title restart) gets nothing. */
-    assert(!nm_select_race_state(&carried,&base));
-    /* From the title: a cold pool, timeouts: Beginner, automatic, the race's base from the counter. */
-    assert(nm_select_mode_start(0,500) && game_start_calls==1 && counter==502);
+    assert(!nm_select_race_state(&base));
+    /* From the title: its game start (the pool stands), timeouts: Beginner, automatic, the race's base from the counter. */
+    assert(nm_select_mode_start(NM_CREDIT_TITLE,500) && game_start_calls==2 && game_start_scene==NM_CREDIT_TITLE && counter==502);
     now_us+=1;active->mode_updater(NULL);
     assert(frame_ticks(2000) && races==2 && race_course==0 && race_transmission==0);
-    assert(nm_select_race_state(&carried,&base) && !carried && base==counter+2);
+    assert(nm_select_race_state(&base) && base==counter+2);
+    /* From the V.R. demo: the game start on its cars, with the credit's counter. */
+    assert(nm_select_mode_start(NM_CREDIT_DEMO,700) && game_start_calls==3 && game_start_scene==NM_CREDIT_DEMO &&
+        game_start_counter==700 && counter==702);
     printf("PASS: select mode: settings chord and credit from the attract, game start (2 iterations), stick/D-pad "
         "steps, A/START/trigger confirms with the original's lockout, dropped stray confirm, Advanced raced, Expert "
-        "(no data) races course 0, pool and counter to the race entry (consumed once)\n");
+        "(no data) races course 0, the game start's scene to the pool's owner, counter to the race entry (consumed once)\n");
 }
 '''
 with tempfile.TemporaryDirectory() as directory:
