@@ -1,12 +1,15 @@
 """Export the in-race HUD art offline from verified daytona93 (course 0, automatic).
 
 Usage: prepare_hud.py ROM_CACHE HUD_TRACE_DIR NEW_DIRECTORY [--first-bank N] [--course-map SLOT TRACE ...]
-                      [cost model: --line-ns --lines --build-ns --tile-ns --px-ns]
+                      [--second-marker SLOT TRACE] [cost model: --line-ns --lines --build-ns --tile-ns --px-ns]
 
 --course-map SLOT TRACE: the course map of another course slot (501460: 1 Expert, 2 Advanced) from a HUD trace
 of a race on it: its flat map polygons become the sprite MAP_C<SLOT> and its markers' fits the matrices
 nm_hud_map_matrix_c<SLOT> and nm_hud_map_leader_c<SLOT> (the markers' turn J is the HUD's and must agree with
 course 0's); nm_hud_course_maps lists the maps by slot.
+
+--second-marker SLOT TRACE: the map's "2" marker (288b5f0, on the second car while the player leads) from a HUD trace
+of a race on a course of --course-map in which the player leads: the sprite MARKER_SECOND.
 
 HUD_TRACE_DIR comes from `m2segment ... --trace-hud NEW_DIR EVERY` (host only): its
 snapshots supply the final palette colours (colour translation and gamma applied
@@ -164,6 +167,13 @@ def radar_polygons(path):
         elif panel and not int(p[2], 16):
             icons.append(dict(colour=int(p[5], 16), xy=[(v[0], v[1]) for v in vertices]))
     return panel, icons
+
+
+def map_turn(program, slot):
+    """12a10..12af0: the map model turns by 234d98[slot].angle; a marker's heading on another course's map by its
+    difference from course 0's, as a 16-bit angle."""
+    angle = lambda s: struct.unpack_from('<I', program, 0x34d98+16*s+12)[0]
+    return (angle(slot)-angle(0)) & 0xffff
 
 
 def c_float(value):
@@ -503,7 +513,7 @@ def check_tight(mask, cores, pieces):
 
 
 
-def course_map(trace, slot, j_reference):
+def course_map(trace, slot, j_reference, p_reference):
     """The course map of a HUD trace of another course (--course-map): its flat polygons, the colour they are
     drawn in, and the player's and the leader's marker matrices (screen = M (x, z, 1)), fitted as course 0's in
     main() from the previous tick's cars. The marker shapes and their turn are the HUD's; the turn must agree."""
@@ -560,16 +570,23 @@ def course_map(trace, slot, j_reference):
         p_first = solution[6:].reshape(4, 2, 2)[:, :, 0]
         q_first = solution[6:].reshape(4, 2, 2)[:, :, 1]
         turn = float(np.abs(p_first@j_reference.T-q_first).max())
-        return solution[:6].reshape(2, 3), residual, turn
+        return solution[:6].reshape(2, 3), residual, turn, p_first
     player = [r for r in fit_rows if 'player' in r and len(points(r['player'])) == 4]
-    affine, residual, turn = fit(('x', 'z', 'yaw'), 'player', player)
+    affine, residual, turn, p_first = fit(('x', 'z', 'yaw'), 'player', player)
+    # The marker on this map against course 0's: the same shape turned by the map and scaled by its depth.
+    centred = p_reference-p_reference.mean(axis=0)
+    a = np.vstack([np.column_stack([centred[:, 0], (centred@j_reference.T)[:, 0]]),
+                   np.column_stack([centred[:, 1], (centred@j_reference.T)[:, 1]])])
+    (cosine, sine), *_ = np.linalg.lstsq(a, (p_first-p_first.mean(axis=0)).T.flatten(), rcond=None)
+    size = float(np.hypot(cosine, sine))
+    print(f'course {slot} marker: size {size:.5f} of course 0\'s, turned by {np.degrees(np.arctan2(sine, cosine)) % 360:.2f} degrees')
     print(f'course {slot} map marker fit: residual={residual:.4f} px over {len(player)} rows, turn residual={turn:.4f}, '
           f'affine={affine.round(6).tolist()}')
     if residual > 0.05 or turn > 0.05:
         raise ValueError(f'course {slot}: the player marker does not follow the affine map rule with the HUD turn')
     leader = [r for r in fit_rows if previous[int(r['frame'])].get('leader_id', '255') != '255'
               and previous[int(r['frame'])]['rank'] != '0' and 'leader' in r and len(points(r['leader'])) == 4]
-    affine_l, residual_l, turn_l = fit(('lx', 'lz', 'lyaw'), 'leader', leader)
+    affine_l, residual_l, turn_l, _ = fit(('lx', 'lz', 'lyaw'), 'leader', leader)
     print(f'course {slot} leader marker fit: residual={residual_l:.4f} px over {len(leader)} rows, turn residual={turn_l:.4f}')
     if residual_l > 0.05 or turn_l > 0.05:
         raise ValueError(f'course {slot}: the leader marker does not follow the affine map rule with the HUD turn')
@@ -585,7 +602,7 @@ def course_map(trace, slot, j_reference):
     print(f'course {slot} map: {map_count} polygons, colour #{colour[0]:02x}{colour[1]:02x}{colour[2]:02x} '
           f'({votes[colour]} of {sum(votes.values())} sampled polygons)')
     return dict(track=track, colour=colour, affine=affine, affine_leader=affine_l, residual=residual, residual_leader=residual_l,
-                polygons=map_count, steady=steady)
+                polygons=map_count, steady=steady, size=size, turn_degrees=float(np.degrees(np.arctan2(sine, cosine)) % 360))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -603,6 +620,8 @@ def main():
     # rectangle with its share of the per-sprite work (records_build, counted in the SH
     # simulator over both scripted races), at one instruction a cycle of 200 MHz.
     # tile-ns, px-ns: the PVR work model (tests/stream_sim, SIM_PVR).
+    parser.add_argument('--second-marker', nargs=2, metavar=('SLOT', 'TRACE'),
+                        help='the map marker of the second car from a HUD trace of a race the player leads')
     parser.add_argument('--line-ns', type=float, default=1030.0)
     parser.add_argument('--lines', type=int, default=2, help='TA records of 32 bytes a rectangle (2: sprite, 4: strip)')
     parser.add_argument('--build-ns', type=float, default=450.0)
@@ -841,6 +860,10 @@ def main():
             if not votes:
                 raise ValueError(f'{name}: polygon {i} never visible')
             colours.append(max(votes, key=votes.get))
+        marker_raster(name, local, colours, scale)
+        return local, colours
+
+    def marker_raster(name, local, colours, scale=2):
         xs = [v[0] for p in local for v in p]; ys = [v[1] for p in local for v in p]
         left, top = int(np.floor(min(xs)))-1, int(np.floor(min(ys)))-1
         width, height = int(np.ceil(max(xs)))+1-left, int(np.ceil(max(ys)))+1-top
@@ -850,7 +873,6 @@ def main():
             draw.polygon([((v[0]-left)*scale-0.5, (v[1]-top)*scale-0.5) for v in polygon], fill=colour+(255,))
         pixels = [(0xff000000 | r << 16 | g << 8 | b) if a else 0 for r, g, b, a in image.get_flattened_data()]
         sprites[name] = dict(width=width*scale, height=height*scale, pixels=pixels, scale=scale, origin=(left, top))
-        return local, colours
     leader_local, _ = marker_sprite('MARKER_LEADER', 24, 6, ('lx', 'lz', 'lyaw'))
     player_local, _ = marker_sprite('MARKER_PLAYER', 30, 13, ('x', 'z', 'yaw'))
 
@@ -1014,7 +1036,9 @@ def main():
         slot = int(slot_text)
         if slot not in (1, 2) or slot in course_maps:
             raise ValueError('--course-map takes the slots 1 and 2, once each')
-        other = course_map(Path(trace_text), slot, j_matrix)
+        other = course_map(Path(trace_text), slot, j_matrix, p_first)
+        if abs((map_turn(program, slot)*360/65536-other['turn_degrees']+180) % 360-180) > 0.1:
+            raise ValueError(f'course {slot}: the markers do not turn with the map (234d98)')
         xs = [v[0] for p in other['track'] for v in p]; ys = [v[1] for p in other['track'] for v in p]
         left2, top2 = int(np.floor(min(xs))), int(np.floor(min(ys)))
         width2, height2 = int(np.ceil(max(xs)))+1-left2, int(np.ceil(max(ys)))+1-top2
@@ -1124,6 +1148,51 @@ def main():
     lap_words = dict(best=best_tiles[:width], lap=lap_tiles[:width], font=font,
                      glyphs=[font+(ord(glyph)-32)*6 for glyph in LAP_MESSAGE['glyphs']])
 
+    # ---- the map's "2" marker (12b34: 288b5f0 on the second car while the player leads) -----------------------
+    second_first = []
+    if args.second_marker:
+        slot, trace = int(args.second_marker[0]), Path(args.second_marker[1])
+        rows2 = trace_rows(trace/'hud.trace')
+        by2, before2 = {int(r['frame']): r for r in rows2}, {int(r['frame']): rows2[i-1] for i, r in enumerate(rows2) if i}
+        count = 14
+        total = course_maps[slot]['polygons']+count+13
+        frames2 = [f for f in sorted(int(p.stem.split('_')[1]) for p in trace.glob('tiles_*.bin'))
+                   if by2[f]['active'] == '22' and by2[f].get('overlay') == str(total) and before2[f]['rank'] == '0' and
+                   before2[f]['leader_id'] != '255' and by2[f]['rank'] == '0']
+        if len(frames2) < 4:
+            raise ValueError('--second-marker: too few snapshots while the player leads')
+        affine2, samples, votes = course_maps[slot]['affine_leader'], [], {}  # votes by colour word: the 2's strokes are thin
+        for f in frames2:
+            r = before2[f]
+            polys = []
+            for line in (trace/f'polys_{f}.txt').read_text().splitlines():
+                p = line.split()
+                if line.startswith('#') or int(p[1]) or int(p[2], 16):
+                    continue
+                vertices = [tuple(map(float, v.split(','))) for v in p[9:]]
+                if vertices[0][2] < 1e-3:
+                    polys.append(([(v[0], v[1]) for v in vertices], p[5]))
+            origin = affine2@np.array([bits_float(r['lx']), bits_float(r['lz']), 1.0])
+            inverse = np.linalg.inv(course_maps[slot]['size']*rotation(int(r['lyaw'])+map_turn(program, slot)))
+            marker = polys[total-13-count:total-13]
+            samples.append([[inverse@(np.array(v)-origin) for v in p] for p, _ in marker])
+            frame = Image.open(trace/f'frame_{f}.tga').convert('RGB')
+            for i, (polygon, word) in enumerate(marker):
+                colour = sample_colour(frame, polygon, [p for p, _ in polys[total-13-count+i+1:]])
+                if colour:
+                    votes.setdefault(word, {})[colour] = votes.setdefault(word, {}).get(colour, 0)+1
+        if len({tuple(len(p) for p in s) for s in samples}) != 1 or any(word not in votes for _, word in marker):
+            raise ValueError('--second-marker: the marker changes shape or a colour is never visible')
+        local2 = [[np.mean([s[i][k] for s in samples], axis=0) for k in range(len(samples[0][i]))] for i in range(count)]
+        spread = max(float(np.abs(s[i][k]-local2[i][k]).max()) for s in samples for i in range(count) for k in range(len(local2[i])))
+        print(f'MARKER_SECOND: {count} polygons of {len(frames2)} snapshots, upright geometry spread={spread:.4f} px')
+        if spread > 0.08:
+            raise ValueError('MARKER_SECOND is not rigid under the fitted rotation')
+        marker_raster('MARKER_SECOND', local2, [max(votes[word], key=votes[word].get) for _, word in marker])
+        second_first = [v.tolist() for v in local2[0]]
+        # The player's marker lies over it in the original: a copy on its sheet, as the paint order goes sheet by sheet.
+        sprites['MARKER_TOP'] = dict(sprites['MARKER_PLAYER'])
+
     # ---- palette banks and atlases -----------------------------------------
     for record in sprites.values():
         w, h, px = record['width'], record['height'], record['pixels']
@@ -1134,9 +1203,9 @@ def main():
         record['colours'] = {p for p in px if p}
     # The gear indicator's sprites (b0c0) and the rolling start's are placed after all others, in banks and on sheets:
     # the others keep the banks and atlas places they had before them, and these go on the space left or further sheets.
-    late = lambda n: n.startswith(('GEAR_', 'ROLL_', 'MSG_'))
+    late = lambda n: n.startswith(('GEAR_', 'ROLL_', 'MSG_')) or n in ('MARKER_SECOND', 'MARKER_TOP')
     banks = []
-    for name in sorted(sprites, key=lambda n: (late(n), -len(sprites[n]['colours']))):
+    for name in sorted((n for n in sprites if n != 'MARKER_TOP'), key=lambda n: (late(n), -len(sprites[n]['colours']))):
         used = sprites[name]['colours']
         if len(used) > 15:
             raise ValueError(f'{name} needs more than 15 colours')
@@ -1146,6 +1215,11 @@ def main():
         else:
             index = len(banks); banks.append(set(used))
         sprites[name]['bank'] = index
+    if 'MARKER_TOP' in sprites:
+        index = sprites['MARKER_TOP']['bank'] = sprites['MARKER_SECOND']['bank']
+        banks[index] |= sprites['MARKER_TOP']['colours']
+        if len(banks[index]) > 15:
+            raise ValueError('the player\'s marker does not fit the bank of the second car\'s')
     if len(banks) > args.max_banks:
         raise ValueError(f'HUD needs {len(banks)} palette banks, limit {args.max_banks}')
     palettes = [[0]+sorted(bank)+[0]*(15-len(bank)) for bank in banks]
@@ -1297,6 +1371,7 @@ def main():
               '#define NM_HUD_PIT_BLOCK 1 /* ab2c "PIT WORK!": sprite NM_HUD_PIT at NM_HUD_PIT_X/Y. */',
               '#define NM_HUD_GEAR 1 /* b0c0: GEAR_LEVER_0..6 at NM_HUD_GEAR_LEVER_X/Y, GEAR_OPEN there too, GEAR_DIGIT_1..4, GEAR_CLOSE, GEAR_LABEL. */',
               '#define NM_HUD_ROLLING 1 /* ab78, d438: ROLL_ACCEL, ROLL_AUTO, ROLL_GO, ROLL_DIGIT_1..3, ROLL_CAR, ROLL_BANNER_0, _1. */',
+              *(['#define NM_HUD_SECOND_MARKER 1 /* 12b34: MARKER_SECOND, the map\'s "2" (--second-marker). */'] if second_first else []),
               '#define NM_HUD_LAP_MESSAGE 1 /* ad34: MSG_BEST, MSG_LAP at NM_HUD_MSG_LABEL_X/Y, MSG_0.. (nm_hud_time glyphs) from NM_HUD_MSG_TIME_X/Y. */',
               '/* The banner\'s backdrop: translucent rectangles x0, y0, x1, y1 from its origin. */',
               '#define NM_HUD_ROLL_PANEL_ARGB 0x%08xu' % banner_panel_argb,
@@ -1326,12 +1401,14 @@ def main():
               *['static const float nm_hud_map_leader_c%d[2][3]={{%.9gf,%.9gf,%.9gf},{%.9gf,%.9gf,%.9gf}};' % (
                   slot, *other['affine_leader'].flatten()) for slot, other in sorted(course_maps.items())],
               '/* The course maps by slot 501460 (--course-map): sprite, origin, player and leader matrices; player NULL:',
-              ' * no map for that course. */',
-              'typedef struct { uint8_t sprite; int16_t x, y; const float (*player)[3], (*leader)[3]; } nm_hud_course_map_t;',
+              ' * no map for that course.',
+              ' * turn, size: what a marker\'s heading adds on this map and its size against course 0\'s (the model\'s angle and depth). */',
+              'typedef struct { uint8_t sprite; int16_t x, y; const float (*player)[3], (*leader)[3]; uint16_t turn; float size; } nm_hud_course_map_t;',
               'static const nm_hud_course_map_t nm_hud_course_maps[3]={' + ','.join(
-                  ['{NM_HUD_MAP,NM_HUD_MAP_X,NM_HUD_MAP_Y,nm_hud_map_matrix,nm_hud_map_leader}'] +
-                  [('{NM_HUD_MAP_C%d,NM_HUD_MAP_C%d_X,NM_HUD_MAP_C%d_Y,nm_hud_map_matrix_c%d,nm_hud_map_leader_c%d}' % ((slot,)*5))
-                   if slot in course_maps else '{0,0,0,0,0}' for slot in (1, 2)]) + '};',
+                  ['{NM_HUD_MAP,NM_HUD_MAP_X,NM_HUD_MAP_Y,nm_hud_map_matrix,nm_hud_map_leader,0,1.0f}'] +
+                  [('{NM_HUD_MAP_C%d,NM_HUD_MAP_C%d_X,NM_HUD_MAP_C%d_Y,nm_hud_map_matrix_c%d,nm_hud_map_leader_c%d,' % ((slot,)*5))+
+                   '%d,%s}' % (map_turn(program, slot), c_float(course_maps[slot]['size'])) if slot in course_maps else '{0,0,0,0,0,0,0.0f}'
+                   for slot in (1, 2)]) + '};',
               'static const float nm_hud_needle_pivot[2]={%.9gf,%.9gf};' % tuple(needle[:2]),
               'static const float nm_hud_needle_cos[4][2]={'+','.join('{%.9gf,%.9gf}' % (v[0][0], v[1][0]) for v in needle_pq)+'};',
               'static const float nm_hud_needle_sin[4][2]={'+','.join('{%.9gf,%.9gf}' % (v[0][1], v[1][1]) for v in needle_pq)+'};',
@@ -1345,8 +1422,9 @@ def main():
                sprites={n: dict(sheet=sprites[n]['sheet'], bank=sprites[n]['bank'], scale=sprites[n]['scale'], crop=sprites[n]['crop'], at=sprites[n]['at'],
                                 origin=sprites[n].get('origin', (0, 0))) for n in names},
                layout=layout, gear=gear_words, steady_frames=steady, reverse_row25=reverse_row, extension_row=extension_row,
-               rolling=rolling_words, lap_message=lap_words,
+               rolling=rolling_words, lap_message=lap_words, second_first=second_first,
                course_maps={slot: dict(affine=o['affine'].tolist(), affine_leader=o['affine_leader'].tolist(), polygons=o['polygons'],
+                                       turn=map_turn(program, slot), size=o['size'],
                                        residual=o['residual'], residual_leader=o['residual_leader'], steady_frames=o['steady'])
                             for slot, o in course_maps.items()},
                radar=dict(zoom=radar_zoom, centre=radar_centre.tolist(), matrix=radar_matrix.tolist(), turn=turn_sign,

@@ -784,7 +784,7 @@ int main(int argc,char **argv) {
     }
     memset(&hud_cars,0,sizeof(hud_cars));hud_cars.math=math; /* The CONDITION panel's TGP divide and circle test. */
     hud_cars.manual=(uint8_t)transmission; /* b0c0, the gear indicator */
-    nm_hud_observe(&race,&hud_race,&hud_cars);nm_hud_reset(&hud,&hud_race,&hud_cars);
+    nm_hud_observe(&race,&hud_race,&hud_cars);nm_hud_reset(&hud,&hud_race,&hud_cars);hud.course=race.course;
     nm_controls_t *fed=script_header ? calloc((size_t)available,sizeof(*fed)) : NULL;
     uint8_t *fed_start=script_header ? calloc((size_t)available,1) : NULL;
     uint8_t *fed_selector=script_header ? calloc((size_t)available,1) : NULL;

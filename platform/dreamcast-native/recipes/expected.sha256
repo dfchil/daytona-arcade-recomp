@@ -60,6 +60,9 @@
 # 30 October (lap message ad34, branch gaps-2): BEST LAP, LAP TIME and the time's font in the same pack, which takes banks
 # 60..63 (--first-bank 60 --max-banks 4): hud_data.h and every set's hud.dp, sheet-1.dt (BEST LAP on its free rows),
 # sheet-2.dt, sheet-3.dt, sheet-4.dt change; sheet-0.dt is the same.
+# 30 October (the map's second-car marker, branch gaps-2): prepare_hud.py --second-marker 1 on a new HUD trace (13000 frames
+# of the Expert finishing race, step trace_hud_lead): MARKER_SECOND and a copy of the player's marker; hud_data.h also holds
+# each map's marker turn and size. hud_data.h, hud.dp, sheet-3.dt change (sheet-3 grows to 256x256).
 958392873aeb4ab5da3784b665fd605f0963df289054d786d6531487678376d8  assets-ssfar4b/car-damage.dnb
 164e577c4337fd441f525ce0051bdcbfbb95c5fc5c4a5a1f5d5fa589f97c9314  assets-ssfar4b/car-hoods.dnb
 d6e43d9760973417a431e217803faa17249305021c1d1991514414daf8f818a2  assets-ssfar4b/car.dnm
@@ -84,11 +87,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4b
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4b/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4b/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4b/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4b/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4b/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4b/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4b/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4b/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4b/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4b/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4b/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4b/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4b/labels/label-001.dt
@@ -348,11 +351,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4c
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4c/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4c/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4c/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4c/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4c/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4c/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4c/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4c/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4c/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4c/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4c/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4c/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4c/labels/label-001.dt
@@ -612,11 +615,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4c
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4cf3/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4cf3/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4cf3/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4cf3/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4cf3/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4cf3/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4cf3/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4cf3/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4cf3/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4cf3/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4cf3/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4cf3/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4cf3/labels/label-001.dt
@@ -876,11 +879,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4c
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4cf3r/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4cf3r/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4cf3r/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4cf3r/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4cf3r/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4cf3r/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4cf3r/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4cf3r/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4cf3r/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4cf3r/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4cf3r/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4cf3r/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4cf3r/labels/label-001.dt
@@ -1140,11 +1143,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4e
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4e/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4e/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4e/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4e/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4e/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4e/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4e/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4e/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4e/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4e/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4e/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4e/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4e/labels/label-001.dt
@@ -1404,11 +1407,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4e
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4eu/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4eu/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4eu/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4eu/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4eu/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4eu/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4eu/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4eu/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4eu/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4eu/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4eu/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4eu/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4eu/labels/label-001.dt
@@ -1668,11 +1671,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4f
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4f/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4f/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4f/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4f/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4f/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4f/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4f/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4f/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4f/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4f/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4f/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4f/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4f/labels/label-001.dt
@@ -1932,11 +1935,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4d
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4d/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4d/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4d/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4d/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4d/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4d/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4d/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4d/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4d/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4d/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4d/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4d/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4d/labels/label-001.dt
@@ -2173,11 +2176,11 @@ ced186debe52e0ead9734fdb52bac6c68266e3dbcf167b47a07e6534831d71ac  assets-ssfar4b
 3b4422b28904f958a1a73ae4d098c377632723e0ee183a731b531ebc645ca54b  assets-ssfar4bf3/finish/texture_4.dt.pal
 c28639b21f226f82d51b96db1a797a3e3b70175b27f3091f689c655b59d19835  assets-ssfar4bf3/finish/texture_5.dt
 e0164854e4086b01863327691daa805b929ca33937a6ebe81c7d14fde980253d  assets-ssfar4bf3/finish/texture_5.dt.pal
-9b219222f775f585f18a05f7bf2f310342fa8d2fe81b29d4bb546222f7ce8ad5  assets-ssfar4bf3/hud/hud.dp
+5112b53978a5caac7955e7b86676ac9ec52d7620d74eb6fa80545af7e250b632  assets-ssfar4bf3/hud/hud.dp
 42495afc89e692863b0c71aeec59ad762171dcbd0a1c9e144c4b8e0bb57cc85d  assets-ssfar4bf3/hud/sheet-0.dt
 51297c3aca1dba6cdd4a8f25439c6bfda746fe37dec6b6d053aaae6a83e7f0a0  assets-ssfar4bf3/hud/sheet-1.dt
 d5dab14e27e8e166547d7f46c124ce288c2f808f045b92bc10db795a406757a9  assets-ssfar4bf3/hud/sheet-2.dt
-89b9a8c412aa46ea5d8db0a3efd33ae824deb5f5d16087f2c684275aaf9133b8  assets-ssfar4bf3/hud/sheet-3.dt
+154306710e55e525c9d6504b8ba0b44f57b1d0d2bfa6587730f4e2a16b0d3061  assets-ssfar4bf3/hud/sheet-3.dt
 b63105805a3c53eb93c9239c3a3cae81be0cf9a1cd34ec9b6e085291dcb2f6b7  assets-ssfar4bf3/hud/sheet-4.dt
 87443ab223e6e21bdb58b2936d817c64f47fc0ef16af5dca47d55df737209462  assets-ssfar4bf3/labels/label-000.dt
 ea08b10d56601a8f745b61936df054e936a1b7348fbe63fc2c800533d1752c70  assets-ssfar4bf3/labels/label-001.dt
@@ -2418,7 +2421,7 @@ f480ac5fba737a06a3113aa9623dfaaaa81fa795b8e0951dafe67b1b25d0c724  headers/podium
 # changed (the fast race presses no START). Was 0a48dee277f7349adf67b80f02cb7978332a5b0350e66d3fd07a2d36984bf417.
 f05aab540ca92cb13f375e3bfe22d53c59ee9ea35ad216c7b87840f5d079d493  headers/script-fast/race_script_data.h
 5746577243b3ca4df74e99ba9d152a739da5f9fec2ca1a469c4b660d0b4c1571  headers/script-manual/race_script_data.h
-b64911a45784d375779358c21d68b4b702e1d77177f916250ccd42a38a4f0657  headers/hud/hud_data.h
+0c00917f4488486a314a04d008fd6300ed95c82052c36ef458c0971477714396  headers/hud/hud_data.h
 2179d790e45637e287043df5236a5ad1ab15b8ab8f97717a470a0a7e898f0568  headers/name/name_data.h
 528789f4910c38b323749a65dbcff132c8c1efacdda896eb6457a077823a673a  headers/name/name_entry_data.h
 996b92f91e83a329d26c5efb05e989f0d9c19e25f1e4d2a8d4788ff8cb5b33fc  headers/name/labels/name_label_data.h

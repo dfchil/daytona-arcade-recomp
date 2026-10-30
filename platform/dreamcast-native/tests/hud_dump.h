@@ -40,7 +40,7 @@ static inline void nm_hud_dump(FILE *out,long frame,const nm_hud_t *h) {
     fprintf(out," needle=%u:%u map=%u player=%08" PRIx32 ",%08" PRIx32 ",%u leader=%u:%08" PRIx32 ",%08" PRIx32 ",%u beep=%u",
         h->needle,h->needle_angle,h->map,nm_hud_dump_bits(h->player_x),nm_hud_dump_bits(h->player_z),h->player_yaw,
         h->leader,nm_hud_dump_bits(h->leader_x),nm_hud_dump_bits(h->leader_z),h->leader_yaw,h->beep);
-    fprintf(out," mapsize=%u:%08" PRIx32,h->map_index,nm_hud_dump_bits(h->map_scale));
+    fprintf(out," course=%u mapsize=%u:%08" PRIx32 " second=%u",h->course,h->map_index,nm_hud_dump_bits(h->map_scale),h->leader_second);
     /* Last on the row: the CONDITION panel (zoom index and zoom, the player's heading, then id:dx:dz:angle
      * of each icon, dx and dz as float bits); only the rows of ticks the map object ran. */
     if(h->map) {

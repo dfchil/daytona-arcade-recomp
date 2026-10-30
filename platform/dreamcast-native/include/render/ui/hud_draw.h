@@ -54,6 +54,14 @@ static __attribute__((noinline, unused)) void nm_hud_late_sprite(nm_hud_list_t *
     q->sheet=p->sheet;q->sprite=(uint8_t)sprite;q->at[0]=(float)x;q->at[1]=(float)y;q->turn[0]=1.0f;q->turn[1]=0.0f;
     if(list->corners) nm_hud_corners(q,p,(float)x,(float)y,1.0f,0.0f);
 }
+/* The map's markers out of line (nm_hud_map_apart): as nm_hud_sprite, for any sprite that turns. */
+static __attribute__((noinline, unused)) void nm_hud_late_turned(nm_hud_list_t *list, unsigned sprite, float x, float y, float c, float s) {
+    if(sprite>=NM_HUD_SPRITE_COUNT || list->count>=NM_HUD_MAX_QUADS) return;
+    const nm_hud_sprite_t *p=nm_hud_sprites+sprite;
+    nm_hud_quad_t *q=list->quads+list->count++;
+    q->sheet=p->sheet;q->sprite=(uint8_t)sprite;q->at[0]=x;q->at[1]=y;q->turn[0]=c;q->turn[1]=s;
+    nm_hud_corners(q,p,x,y,c,s);
+}
 static inline void nm_hud_cell(nm_hud_list_t *list, unsigned family, unsigned glyph, int x, int y) {
     if(glyph!=NM_HUD_BLANK) nm_hud_sprite(list,family+glyph,(float)x,(float)y,1.0f,0.0f);
 }
@@ -94,42 +102,53 @@ static inline void nm_hud_radar_place(nm_hud_list_t *list, const nm_hud_t *h, nm
 #ifndef NM_HUD_ROLLING
 #error "hud_data.h has no rolling start overlay (ab78, d438): make the HUD pack again with tools/prepare_hud.py (NATIVE_HUD_DIR)"
 #endif
+#ifndef NM_HUD_SECOND_MARKER
+#error "hud_data.h has no second car's marker (12b34): make the HUD pack again with tools/prepare_hud.py --second-marker (NATIVE_HUD_DIR)"
+#endif
 #ifndef NM_HUD_LAP_MESSAGE
 #error "hud_data.h has no lap message (ad34): make the HUD pack again with tools/prepare_hud.py (NATIVE_HUD_DIR)"
 #endif
 /* The car of the banner on the screen: column 0 of the tile layer in the 1024-pixel ring, as -512..511; the car and
  * the banner lie within the ring's first 512 pixels, so one place shows all of them. */
 static inline int nm_hud_roll_x(const nm_hud_t *h) { return (int)((1536u-h->roll_scroll)&1023u)-512; }
-/* The map at another size than its default (the chord, nm_hud_overlay): map scale k against the default. Its polygons
- * and the marker places scale about the projected origin of its model, the constant of the leader's matrix (height
- * 0); the markers keep their size. One whole quad for the map: it is on whole pixels only at k = 1. The largest size
- * reaches the CONDITION label: on course 0 the map's sheet is the label's and the two swap places, as tiles over
- * polygons; the other courses' maps lie on a later sheet and paint over the label's top row. Out of line after the
- * other sprites: nm_hud_place stays what it was. */
-static __attribute__((noinline, unused)) void nm_hud_map_scaled(nm_hud_list_t *list, const nm_hud_t *h, nm_hud_sincos_t sincos) {
-    const nm_hud_course_map_t *course_map=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
-    if(!course_map) return;
-    const float (*leader)[3]=course_map->leader,(*player)[3]=course_map->player;
-    const float ax=leader[0][2],ay=leader[1][2],k=h->map_scale*(1.0f/((const float *)nm_hud_map_scales[h->course])[1]);
+/* The map and its markers out of line, for all but course 0's plain case (nm_hud_place): nm_hud_place stays what it was.
+ * At another size than the default (the chord, nm_hud_overlay; k = the scale against the default) its polygons and the
+ * marker places scale about the projected origin of its model, the constant of the leader's matrix (height 0), and
+ * the markers keep their size; one whole quad for the map, on whole pixels only at k = 1. The largest size reaches the
+ * CONDITION label: on course 0 the map's sheet is the label's and the two swap places, as tiles over polygons; the
+ * other courses' maps lie on a later sheet and paint over the label's top row.
+ * Another course's map turns the markers by its model's angle, and its depth sizes them (turn, size; 12a10..12af0).
+ * While the player leads the second car carries the "2" 288b5f0 (12b34), under the player's marker, whose copy
+ * MARKER_TOP lies on its sheet. */
+static __attribute__((noinline, unused)) void nm_hud_map_apart(nm_hud_list_t *list, const nm_hud_t *h, nm_hud_sincos_t sincos) {
+    const nm_hud_course_map_t *m=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
+    if(!m) return;
+    const float (*leader)[3]=m->leader,(*player)[3]=m->player;
+    const float ax=leader[0][2],ay=leader[1][2],standard=((const float *)nm_hud_map_scales[h->course])[1];
+    const float k=h->map_scale==standard ? 1.0f : h->map_scale*(1.0f/standard);
     float s,c;
-    /* Early in the paint order, in the CONDITION label's place. */
-    nm_hud_sprite(list,course_map->sprite,ax+k*((float)course_map->x-ax),ay+k*((float)course_map->y-ay),k,0);
-    if(list->count) for(unsigned i=0;i+1<list->count;++i) if(list->quads[i].sprite==NM_HUD_CONDITION_LABEL) {
-        const nm_hud_quad_t q=list->quads[i];list->quads[i]=list->quads[list->count-1];list->quads[list->count-1]=q;
-        break;
+    if(k==1.0f) nm_hud_sprite(list,m->sprite,(float)m->x,(float)m->y,1.0f,0.0f);
+    else {
+        nm_hud_sprite(list,m->sprite,ax+k*((float)m->x-ax),ay+k*((float)m->y-ay),k,0.0f);
+        for(unsigned i=0;i+1<list->count;++i) if(list->quads[i].sprite==NM_HUD_CONDITION_LABEL) {
+            const nm_hud_quad_t q=list->quads[i];list->quads[i]=list->quads[list->count-1];list->quads[list->count-1]=q;
+            break;
+        }
     }
     if(h->leader) {
-        sincos(h->leader_yaw,&s,&c);
-        nm_hud_sprite(list,NM_HUD_MARKER_LEADER,ax+k*(leader[0][0]*h->leader_x+leader[0][1]*h->leader_z),
-            ay+k*(leader[1][0]*h->leader_x+leader[1][1]*h->leader_z),c,s);
+        sincos((uint16_t)(h->leader_yaw+m->turn),&s,&c);
+        nm_hud_late_turned(list,h->leader_second ? NM_HUD_MARKER_SECOND : NM_HUD_MARKER_LEADER,
+            ax+k*(leader[0][0]*h->leader_x+leader[0][1]*h->leader_z),ay+k*(leader[1][0]*h->leader_x+leader[1][1]*h->leader_z),
+            c*m->size,s*m->size);
     }
-    sincos(h->player_yaw,&s,&c);
-    nm_hud_sprite(list,NM_HUD_MARKER_PLAYER,ax+k*(player[0][0]*h->player_x+player[0][1]*h->player_z+player[0][2]-ax),
-        ay+k*(player[1][0]*h->player_x+player[1][1]*h->player_z+player[1][2]-ay),c,s);
+    sincos((uint16_t)(h->player_yaw+m->turn),&s,&c);
+    nm_hud_late_turned(list,h->leader_second ? NM_HUD_MARKER_TOP : NM_HUD_MARKER_PLAYER,
+        ax+k*(player[0][0]*h->player_x+player[0][1]*h->player_z+player[0][2]-ax),
+        ay+k*(player[1][0]*h->player_x+player[1][1]*h->player_z+player[1][2]-ay),c*m->size,s*m->size);
 }
 /* nm_hud_overlay's elements. Tile layer 0 lies over the map's polygons, as the paint order here. */
 static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t *list, const nm_hud_t *h, nm_hud_sincos_t sincos) {
-    if(h->map_resized && h->map) nm_hud_map_scaled(list,h,sincos);
+    if(h->map_apart && h->map) nm_hud_map_apart(list,h,sincos);
     if(h->roll_banner) {
         const int x=nm_hud_roll_x(h);
         nm_hud_late_sprite(list,NM_HUD_ROLL_CAR,x+NM_HUD_ROLL_CAR_X,NM_HUD_ROLL_CAR_Y);
@@ -235,12 +254,12 @@ static inline unsigned nm_hud_place(const nm_hud_t *h, nm_hud_quad_t quads[NM_HU
     if(h->extension&2u) nm_hud_sprite(&list,NM_HUD_EXTENSION,NM_HUD_EXTENSION_LOW_X,NM_HUD_EXTENSION_LOW_Y,1,0);
     if(h->pit) nm_hud_sprite(&list,NM_HUD_PIT,NM_HUD_PIT_X,NM_HUD_PIT_Y,1,0);
     /* The course's map (prepare_hud.py nm_hud_course_maps: course 0's, and --course-map's); none without one.
-     * At its default size here; another size above. */
+     * Here course 0's at the default size; everything else nm_hud_map_apart. */
     const nm_hud_course_map_t *course_map=h->course<3 && nm_hud_course_maps[h->course].player ? nm_hud_course_maps+h->course : 0;
-    if(h->map && course_map && !h->map_resized) {
+    if(h->map && course_map && !h->map_apart) {
         const float (*leader)[3]=course_map->leader,(*player)[3]=course_map->player;
         nm_hud_sprite(&list,course_map->sprite,course_map->x,course_map->y,1,0);
-        if(h->leader) { /* ponytail: the "2" marker shown while the player leads is not exported yet. */
+        if(h->leader) {
             sincos(h->leader_yaw,&s,&c);
             nm_hud_sprite(&list,NM_HUD_MARKER_LEADER,
                 leader[0][0]*h->leader_x+leader[0][1]*h->leader_z+leader[0][2],

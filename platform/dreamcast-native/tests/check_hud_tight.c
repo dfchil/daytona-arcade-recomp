@@ -197,10 +197,12 @@ static void row_parse(const char *line,nm_hud_t *h) {
         h->roll_hint=(uint8_t)(roll[6]-'0');h->roll_digit=(uint8_t)(roll[7]-'0');h->roll_go=(uint8_t)(roll[8]-'0');
         h->roll_banner=(uint8_t)(roll[9]-'0');h->roll_scroll=(uint16_t)strtoul(field(line,"scroll"),NULL,10);
     }
+    const char *course=strstr(line," course=");
+    h->course=course ? (uint8_t)strtoul(course+8,NULL,10) : 0;
     const char *size=strstr(line," mapsize="); /* The map's size (the chord); rows made before the field have none. */
     if(size) {
         h->map_index=(uint8_t)strtoul(size+9,&end,10);h->map_scale=bits_float(end+1,NULL);
-        h->map_resized=h->map_scale!=0.0f && h->map_scale!=((const float *)nm_hud_map_scales[0])[1]; /* Course 0's rows. */
+        h->map_apart=h->map_scale!=((const float *)nm_hud_map_scales[h->course])[1] || h->course || h->leader_second;
     }
     const char *message=strstr(line," message="); /* ad34; the time back from its cells to ticks at nm_hud_time's rate. */
     if(message) {
@@ -213,7 +215,7 @@ static void row_parse(const char *line,nm_hud_t *h) {
             h->lap_time=(uint16_t)ticks;
         }
     }
-    h->overlay=h->roll_banner || h->roll_digit || h->roll_go || h->lap_label || h->map_resized;
+    h->overlay=h->roll_banner || h->roll_digit || h->roll_go || h->lap_label || h->map_apart;
     const char *needle=field(line,"needle");
     h->needle=(uint8_t)strtoul(needle,&end,10);h->needle_angle=(uint16_t)strtoul(end+1,NULL,10);
     h->map=(uint8_t)strtoul(field(line,"map"),NULL,10);
@@ -222,6 +224,8 @@ static void row_parse(const char *line,nm_hud_t *h) {
     const char *leader=field(line,"leader");
     h->leader=(uint8_t)strtoul(leader,&end,10);
     h->leader_x=bits_float(end+1,&end);h->leader_z=bits_float(end+1,&end);h->leader_yaw=(uint16_t)strtoul(end+1,NULL,10);
+    const char *second=strstr(line," second="); /* The "2" marker; rows made before the field have none. */
+    h->leader_second=second && second[8]=='1';
     /* The CONDITION panel's icons (rows of map ticks; rows made before the fields have none). */
     const char *zoom=strstr(line," zoom=");
     if(h->map && zoom) {

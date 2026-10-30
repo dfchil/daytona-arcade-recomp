@@ -41,6 +41,7 @@ struct HudTrace {
     bool log_calls = false;
     std::vector<std::array<uint32_t,4>> calls;
     uint32_t radar_task = 0; // the map object (task g13) that draws the CONDITION panel 288b578 (12d3c)
+    bool leads = false;      // the player led on the row before: the map shows 288b5f0 (14 polygons), not 288b5dc (6)
     static void observe_call(void *context, const rt::Cpu &cpu, uint32_t target, int type) {
         auto &self = *static_cast<HudTrace *>(context);
         if (!type && target == 0x1786c && cpu.m_r[16] == 0x288b578) self.radar_task = cpu.m_r[29];
@@ -209,15 +210,17 @@ struct HudTrace {
                     float((384 - poly.center[1]) + video.crtc_y()) - v.y / z);
             }
         };
-        // The map's polygons come first (24 on course 0, 98 on Advanced), then the leader's 6 and the player's 13:
-        // the markers' first polygons are counted from the end (on course 0 with every polygon drawn, 24 and 30).
+        // The map's polygons come first (24 on course 0, 98 on Advanced), then the leader's 6 (the "2" while the player
+        // leads: 14, 12b34 with the rank of the tick the polygons come from) and the player's 13: the markers' first
+        // polygons are counted from the end (on course 0 with every polygon drawn, 24 and 30).
+        const unsigned leader_end = leads ? 27 : 19;
         unsigned overlay = 0, overlays = 0; bool needle = false;
         for (const rt::GeoPoly &poly : video.gpu_polys())
             if (!poly.texheader[0] && poly.z == 0 && poly.v[0].p[0] < 1e-3f) ++overlays;
         for (const rt::GeoPoly &poly : video.gpu_polys()) {
             if (poly.texheader[0]) continue;
             if (poly.z == 0 && poly.v[0].p[0] < 1e-3f) {
-                if (overlays >= 19 && overlay == overlays - 19) project(poly, "leader");
+                if (overlays >= leader_end && overlay == overlays - leader_end) project(poly, "leader");
                 if (overlays >= 19 && overlay == overlays - 13) project(poly, "player");
                 ++overlay;
             } else if (!needle && poly.texheader[3] == 0x00c0 && poly.v[0].p[0] > 0.29f && poly.v[0].p[0] < 0.31f) {
@@ -268,6 +271,7 @@ struct HudTrace {
             if (panel) std::fprintf(file, " radar=%u", icons);
         }
         std::fputc('\n', file);
+        leads = b.read_byte(player + 0x6a) == 0;
         if (snapshot_every && rows % snapshot_every == 0) snapshot(consumed);
         ++rows;
         calls.clear();

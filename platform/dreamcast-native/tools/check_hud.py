@@ -225,11 +225,15 @@ def main():
     parser.add_argument('display', type=Path)
     parser.add_argument('--tolerance', type=float, default=0.05)
     parser.add_argument('--preview-dir', type=Path)
+    parser.add_argument('--course', type=int, default=0, help='course slot of the race (a --course-map of the pack)')
     args = parser.parse_args()
     fit = json.loads((args.pack/'fit.json').read_text())
     reference = trace_rows(args.trace/'hud.trace')
     native = display_rows(args.display)
     turn = np.array(fit['turn'])
+    matrices = fit['course_maps'][str(args.course)] if args.course else fit
+    map_turn, marker_size = (matrices['turn'], matrices['size']) if args.course else (0, 1.0)
+    seconds = 0  # frames the "2" marker was compared on
     failures, compared, polygons, worst = {}, 0, 0, 0.0
     first_failure = {}
 
@@ -294,21 +298,24 @@ def main():
                 if error > args.tolerance:
                     fail('needle', frame, (x, y), (ex, ey))
             polygons += 1
+        second = d.get('second') == '1' and fit.get('second_first')
         for key, matrix, local, source in (('player', 'affine', 'player_first', d['player'].split(',')),
-                                           ('leader', 'affine_leader', 'leader_first', d['leader'].split(':')[1].split(','))):
+                                           ('leader', 'affine_leader', 'second_first' if second else 'leader_first',
+                                            d['leader'].split(':')[1].split(','))):
             if key not in row or len(points(row[key])) != len(fit[local]):
                 continue
+            seconds += key == 'leader' and bool(second)
             if d['map'] != '1' or (key == 'leader' and d['leader'][0] != '1'):
                 fail(key+' marker visibility', frame, True, False)
                 continue
-            origin = np.array(fit[matrix])@np.array([bits_float(source[0]), bits_float(source[1]), 1.0])
+            origin = np.array(matrices[matrix])@np.array([bits_float(source[0]), bits_float(source[1]), 1.0])
             if d.get('mapsize'):  # The size of the chord: the places scale about the model's origin (hud_draw.h).
-                standard = bits_float('%08x' % MAP_SCALES[0][1])
-                k, anchor = bits_float(d['mapsize'].split(':')[1])/standard, np.array(fit['affine_leader'])[:, 2]
+                standard = bits_float('%08x' % MAP_SCALES[args.course][1])
+                k, anchor = bits_float(d['mapsize'].split(':')[1])/standard, np.array(matrices['affine_leader'])[:, 2]
                 origin = anchor+k*(origin-anchor)
-            c, s = unit(int(source[2]))
+            c, s = unit(int(source[2])+map_turn)
             for (x, y), offset in zip(points(row[key]), fit[local]):
-                expected = origin+(c*np.eye(2)+s*turn)@np.array(offset)
+                expected = origin+marker_size*(c*np.eye(2)+s*turn)@np.array(offset)
                 error = float(np.abs(expected-np.array([x, y])).max()); worst = max(worst, error)
                 if error > args.tolerance:
                     fail(key+' marker', frame, (x, y), expected.tolist())
@@ -361,6 +368,8 @@ def main():
         print(f'  time extension message (ae98): compared on {extensions[0]} cells (rows 12 and 16 of a frame), drawn on {extensions[1]}')
     if gears[0]:
         print(f'  gear indicator (b0c0): compared on {gears[0]} frames, lever drawn on {gears[1]}, digit on {gears[2]}')
+    if seconds:
+        print(f'  the second car\'s marker (12b34, the player leading): compared on {seconds} frames')
     if lap_messages[0]:
         print(f'  lap message (ad34): compared on {lap_messages[0]} frames, LAP TIME drawn on {lap_messages[1]}, BEST LAP on {lap_messages[2]}')
     if overlay:

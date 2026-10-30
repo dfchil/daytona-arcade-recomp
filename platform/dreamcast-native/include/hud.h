@@ -134,7 +134,7 @@ typedef struct {
     uint16_t roll_scroll;
     uint16_t lap_time;            /* ad34: the ticks it shows. */
     float map_scale;              /* The map task's +38, 0 until its first tick. */
-    uint8_t map_resized;          /* map_scale is not the course's default. */
+    uint8_t map_apart;            /* The map goes through nm_hud_map_apart: another size, another course's, the "2" marker. */
 } nm_hud_t;
 
 /* 234dd8: zoom by index (START + VR2/VR3/VR4 select 0, 1, 2; 1 at the map object's start, 12898..128ac).
@@ -319,7 +319,7 @@ static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, cons
         const float *table=(const float *)nm_hud_map_scales[hud->course<3u ? hud->course : 0u];
         if(hud->map_scale==0.0f) hud->map_scale=table[1];
         hud->map_scale=nm_force_float(0x3e4ccccdu)*(table[hud->map_index]-hud->map_scale)+hud->map_scale;
-        hud->map_resized=hud->map_scale!=table[1];
+        hud->map_apart=hud->map_scale!=table[1] || hud->course || c->leader_second;
     }
     if(race->active_phase==22 && !(c->start_flags&1u) && c->completed && hud->lap_ticks>0 && !(race->finish_flags&2u)) {
         hud->lap_label=0;
@@ -332,7 +332,7 @@ static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, cons
     hud->roll_hint=hud->roll_banner && !stage && (race->counter&31u)<15u ? (race->accel>128u ? 2u : 1u) : 0u;
     hud->roll_digit=stage>=1 && stage<=3 ? (uint8_t)(4-stage) : 0u;
     hud->roll_go=stage>3 && (stage&15)>7;
-    hud->overlay=hud->roll_banner || hud->roll_digit || hud->roll_go || hud->lap_label || hud->map_resized;
+    hud->overlay=hud->roll_banner || hud->roll_digit || hud->roll_go || hud->lap_label || hud->map_apart;
 }
 
 /* One gameplay tick. `race` and `cars` are the state after the tick. */

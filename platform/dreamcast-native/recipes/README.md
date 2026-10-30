@@ -356,6 +356,8 @@ Expert (course slot 1; 18 October):
       ticks on the i960 and TGP against code/expert_actors.c: random task and player words, every state)
   M 6602 --export-native-sky, T/prepare_sky                            -> course1-sky.dns
   M 9100 --trace-hud, T/prepare_hud --course-map 1                     -> hud (MAP_C1)
+  M 13000 inputs-expert-finish.txt --trace-hud (the player leads from frame 11483), T/prepare_hud --second-marker 1
+                                                                       -> hud (MARKER_SECOND, MARKER_TOP)
   M 9100 inputs/inputs-expert-timeout.txt --trace-race --trace-clock --trace-clock-expert -> race-expert.trace,
       clock-expert.txt (the actors' draws with the TGP's matrices)
   trace_race_native --course 1 --counter-base auto --clock, compare_race_trace --require-equal --skip-rows 0,1,

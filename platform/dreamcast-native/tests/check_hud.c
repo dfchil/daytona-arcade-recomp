@@ -3,7 +3,7 @@
  * one row per reference frame, for tools/check_hud.py to compare with the
  * reference's own tile words and overlay polygons.
  *
- *   check_hud HUD_TRACE NEW_DISPLAY_FILE [--drive DRIVE_PACK] [--manual] [QUAD_FRAME ...]
+ *   check_hud HUD_TRACE NEW_DISPLAY_FILE [--drive DRIVE_PACK] [--manual] [--course SLOT] [QUAD_FRAME ...]
  *
  * DRIVE_PACK (drive.dnd of an asset set): the TGP tables of the CONDITION
  * panel's radius and circle test, as the race uses them; without it IEEE
@@ -53,8 +53,11 @@ void nm_hud_write_quads(const char *path,const nm_hud_t *hud) {
 #ifndef NM_HUD_CHECK_NO_MAIN
 int main(int argc,char **argv) {
     if(argc<3) { fputs("usage: check_hud HUD_TRACE NEW_DISPLAY_FILE [--drive DRIVE_PACK] [--manual] [QUAD_FRAME ...]\n",stderr);return 2; }
-    uint8_t manual=0;
-    for(int i=3;i<argc;++i) if(!strcmp(argv[i],"--manual")) manual=1;
+    uint8_t manual=0,course=0;
+    for(int i=3;i<argc;++i) {
+        if(!strcmp(argv[i],"--manual")) manual=1;
+        else if(!strcmp(argv[i],"--course") && i+1<argc) course=(uint8_t)strtoul(argv[i+1],NULL,10);
+    }
     const nm_drive_params_t *math=NULL;
     for(int i=3;i+1<argc;++i) if(!strcmp(argv[i],"--drive") && !(math=nm_drive_load(argv[i+1]))) {
         fprintf(stderr,"cannot load %s\n",argv[i+1]);return 2;
@@ -113,7 +116,7 @@ int main(int argc,char **argv) {
         if(!started) {
             /* The HUD exists from the phase-19 entry (a6b4, 3414). */
             if(race.active_phase<19) continue;
-            nm_hud_reset(&hud,&race,&cars);started=1;
+            nm_hud_reset(&hud,&race,&cars);hud.course=course;started=1;
         } else {
             /* 129d0..12a04: the chord from the reference's held inputs. Traces before the field: its index after this tick. */
             if(field(line,"held")) race.held=(uint32_t)number(line,"held",16);
@@ -121,7 +124,7 @@ int main(int argc,char **argv) {
             nm_hud_tick(&hud,&race,&cars);
         }
         nm_hud_dump(out,frame,&hud);++rows;
-        for(int i=3;i<argc;++i) if(strcmp(argv[i-1],"--drive") && strtol(argv[i],NULL,10)==frame) {
+        for(int i=3;i<argc;++i) if(strcmp(argv[i-1],"--drive") && strcmp(argv[i-1],"--course") && strtol(argv[i],NULL,10)==frame) {
             char path[1024];snprintf(path,sizeof(path),"%s.quads-%ld",argv[2],frame);
             nm_hud_write_quads(path,&hud);
         }

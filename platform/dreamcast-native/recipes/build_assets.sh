@@ -257,6 +257,9 @@ bg_step trace_race1 trace_race1
 DESC_trace_hud1="Expert HUD trace: 9100 frames of the time-out run (--trace-hud), for its course map"
 trace_hud1() { fresh $X/hud-trace1; $M $R 9100 --inputs $INPUTS1 --trace-hud $X/hud-trace1 250; }
 bg_step trace_hud1 trace_hud1
+DESC_trace_hud_lead="Expert HUD trace: 13000 frames of the finishing race, which leads from frame 11483 (--trace-hud), for the map's marker of the second car"
+trace_hud_lead() { fresh $X/hud-trace-lead; $M $R 13000 --inputs $INPUTS1F --trace-hud $X/hud-trace-lead 250; }
+bg_step trace_hud_lead trace_hud_lead
 DESC_trace_race2f="Advanced finishing reference trace: 17800 frames of the 3rd-place race, podium and results (--trace-race, --trace-clock)"
 trace_race2f() { rm -f $X/race-advanced-finish.trace $X/clock-advanced-finish.txt
   $M $R 17800 --inputs $INPUTS2F --trace-race $X/race-advanced-finish.trace --trace-clock $X/clock-advanced-finish.txt; }
@@ -661,10 +664,11 @@ bg_wait trace_hud
 DESC_hud="HUD pack (prepare_hud.py on the reference trace; the Advanced map from its HUD trace)"
 bg_wait trace_hud2
 bg_wait trace_hud1
+bg_wait trace_hud_lead
 # The HUD takes banks 60..63 (palette_banks.h): the Advanced map's colour and the lap message's font fill no free entry.
 hud() {
   fresh $HD/hud
-  python3 $T/prepare_hud.py $R $X/hud-trace $HD/hud --course-map 2 $X/hud-trace2 --course-map 1 $X/hud-trace1 --first-bank 60 --max-banks 4
+  python3 $T/prepare_hud.py $R $X/hud-trace $HD/hud --course-map 2 $X/hud-trace2 --course-map 1 $X/hud-trace1 --second-marker 1 $X/hud-trace-lead --first-bank 60 --max-banks 4
 }
 step hud hud
 
@@ -864,7 +868,7 @@ props_slow() {
 }
 step props_slow props_slow
 if (( ! KEEP )); then rm -rf $X/attract-2d; fi
-if (( ! KEEP )); then rm -rf $X/hud-trace $X/hud-trace2 $X/hud-trace1 $X/race.trace $X/race.sound $X/reference-manual.trace $X/reference-manual.sound $X/race-advanced.trace $X/race-expert.trace $X/race-advanced-finish.trace $X/race-expert-finish.trace $X/clock-advanced.txt $X/clock-advanced-finish.txt $X/clock-expert.txt $X/clock-expert-finish.txt $X/attract.trace $X/clock-attract.txt; fi
+if (( ! KEEP )); then rm -rf $X/hud-trace $X/hud-trace2 $X/hud-trace1 $X/hud-trace-lead $X/race.trace $X/race.sound $X/reference-manual.trace $X/reference-manual.sound $X/race-advanced.trace $X/race-expert.trace $X/race-advanced-finish.trace $X/race-expert-finish.trace $X/clock-advanced.txt $X/clock-advanced-finish.txt $X/clock-expert.txt $X/clock-expert-finish.txt $X/attract.trace $X/clock-attract.txt; fi
 
 # ---------------------------------------------------------------------------------------------------- asset sets
 DESC_assets="asset sets assets-ssfar4f, assets-ssfar4eu, assets-ssfar4e, assets-ssfar4cf3r, assets-ssfar4cf3, assets-ssfar4c, assets-ssfar4b and the variants asked for"
