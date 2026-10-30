@@ -15,17 +15,17 @@ in [FULL_COURSE_BENCHMARKS.md](FULL_COURSE_BENCHMARKS.md).
 Needs: this repository with `extern/` fetched (`python3 scripts/setup.py` or
 `./setup.sh`), CMake and a C++20 compiler, `python3` with numpy and Pillow,
 and the KOS/enDjinn Dreamcast toolchain (`pvrtex`; `sh-elf` for the ELFs).
-`ENDJINN_ROOT` defaults to `extern/endjinn` (`scripts/fetch_endjinn.sh`); SH4ZAM
-comes from `scripts/fetch_sh4zam.sh` (`extern/sh4zam`).
+`ENDJINN_ROOT` defaults to `extern/endjinn` (`platform/dreamcast-native/scripts/fetch_endjinn.sh`); SH4ZAM
+comes from `platform/dreamcast-native/scripts/fetch_sh4zam.sh` (`extern/sh4zam`).
 The ROM set is MAME's `daytona93` (`.zip` or `.7z`); the sound ROMs are not
 needed. The music comes from vgmrips' pack (see "Music" below: a browser
-download, AICAflow and AICAforge from `scripts/fetch_aicaflow.sh`, zlib
+download, AICAflow and AICAforge from `platform/dreamcast-native/scripts/fetch_aicaflow.sh`, zlib
 headers, `unzip`). From the repository root:
 
 ```sh
-scripts/fetch_endjinn.sh         # once: enDjinn at its pin into extern/endjinn
-scripts/fetch_sh4zam.sh          # once: SH4ZAM at its pin, built into extern/sh4zam/lib
-scripts/fetch_aicaflow.sh        # once: AICAflow + AICAforge at their pins into extern/aicaflow
+platform/dreamcast-native/scripts/fetch_endjinn.sh         # once: enDjinn at its pin into extern/endjinn
+platform/dreamcast-native/scripts/fetch_sh4zam.sh          # once: SH4ZAM at its pin, built into extern/sh4zam/lib
+platform/dreamcast-native/scripts/fetch_aicaflow.sh        # once: AICAflow + AICAforge at their pins into extern/aicaflow
 zsh platform/dreamcast-native/recipes/build_assets.sh roms/daytona93.zip build/my-assets \
     --music ~/Downloads/Daytona_USA_\(Sega_Model_2\).zip --elf
 ```
@@ -95,7 +95,7 @@ runs it as its first step (`work/music/`, stamped) and copies the AFB/AFX
 pairs into every asset set; on its own, from the repository root:
 
 ```sh
-scripts/fetch_aicaflow.sh        # once: AICAflow + AICAforge into extern/aicaflow
+platform/dreamcast-native/scripts/fetch_aicaflow.sh        # once: AICAflow + AICAforge into extern/aicaflow
 zsh platform/dreamcast-native/recipes/build_music.sh ~/Downloads/Daytona_USA_\(Sega_Model_2\).zip build/dc-native-music
 ```
 
@@ -215,11 +215,11 @@ fast race in order.
 | `specs/L12.json`, `specs/ssfar4b.json`, `specs/ssfar4bf3.json`, `specs/ssfar4b-fence-plain.json`, `specs/ssfar4bf3-rock.json`, `specs/ssfar4e.json`, `specs/ssfar4eu.json`, `specs/ssfar4f.json` | level-of-detail rules (`tools/lod_groups.py`): trees, fence; ssfar4b adds the far-road super-sampling and the gantry board; ssfar4bf3 has the three-level fence of L15 (ssfar4cf3's); ssfar4b-fence-plain is ssfar4b without the fence rule (ssfar4cf0's); ssfar4bf3-rock is ssfar4bf3 with the rock decals' cores added to its `cores` list (ssfar4cf3r's); ssfar4e is ssfar4bf3-rock with the rule "signs" (banners, pit-wall boards, the other lettering faces: per face, the super-sampled far level beyond 3x the depth of one texel per pixel plus the face's radius, as the gantry board); ssfar4eu is ssfar4e with the rule "picks" (the same switch; ssfar4eu's); ssfar4f is ssfar4eu without the rule "fence" (ssfar4f's: the plain fence) and with the rule "verges" reduced to 6686 (16 October: the infield grass 6924 and the aprons 6664 not super-sampled) and the rule "reels" (17 October: the slot machine reels, the signs' switch) |
 | `decals/rock-shared.json` | ssfar4d's baked composites (`prepare_face_order.py --bake-decals`): rock with Sonic, rock with moss, one palette bank |
 | `inputs/inputs-finish-fast.txt` | controller script of the second-place 8-lap race (made by `tests/drive_race_native.c`) |
-| `inputs/inputs-expert-timeout.txt` | Expert (slot 1): the menu of `scripts/inputs/course_expert.txt` (steering 0xe0 held through the accelerator confirm), then full accelerator and steering 0x98 to the time-out (frame 8371) and the results (9100 frames; the reference of the step `course1_lockstep`) |
+| `inputs/inputs-expert-timeout.txt` | Expert (slot 1): the menu of `recipes/inputs/course_expert.txt` (steering 0xe0 held through the accelerator confirm), then full accelerator and steering 0x98 to the time-out (frame 8371) and the results (9100 frames; the reference of the step `course1_lockstep`) |
 | `inputs/inputs-advanced-finish.txt` | Advanced: the same menu, then a race searched by `tests/drive_race_native.c --pursuit --launch 0xa8 --course 2 --counter-base 2116` (first frame 2331): 4 laps to 3rd place, the podium and the results (17800 frames; the reference of the step `course2_finish`) |
 | `inputs/inputs-expert-finish.txt` | Expert: the same menu, then a race searched by `tests/drive_race_native.c --pursuit --launch 0xa8 --course 1 --counter-base 2156` (first frame 2372): 2 laps to 3rd place, the podium and the results (19100 frames; the reference of the step `course1_finish`) |
 | `course1-surface.txt`, `course2-surface.txt` | the reduced view's road-surface headers of Expert and Advanced (none audited: `--surface-ground`) |
-| `inputs/inputs-advanced-timeout.txt` | Advanced (slot 2): the menu of `scripts/inputs/course_advanced.txt` (steering 0xa0 held through the accelerator confirm), then full accelerator and steering 0x98 to the time-out and the results (8000 frames; the reference of the step `course2_lockstep`) |
+| `inputs/inputs-advanced-timeout.txt` | Advanced (slot 2): the menu of `recipes/inputs/course_advanced.txt` (steering 0xa0 held through the accelerator confirm), then full accelerator and steering 0x98 to the time-out and the results (8000 frames; the reference of the step `course2_lockstep`) |
 | `inputs/inputs-damage-{A,C,E,F,G,H}.txt` | the fast race's script to frame 3149, then steering/braking into the walls and against the traffic to frame 7600 (time up in lap 1): the original's runs of `tests/test_damage_lockstep.py` (`m2segment ROM 7600 --inputs ... --trace-race reference-damage-X.trace`) |
 | `inputs/frontend-{A,B,C,D,E}.txt` | credits at different points of the cinematic attract and different course/transmission choices, timeouts and confirms: the original's runs of `tests/test_frontend_lockstep.py` (`m2segment ROM N --inputs ... --trace-frontend frontend-X.trace --trace-race race-X.trace`; A, B, E with a race) |
 | `expected.sha256` | sha256 of the asset sets and headers as delivered on 14 October 2026 (assets-ssfar4cf3 added that night, assets-ssfar4cf3r, assets-ssfar4e, assets-ssfar4eu and assets-ssfar4f on 15 October; car-damage.dnb and the music/ rows of every set that night) |
@@ -309,7 +309,7 @@ Name, result, finish, sky, title, HUD, script:
   T/prepare_result_pal4 result-models                                             -> result/, result_pal4_data.h
   T/prepare_models result-models --result-models R                                -> result.dnm
   T/prepare_models finish-models --finish-models R                                -> finish.dnm
-  scripts/prepare_dreamcast_textures.py finish-models/materials --format pal4     -> finish/
+  tools/prepare_dreamcast_textures.py finish-models/materials --format pal4     -> finish/
   T/prepare_sky sky/panorama.tga                                                  -> sky.dns
   T/prepare_scene title --title-program program.bin                               -> native_scene.inc + textures
   T/prepare_hud R hud-trace                                                       -> hud_data.h, hud/

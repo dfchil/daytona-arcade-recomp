@@ -83,11 +83,11 @@ Known limits:
 - **KallistiOS** with its SH-4 toolchain at `/opt/toolchains/dc` (`sh-elf`,
   `kos-cc`, `pvrtex`). The port is built and measured with KOS
   `368a2eb9`.
-- **enDjinn**, the frontend framework: `scripts/fetch_endjinn.sh` (pinned,
+- **enDjinn**, the frontend framework: `platform/dreamcast-native/scripts/fetch_endjinn.sh` (pinned,
   into `extern/endjinn`). `ENDJINN_ROOT` overrides it.
-- **SH4ZAM**: `scripts/fetch_sh4zam.sh` (pinned v0.9.0, built into
+- **SH4ZAM**: `platform/dreamcast-native/scripts/fetch_sh4zam.sh` (pinned v0.9.0, built into
   `extern/sh4zam/lib`).
-- **AICAflow and AICAforge**: `scripts/fetch_aicaflow.sh` (pinned, into
+- **AICAflow and AICAforge**: `platform/dreamcast-native/scripts/fetch_aicaflow.sh` (pinned, into
   `extern/aicaflow`).
 - **Your ROM set**: MAME's `daytona93` (`.zip` or `.7z`). The sound ROMs are
   not needed.
@@ -104,9 +104,9 @@ From the repository root:
 
 ```sh
 ./setup.sh                       # host build of this repository
-scripts/fetch_endjinn.sh
-scripts/fetch_sh4zam.sh
-scripts/fetch_aicaflow.sh
+platform/dreamcast-native/scripts/fetch_endjinn.sh
+platform/dreamcast-native/scripts/fetch_sh4zam.sh
+platform/dreamcast-native/scripts/fetch_aicaflow.sh
 zsh platform/dreamcast-native/recipes/build_assets.sh roms/daytona93.zip build/my-assets \
     --music ~/Downloads/Daytona_USA_\(Sega_Model_2\).zip --elf
 ```

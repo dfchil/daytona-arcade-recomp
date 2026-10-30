@@ -1,7 +1,7 @@
-# enDjinn: the repository's extern/endjinn (scripts/fetch_endjinn.sh) unless ENDJINN_ROOT is set.
+# enDjinn: the repository's extern/endjinn (platform/dreamcast-native/scripts/fetch_endjinn.sh) unless ENDJINN_ROOT is set.
 ENDJINN_ROOT ?= $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../../extern/endjinn)
 ifeq ($(wildcard $(ENDJINN_ROOT)/base_link.mk),)
-$(error no enDjinn at $(ENDJINN_ROOT): run scripts/fetch_endjinn.sh or set ENDJINN_ROOT)
+$(error no enDjinn at $(ENDJINN_ROOT): run platform/dreamcast-native/scripts/fetch_endjinn.sh or set ENDJINN_ROOT)
 endif
 
 .DEFAULT_GOAL := all

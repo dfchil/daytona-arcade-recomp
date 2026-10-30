@@ -1252,7 +1252,7 @@ Next, in priority order:
   days, gameplay about 3.
 - AICAflow PR #12 (firmware ABI 8: status by the AICA's main-CPU interrupt)
   is merged upstream (origin main f448121). The Daytona pin bump (both pins
-  in `scripts/fetch_aicaflow.sh`, music rows if AICAforge encodes
+  in `platform/dreamcast-native/scripts/fetch_aicaflow.sh`, music rows if AICAforge encodes
   differently, `PLAYING_POLL` dropped in `code/audio/sound.c`) was then in
   progress on branch `aicaflow-abi8` (`build/dc-native-afx8.wt`);
   integrate2 still pins c6b116dd.
@@ -1398,7 +1398,7 @@ drop log; render and registration = race mean, ms; podium = registration):
   `afx_instance_refresh()`; not yet on hardware (needs DKR attract runs,
   Daytona with `afx_update` every frame, and a check that Flycast delivers
   the interrupt, without which `afx_init` fails there). Daytona follow-up
-  once #12 is merged: move both pins in `scripts/fetch_aicaflow.sh` together
+  once #12 is merged: move both pins in `platform/dreamcast-native/scripts/fetch_aicaflow.sh` together
   (a new AICAforge may encode differently: rerun `build_music.sh` and
   update `music-expected.sha256` and the music rows of `expected.sha256`),
   drop the 16-frame polling in `code/audio/sound.c` (`PLAYING_POLL`: call
@@ -1788,7 +1788,7 @@ the default ELFs), byte for byte the delivered files, from the repository
 and vgmrips' music archive (see "Sound"):
 
 ```sh
-scripts/fetch_aicaflow.sh   # once
+platform/dreamcast-native/scripts/fetch_aicaflow.sh   # once
 zsh platform/dreamcast-native/recipes/build_assets.sh roms/daytona93.zip build/my-assets \
     --music ../aicaflow-foundation-lab/Daytona_USA_\(Sega_Model_2\).zip --elf [--variants ssfar4cf0,ssfar4d,ssfar4bf3]
 ```
@@ -1919,7 +1919,7 @@ music A/B in "15 October, night": no frame cost, three late frames from the
 in-frame loads); effects and voices do not exist yet.
 
 Setup and assets:
-- `scripts/fetch_aicaflow.sh` puts AICAflow `f448121` (origin main, 16
+- `platform/dreamcast-native/scripts/fetch_aicaflow.sh` puts AICAflow `f448121` (origin main, 16
   October; firmware ABI 8) into the ignored `extern/aicaflow`, and through
   AICAflow's own pin AICAforge `e77de852` (origin main; its SDK pin
   `53c464db`). Before 16 October the pin was `c6b116dd` (ABI 7); the move
@@ -2482,7 +2482,7 @@ ELFs. Any other ELF, from the repo root, against those outputs:
 
 ```sh
 A=build/my-assets                                      # build_assets.sh's OUTDIR
-source extern/endjinn/environ.sh                      # scripts/fetch_endjinn.sh; ENDJINN_ROOT defaults to it
+source extern/endjinn/environ.sh                      # platform/dreamcast-native/scripts/fetch_endjinn.sh; ENDJINN_ROOT defaults to it
 make -C platform/dreamcast-native $(grep -v '^#' $A/make-vars.txt) \
   NATIVE_RESIDENT_CAR=1 NATIVE_FRAME_PROFILE=1 NATIVE_HANDOPT=1 RACE_TICK_LIMIT=0 AUTO_START=1 \
   ENJ_BUILDDIR=$PWD/<new>/obj ENJ_BINDIR=$PWD/<new>/bin -j8 check

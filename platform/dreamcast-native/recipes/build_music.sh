@@ -12,9 +12,9 @@
 # --adpcm  AICA ADPCM samples instead of AICAforge's default PCM8: half the bank (Sky High 1,576,173 -> 788,647
 #          bytes). A budget option: its outputs do not match music-expected.sha256.
 # --gain-db DB  sample gain (AICAforge's default -6.4 dB); other values do not match music-expected.sha256.
-# --aicaflow DIR  AICAflow checkout with AICAforge initialised (default: extern/aicaflow from scripts/fetch_aicaflow.sh).
+# --aicaflow DIR  AICAflow checkout with AICAforge initialised (default: extern/aicaflow from platform/dreamcast-native/scripts/fetch_aicaflow.sh).
 #
-# Needs: scripts/fetch_aicaflow.sh run once, a C11 compiler and zlib headers (AICAforge's native tools), unzip.
+# Needs: platform/dreamcast-native/scripts/fetch_aicaflow.sh run once, a C11 compiler and zlib headers (AICAforge's native tools), unzip.
 # No Dreamcast toolchain: nothing here runs on the target.
 #
 # Outputs (game-derived: never commit them):
@@ -50,7 +50,7 @@ done
 [[ -f $ARCHIVE ]] || { print -u2 -r -- "archive $ARCHIVE not found (download it in a browser: see the header of this script)"; exit 2; }
 sum=$(shasum -a 256 $ARCHIVE | cut -c1-64)
 [[ $sum == $ARCHIVE_SHA256 ]] || { print -u2 -r -- "archive sha256 $sum is not vgmrips' Daytona USA pack ($ARCHIVE_SHA256)"; exit 2; }
-[[ -f $AF/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge at $AF: run scripts/fetch_aicaflow.sh"; exit 2; }
+[[ -f $AF/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge at $AF: run platform/dreamcast-native/scripts/fetch_aicaflow.sh"; exit 2; }
 command -v unzip >/dev/null || { print -u2 -r -- "unzip not found"; exit 2; }
 
 START=$EPOCHREALTIME

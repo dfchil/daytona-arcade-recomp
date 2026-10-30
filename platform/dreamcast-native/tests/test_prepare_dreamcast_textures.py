@@ -1,11 +1,11 @@
-"""ROM-free format validation: python3 tests/test_prepare_dreamcast_textures.py."""
+"""ROM-free format validation: python3 platform/dreamcast-native/tests/test_prepare_dreamcast_textures.py."""
 import importlib.util
 from pathlib import Path
 import struct
 import hashlib
 import tempfile
 
-spec = importlib.util.spec_from_file_location("prep", Path(__file__).resolve().parents[1] / "scripts/prepare_dreamcast_textures.py")
+spec = importlib.util.spec_from_file_location("prep", Path(__file__).resolve().parents[1] / "tools/prepare_dreamcast_textures.py")
 prep = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prep)
 

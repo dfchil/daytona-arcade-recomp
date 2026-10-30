@@ -392,6 +392,6 @@ if(Python3_FOUND)
     add_test(NAME native_meshpack_alignment
         COMMAND Python3::Interpreter ${DN}/tests/test_align_meshpack.py
                 $<TARGET_FILE:check_native_meshpack>)
-    add_test(NAME prepare_dreamcast_textures
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/test_prepare_dreamcast_textures.py)
+    add_test(NAME native_prepare_textures
+        COMMAND Python3::Interpreter ${DN}/tests/test_prepare_dreamcast_textures.py)
 endif()

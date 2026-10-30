@@ -1,4 +1,4 @@
-/* Sound on the AICA through AICAflow (extern/aicaflow, scripts/fetch_aicaflow.sh).
+/* Sound on the AICA through AICAflow (extern/aicaflow, platform/dreamcast-native/scripts/fetch_aicaflow.sh).
  *
  * Gameplay hands over the original program's packed three-byte sound commands:
  * the words 19bf4 queues for the sound board's UART (ae1005, be1a10, ...). This

@@ -5,7 +5,7 @@
 # 725f8b1 was origin main on 28 October 2026.
 set -eu
 ENDJINN_COMMIT=725f8b192c18ba56298eca1b5eaf8abc216e67be
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)"
 DEST="$ROOT/extern/endjinn"
 [ -d "$DEST/.git" ] || git clone https://github.com/dfchil/enDjinn.git "$DEST"
 git -C "$DEST" fetch origin 2>/dev/null || true

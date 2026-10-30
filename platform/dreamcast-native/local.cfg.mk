@@ -993,21 +993,21 @@ ENJ_DEFAULT_OPTLEVEL := 3
 ENJ_CFLAGS += $(KOS_CFLAGS) -fno-fast-math -ffp-contract=off -include $(abspath include/finite.h)
 ENJ_CFLAGS += -I$(KOS_PORTS)/include/zlib
 # NATIVE_SH4ZAM_ROOT: the SH4ZAM checkout (its include/, and lib/libsh4zam.a built from it) used instead of the one
-#   installed in KOS's addons. Default: extern/sh4zam at the pinned release (v0.10.0, 70dbb17; scripts/fetch_sh4zam.sh), since KOS's copy
+#   installed in KOS's addons. Default: extern/sh4zam at the pinned release (v0.10.0, 70dbb17; platform/dreamcast-native/scripts/fetch_sh4zam.sh), since KOS's copy
 #   is shared and can move. SHZ_SH4_DOT_FIPR: v0.10.0 computes shz_dot6f/shz_dot8f (and the squared magnitudes) with
 #   scalar FPU code unless it is defined; the renderer's bounds (geometry.c) and face classes (model_submission.h)
 #   mirror the FIPR form in their own asm, so the FIPR form stays. NATIVE_SH4ZAM_ROOT= (empty) links KOS's copy.
 NATIVE_SH4ZAM_ROOT ?= $(abspath ../../extern/sh4zam)
 ifneq ($(strip $(NATIVE_SH4ZAM_ROOT)),)
 ifeq ($(wildcard $(NATIVE_SH4ZAM_ROOT)/lib/libsh4zam.a),)
-$(error $(NATIVE_SH4ZAM_ROOT)/lib/libsh4zam.a is missing: run scripts/fetch_sh4zam.sh (or set NATIVE_SH4ZAM_ROOT=))
+$(error $(NATIVE_SH4ZAM_ROOT)/lib/libsh4zam.a is missing: run platform/dreamcast-native/scripts/fetch_sh4zam.sh (or set NATIVE_SH4ZAM_ROOT=))
 endif
 ENJ_CFLAGS += -I$(abspath $(NATIVE_SH4ZAM_ROOT))/include -DSHZ_SH4_DOT_FIPR
 ENJ_LDLIBS += $(abspath $(NATIVE_SH4ZAM_ROOT))/lib/libsh4zam.a -lz
 else
 ENJ_LDLIBS += -lsh4zam -lz
 endif
-# Sound: AICAflow (include/audio/sound.h). scripts/fetch_aicaflow.sh puts it into extern/aicaflow (AICAFLOW_ROOT selects
+# Sound: AICAflow (include/audio/sound.h). platform/dreamcast-native/scripts/fetch_aicaflow.sh puts it into extern/aicaflow (AICAFLOW_ROOT selects
 #   another checkout); the Makefile builds its SH4 library there, code/audio/sound.c embeds its ARM7 firmware, and KOS's
 #   own sound startup (enDjinn calls snd_init) is wrapped away so KOS's driver never loads. Music: ASSET_ROOT/music from
 #   recipes/build_music.sh; without it the game is silent.
@@ -1016,7 +1016,7 @@ endif
 ifndef NATIVE_TRANSFER_BENCH
 AICAFLOW_ROOT ?= $(abspath ../../extern/aicaflow)
 ifeq ($(wildcard $(AICAFLOW_ROOT)/driver/sh4/Makefile),)
-$(error No AICAflow at $(AICAFLOW_ROOT): run scripts/fetch_aicaflow.sh or set AICAFLOW_ROOT)
+$(error No AICAflow at $(AICAFLOW_ROOT): run platform/dreamcast-native/scripts/fetch_aicaflow.sh or set AICAFLOW_ROOT)
 endif
 AICAFLOW_LIB := $(AICAFLOW_ROOT)/driver/sh4/libaicaflow_host.a
 ENJ_CFLAGS += -I$(AICAFLOW_ROOT)/driver/include -I$(AICAFLOW_ROOT)/driver/format/include \

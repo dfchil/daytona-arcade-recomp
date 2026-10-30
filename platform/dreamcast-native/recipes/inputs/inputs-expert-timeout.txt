@@ -1,4 +1,4 @@
-# Expert (course slot 1): the menu of scripts/inputs/course_expert.txt (steering 0xe0 held through the
+# Expert (course slot 1): the menu of recipes/inputs/course_expert.txt (steering 0xe0 held through the
 # accelerator confirm), full accelerator and steering 0x98 from frame 2190 to the time-out and the results.
 frames 9100
 1200-1209 coin=1

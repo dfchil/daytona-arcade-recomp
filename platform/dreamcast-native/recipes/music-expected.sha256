@@ -1,6 +1,6 @@
 # sha256 of the outputs of build_music.sh with its defaults (PCM8, AICAforge's -6.4 dB gain): every file of music/
 # from vgmrips' Daytona USA pack (sha256 ac086fd5...) with AICAflow c6b116dd and AICAforge e77de852
-# (scripts/fetch_aicaflow.sh, 15 October 2026); unchanged with AICAflow f448121 (firmware ABI 8: no format or
+# (platform/dreamcast-native/scripts/fetch_aicaflow.sh, 15 October 2026); unchanged with AICAflow f448121 (firmware ABI 8: no format or
 # AICAforge change; 181 of 181 identical, 16 October 2026). Hashes only: no game data. build_music.sh compares
 # OUTDIR/outputs.sha256 with this. Other AICAforge commits may encode differently: update both pins and this list together.
 27e36b282ad99a90e5cbe49dfe1c6d44a782d2929317e73b0174c545a8c58b48  music/t01.afb

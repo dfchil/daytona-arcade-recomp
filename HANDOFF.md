@@ -18,7 +18,7 @@ Its entry point is `platform/dreamcast-native/README.md`, and its engineering st
   it is.
 - Our old Dreamcast bring-up under `platform/dreamcast` is removed. Upstream's
   port in that directory is the one kept.
-- enDjinn is now pinned like SH4ZAM and AICAflow: `scripts/fetch_endjinn.sh`
+- enDjinn is now pinned like SH4ZAM and AICAflow: `platform/dreamcast-native/scripts/fetch_endjinn.sh`
   fetches `725f8b1` into `extern/endjinn`. The Makefile and the recipe default
   `ENDJINN_ROOT` to it.
 - The host tools that call `sh-elf-*` take `KOS_<TOOL>` overrides.

@@ -10,7 +10,7 @@
 set -eu
 AICAFLOW_COMMIT=f4481210a8a9fa8248a74b6e6e56da38c0df5c61
 AICAFORGE_COMMIT=e77de85282035a679887f3166cf7caf6a0d61b16
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)"
 DEST="$ROOT/extern/aicaflow"
 [ -d "$DEST/.git" ] || git clone https://github.com/dfchil/aicaflow.git "$DEST"
 git -C "$DEST" fetch --depth 1 origin "$AICAFLOW_COMMIT" 2>/dev/null || true

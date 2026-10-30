@@ -8,7 +8,7 @@
 # v0.9.0 (0fd3a1e) was the release the renderer was written and measured with.
 set -eu
 SH4ZAM_COMMIT=70dbb177b20c1734fbe4f97df0f8c6ec87a8e8d3
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)"
 DEST="$ROOT/extern/sh4zam"
 [ -d "$DEST/.git" ] || git clone https://github.com/gyrovorbis/sh4zam.git "$DEST"
 git -C "$DEST" fetch --depth 1 origin "$SH4ZAM_COMMIT" 2>/dev/null || true

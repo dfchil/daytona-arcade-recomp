@@ -7,7 +7,7 @@
 # ROMSET.zip  the daytona93 set (MAME layout) with its sound ROMs: epr-16720/16721 (the 68000 program, Revision A's,
 #             as MAME's set has it) and mpr-16491..16494 (the MultiPCM samples), checked by CRC.
 # OUTDIR      output directory (keep it under the ignored build/); OUTDIR/sfx is made from scratch on every run.
-# --aicaflow DIR  AICAflow checkout with AICAforge (default: extern/aicaflow from scripts/fetch_aicaflow.sh).
+# --aicaflow DIR  AICAflow checkout with AICAforge (default: extern/aicaflow from platform/dreamcast-native/scripts/fetch_aicaflow.sh).
 # --music DIR the music/ of build_music.sh: the race bank must fit next to its race recording t03; without it the
 #             check uses t03's PCM8 size (1,561,766 bytes with its flow).
 # --voices MODE  the announcer's phrases of sfx-banks.txt's "voices" line (ADPCM): stream (default) writes
@@ -15,7 +15,7 @@
 #             the largest fits beside the race bank and t03; resident puts them into the race bank (fits only
 #             beside t03 in ADPCM: build_music.sh --adpcm, --music); none leaves them out.
 #
-# Needs: scripts/fetch_aicaflow.sh run once, a C11 and a C++20 compiler, zlib headers (AICAforge), python3.
+# Needs: platform/dreamcast-native/scripts/fetch_aicaflow.sh run once, a C11 and a C++20 compiler, zlib headers (AICAforge), python3.
 #
 # Steps: tools/extract_sound_roms.py (sound images, deleted at the end), tools/prepare_sfx.cpp render (the native
 # sequencer plays every effect command from the boot state into a MultiPCM VGM; engine layers and their tables),
@@ -57,7 +57,7 @@ while (( $# )); do
   shift
 done
 [[ -f $ROMSET ]] || { print -u2 -r -- "ROM set $ROMSET not found"; exit 2; }
-[[ -f $AF/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge at $AF: run scripts/fetch_aicaflow.sh"; exit 2; }
+[[ -f $AF/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge at $AF: run platform/dreamcast-native/scripts/fetch_aicaflow.sh"; exit 2; }
 
 START=$EPOCHREALTIME
 W=$OUT/work/sfx

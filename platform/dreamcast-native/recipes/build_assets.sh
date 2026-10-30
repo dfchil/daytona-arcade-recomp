@@ -8,7 +8,7 @@
 #          holds the imported images (program.bin, main_data.bin, ... as written by m2import).
 # OUTDIR   new or partly built output directory (each finished step leaves OUTDIR/stamps/STEP; a rerun skips those).
 # --music ARCHIVE  the soundtrack: vgmrips' Daytona USA pack (not in the ROM set; a browser download, see build_music.sh,
-#          which this runs as the step "music", about 15 s; it needs scripts/fetch_aicaflow.sh run once). Every asset
+#          which this runs as the step "music", about 15 s; it needs platform/dreamcast-native/scripts/fetch_aicaflow.sh run once). Every asset
 #          set gets music/tNN.afb and tNN.afx of the 45 tracks, the files the ELF reads. One of --music and --no-music
 #          is required, unless an earlier run of OUTDIR finished the step "music".
 # --no-music  asset sets without music/ (the game runs silent); their music rows are reported as one line.
@@ -33,8 +33,8 @@
 #
 # Needs: this repository, CMake and a C++20 compiler (the host tools), python3 with numpy and Pillow, the KOS/enDjinn
 # Dreamcast toolchain (pvrtex for the sky, title and finish textures; sh-elf and make for --elf), found through
-# ENDJINN_ROOT (default: extern/endjinn, fetched by scripts/fetch_endjinn.sh; its environ.sh is sourced); for the music,
-# AICAflow and AICAforge at their pins in extern/aicaflow (scripts/fetch_aicaflow.sh), zlib headers and unzip.
+# ENDJINN_ROOT (default: extern/endjinn, fetched by platform/dreamcast-native/scripts/fetch_endjinn.sh; its environ.sh is sourced); for the music,
+# AICAflow and AICAforge at their pins in extern/aicaflow (platform/dreamcast-native/scripts/fetch_aicaflow.sh), zlib headers and unzip.
 # Nothing here reads any build/ directory of the repository: everything is made from the ROM (and the music archive)
 # below OUTDIR.
 #
@@ -96,7 +96,7 @@ if (( NOMUSIC )); then
   [[ -z $MUSIC ]] || { print -u2 -r -- "--music and --no-music exclude each other"; exit 2; }
 elif [[ -n $MUSIC ]]; then
   [[ -f $MUSIC ]] || { print -u2 -r -- "music archive $MUSIC not found (vgmrips' Daytona USA pack: see build_music.sh)"; exit 2; }
-  [[ -f $REPO/extern/aicaflow/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge in extern/aicaflow: run scripts/fetch_aicaflow.sh"; exit 2; }
+  [[ -f $REPO/extern/aicaflow/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge in extern/aicaflow: run platform/dreamcast-native/scripts/fetch_aicaflow.sh"; exit 2; }
 elif [[ ! -e $OUT/stamps/music ]]; then
   print -u2 -r -- "the soundtrack is not in the ROM set: pass --music ARCHIVE (vgmrips' Daytona USA pack, a browser download:"
   print -u2 -r -- "see platform/dreamcast-native/recipes/build_music.sh) or --no-music for asset sets without music (the game runs silent)"
@@ -105,7 +105,7 @@ fi
 
 ENDJINN_ROOT=${ENDJINN_ROOT:-$REPO/extern/endjinn}
 if ! command -v pvrtex >/dev/null || (( ELF )); then
-  [[ -r $ENDJINN_ROOT/environ.sh ]] || { print -u2 -r -- "need pvrtex/KOS: run scripts/fetch_endjinn.sh or set ENDJINN_ROOT to an enDjinn checkout (environ.sh)"; exit 2; }
+  [[ -r $ENDJINN_ROOT/environ.sh ]] || { print -u2 -r -- "need pvrtex/KOS: run platform/dreamcast-native/scripts/fetch_endjinn.sh or set ENDJINN_ROOT to an enDjinn checkout (environ.sh)"; exit 2; }
   set +u; source $ENDJINN_ROOT/environ.sh >/dev/null; set -u
 fi
 command -v pvrtex >/dev/null || { print -u2 -r -- "pvrtex not on PATH after sourcing $ENDJINN_ROOT/environ.sh"; exit 2; }
@@ -194,7 +194,7 @@ DESC_sfx="sound effects: build_sfx.sh on the ROM set (native sequencer, AICAforg
 sfx() { local music=(); (( NOMUSIC )) || music=(--music $MU/music); fresh $SX; zsh $RC/build_sfx.sh $ROM $SX $music; }
 SFX=0
 if [[ $ROM == *.zip ]]; then
-  [[ -f $REPO/extern/aicaflow/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge in extern/aicaflow: run scripts/fetch_aicaflow.sh"; exit 2; }
+  [[ -f $REPO/extern/aicaflow/dependencies/AICAforge/Makefile ]] || { print -u2 -r -- "no AICAflow/AICAforge in extern/aicaflow: run platform/dreamcast-native/scripts/fetch_aicaflow.sh"; exit 2; }
   step sfx sfx; SFX=1
 elif [[ -e $OUT/stamps/sfx ]]; then SFX=1
 else print -r -- "-- sfx: left out (ROM is not a .zip: no sound ROMs); the sets get no sfx/ and the game plays no effects"
@@ -300,8 +300,8 @@ DESC_export_select="course/transmission select and GENTLEMEN screens (--export-n
 export_select() {
   fresh $X/select-rte $X/select-adv $X/select-exp
   $M $R 2600 --inputs $REPO/scripts/inputs/race_to_end.txt --export-native-select $X/select-rte
-  $M $R 1700 --inputs $REPO/scripts/inputs/course_advanced.txt --export-native-select $X/select-adv
-  $M $R 1740 --inputs $REPO/scripts/inputs/course_expert.txt --export-native-select $X/select-exp
+  $M $R 1700 --inputs $RC/inputs/course_advanced.txt --export-native-select $X/select-adv
+  $M $R 1740 --inputs $RC/inputs/course_expert.txt --export-native-select $X/select-exp
 }
 step export_cells export_cells
 step export_cars export_cars
@@ -635,7 +635,7 @@ ui_packs() {
   python3 $T/prepare_result_pal4.py $X/result-models $HD/result-pal4
   python3 $T/prepare_models.py $X/result-models $W/ui/result.dnm --result-models $R
   python3 $T/prepare_models.py $X/finish-models $W/ui/finish.dnm --finish-models $R
-  python3 $REPO/scripts/prepare_dreamcast_textures.py $X/finish-models/materials $W/ui/finish --format pal4
+  python3 $T/prepare_dreamcast_textures.py $X/finish-models/materials $W/ui/finish --format pal4
   python3 $T/prepare_sky.py $X/sky/panorama.tga $W/ui/sky
   python3 $T/prepare_scene.py $X/title $HD/title --title-program $R/program.bin
 }

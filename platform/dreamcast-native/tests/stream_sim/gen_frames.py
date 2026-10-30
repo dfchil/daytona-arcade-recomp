@@ -1,7 +1,7 @@
 """Frame tables for the stream simulator from the game's own code (FRM5, sim_main.c): the tick loop of
 tests/trace_race_native.c plus the frame assembly of code/render/scene/practice.c, sliced from the tree, write the
 car and world instance tables of sampled ticks. No renderer, no PVR. Every table is ROM-derived: keep it under build/.
-Needs cc and SH4ZAM's headers (extern/sh4zam, scripts/fetch_sh4zam.sh: the scene struct holds its types).
+Needs cc and SH4ZAM's headers (extern/sh4zam, platform/dreamcast-native/scripts/fetch_sh4zam.sh: the scene struct holds its types).
 
 usage: gen_frames.py OUT.frm ASSETS HEADERS [--course N] [--script NAME] [--step TICKS] [--last TICK]
            [--views TICK:VR,TICK:VR,...] [--attract TICKS] [--work DIR]

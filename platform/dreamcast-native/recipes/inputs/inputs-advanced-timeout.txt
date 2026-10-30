@@ -1,4 +1,4 @@
-# Advanced (course slot 2): the menu of scripts/inputs/course_advanced.txt (steering 0xa0 held through the
+# Advanced (course slot 2): the menu of recipes/inputs/course_advanced.txt (steering 0xa0 held through the
 # accelerator confirm), full accelerator and steering 0x98 from frame 2150 to the time-out and the results.
 frames 8000
 1200-1209 coin=1
