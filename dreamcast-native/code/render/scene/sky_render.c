@@ -54,6 +54,9 @@ int nm_sky_load(const char *path) {
             PVR_FILTER_NONE);
 #endif
         else pvr_poly_cxt_col(&c,PVR_LIST_OP_POLY);
+        /* Clamped: a wrapping filter blends a page's edge texels with its opposite edge (seams at page joins and
+         * the panorama's top row). */
+        if(i<4) c.txr.uv_clamp=PVR_UVCLAMP_UV;
         c.gen.culling=PVR_CULLING_NONE;
         c.depth.comparison=PVR_DEPTHCMP_GEQUAL;
         pvr_poly_compile(sky.headers+i,&c);
