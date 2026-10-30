@@ -32,6 +32,8 @@ static inline void nm_hud_dump(FILE *out,long frame,const nm_hud_t *h) {
     fprintf(out," reverse=%u extension=%u pit=%u",h->reverse,h->extension,h->pit);
     /* b0c0: the lever frame (0..6) and the digit (1..4), '_' when not drawn. */
     fprintf(out," gear=%c%c",h->gear_lever<=6 ? '0'+h->gear_lever : '_',h->gear_digit ? '0'+h->gear_digit : '_');
+    /* The rolling start's overlay: hint, digit, GO, banner, the banner's scroll. */
+    fprintf(out," roll=%u%u%u%u scroll=%u",h->roll_hint,h->roll_digit,h->roll_go,h->roll_banner,h->roll_scroll);
     fprintf(out," needle=%u:%u map=%u player=%08" PRIx32 ",%08" PRIx32 ",%u leader=%u:%08" PRIx32 ",%08" PRIx32 ",%u beep=%u",
         h->needle,h->needle_angle,h->map,nm_hud_dump_bits(h->player_x),nm_hud_dump_bits(h->player_z),h->player_yaw,
         h->leader,nm_hud_dump_bits(h->leader_x),nm_hud_dump_bits(h->leader_z),h->leader_yaw,h->beep);

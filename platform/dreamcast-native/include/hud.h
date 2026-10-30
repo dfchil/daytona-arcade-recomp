@@ -21,6 +21,7 @@
  *   a818..a968         wrong-way message "逆走" (unit 1 on this board, 53e59a bit0)
  *   ae98..aef0         "TIME EXTENSION!!" after a time award (phase handler 3558)
  *   ab2c..ab74         "PIT WORK!" while the pit's stop count 501a84 is positive (blinks while the car stands)
+ *   ab78..ad30, d438..d5e0  the rolling start's overlay on course 0 (nm_hud_overlay)
  *   1299c..12c70       course map and its two markers (polygons)
  *   12c98..13208       CONDITION panel: the cars near the player (polygons, with the map)
  * The HUD object a7c0 runs only while flags 501090 select phase 20 or 22; the
@@ -55,6 +56,8 @@ typedef struct {
      * time award (13534: 5010d4 = 128, the native award.display; award.counter counts them). */
     uint8_t lap_line, award;
     uint32_t hold;               /* 501a84 after this tick (the pit's stop count, race_field.h timer_hold). */
+    int16_t stage;               /* 501850 after this tick (-1 off course 0): the rolling start's sequence. */
+    uint16_t accel;              /* 501054 of this tick: d480 chooses the hint by it. */
 } nm_hud_race_t;
 
 /* CONDITION panel inputs: a car's position and its drawn heading +58 + +d6. */
@@ -120,6 +123,10 @@ typedef struct {
     uint8_t gear_lever, gear_digit;
     uint8_t gear_last, gear_from; /* +14c of the player (the gear seen last), and the gear the lever leaves. */
     int8_t gear_ticks;            /* The HUD object's +6: 31 ticks of lever animation after a change. */
+    /* The rolling start's overlay (nm_hud_overlay; last: the fields before keep their offsets). hint: 0 none, 1 "ACCEL ON!",
+     * 2 "AUTO DRIVE"; digit: 1..3, 0 none; scroll: 4 * 5010b0 & 1023, how far the banner has run left. */
+    uint8_t roll_banner, roll_hint, roll_digit, roll_go;
+    uint16_t roll_scroll;
 } nm_hud_t;
 
 /* 234dd8: zoom by index (START + VR2/VR3/VR4 select 0, 1, 2; 1 at the map object's start, 12898..128ac).
@@ -266,6 +273,28 @@ static inline void nm_hud_radar(nm_hud_t *hud, const nm_hud_cars_t *c) {
     }
 }
 
+/* The rolling start's overlay, course 0, tiles (never in the cells of the rules above). What the original draws and
+ * erases tick by tick comes down to a state of this tick's stage 501850, 5010b0 and 501854:
+ *  - the player's rolling update d328 (from the tick after its init, so not in phase 19): d448..d46c draw the banner
+ *    28829f0 (57x7 tiles at 7,23) and the car 2882d1a (7x5 at 0,24) on its first two ticks, d56c..d5a4 give lines
+ *    184..239 the scroll -4 * 5010b0 & 1023 in the layer pair's 1024-pixel ring, the other half blank; d5a8 erases
+ *    both when the player passes the line (+128 = 0, 501854 bit0 clears);
+ *  - d470..d534, stage 0: while 5010b0 & 31 < 15 "ACCEL ON!" 28766c8 at 19,19, with the accelerator 501054 above 128
+ *    "AUTO DRIVE" 287679c at 20,19; erased otherwise. ab9c..abc8 erases both every tick of stage 0 in phase 22, so the
+ *    tick that leaves stage 0 leaves them erased. (A pedal crossing 128 inside the 15 ticks leaves one column of
+ *    "ACCEL ON!" at column 43 until the next erase: d4d8 erases with the width of the shorter block. Not reproduced.)
+ *  - ab78, stages 0..3 (the player 29, 19, 9 profiles before the line): "3", "2", "1" (2882e9c, 2882e24, 2882dac, 9x6
+ *    at 27,16) drawn with the stage's step, kept until GO's first erase;
+ *  - ac04.. from the line on, stage 5..64: GO! 2882f14 (20x12 at 21,14) drawn while stage & 15 > 7, erased otherwise. */
+static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
+    const int stage=race->stage;
+    hud->roll_banner=(c->start_flags&1u) && race->active_phase!=19;
+    hud->roll_scroll=(uint16_t)((race->counter<<2)&1023u);
+    hud->roll_hint=hud->roll_banner && !stage && (race->counter&31u)<15u ? (race->accel>128u ? 2u : 1u) : 0u;
+    hud->roll_digit=stage>=1 && stage<=3 ? (uint8_t)(4-stage) : 0u;
+    hud->roll_go=stage>3 && (stage&15)>7;
+}
+
 /* One gameplay tick. `race` and `cars` are the state after the tick. */
 static __attribute__((noinline, unused)) void nm_hud_tick(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
     hud->beep=0;
@@ -338,6 +367,7 @@ static __attribute__((noinline, unused)) void nm_hud_tick(nm_hud_t *hud, const n
         /* ab10..ab20, the end of a96c: the lap message counts down. */
         if(hud->lap_ticks>0) --hud->lap_ticks;
     }
+    nm_hud_overlay(hud,race,c);
     hud->map=race->active_phase==20 || race->active_phase==22 || race->active_phase==24 || race->active_phase==26;
     if(hud->map) {
         hud->player_x=c->x;hud->player_z=c->z;hud->player_yaw=c->yaw;

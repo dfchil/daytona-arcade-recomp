@@ -96,6 +96,18 @@ def gear_blocks(program):
     return blocks[:7]
 
 
+# ab78..ad30 and d438..d5e0, the rolling start's overlay (course 0, include/hud.h nm_hud_overlay): the hint blocks and
+# their places, GO!, the digits 1, 2, 3 at one place, the banner and its car; (word of the program, value) of each.
+ROLLING = dict(hint_accel=(0x28766c8, 0x10009a6), hint_auto=(0x287679c, 0x10009a8), go=(0x2882f14, 0x100072a),
+               digits=(0x2882dac, 0x2882e24, 0x2882e9c), digit_at=0x1000836, banner=(0x28829f0, 0x1000b8e),
+               car=(0x2882d1a, 0x1000c00))
+ROLLING_WORDS = {0xabb0: 0x287679c, 0xaba8: 0x10009a8, 0xabc4: 0x28766c8, 0xabbc: 0x10009a6, 0xac50: 0x100072a,
+                 0xac58: 0x2882f14, 0xac80: 0x1000836, 0xac88: 0x2882dac, 0xacbc: 0x1000836, 0xacc4: 0x2882e24,
+                 0xacfc: 0x1000836, 0xad04: 0x2882e9c, 0xd44c: 0x1000b8e, 0xd454: 0x28829f0, 0xd460: 0x1000c00,
+                 0xd468: 0x2882d1a, 0xd4b8: 0x10009a6, 0xd4c0: 0x28766c8, 0xd4f0: 0x10009a8, 0xd4f8: 0x287679c}
+ROLLING_SPLIT = 28  # tile columns of the banner's first sprite: a sheet is 256 texels wide, the banner 456
+
+
 # CONDITION panel (12c98..13208): zoom table 234dd8 (include/hud.h nm_hud_radar_zooms), the icon of the
 # automatic car 13218[0], the opponents' icon 288b550 (each car's +84 in the race).
 RADAR_ZOOMS = (0x3c03126f, 0x3ba3d70a, 0x3b23d70a)
@@ -450,19 +462,21 @@ def cover(mask, cost, core_minimum, method):
     return total, cores, pieces, textured
 
 
-def tight_pieces(mask, cost):
+def tight_pieces(mask, cost, quick=False):
     """The cheapest form in the cost model: the one quad (a core when the sprite has no
     transparent texel), or cores and pieces for one of a range of core sizes and either way
-    of cutting the pieces. Returns cost, cores, pieces, textured texels."""
+    of cutting the pieces. quick: two core sizes, cut only: merge_pieces is cubic in the runs of
+    a sprite and largest_rectangle goes texel by texel in Python, which large art cannot afford.
+    Returns cost, cores, pieces, textured texels."""
     height, width = mask.shape
     whole = (float(cost(width, height, 0)), [(0, 0, width, height)], [], 0) if mask.all() else \
         (float(cost(width, height, width*height)), [], [(0, 0, width, height)], width*height)
     best = whole
     area = int(mask.sum())
-    for core_minimum in sorted({8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512} | {1 << 30}):
+    for core_minimum in (64, 256, 1 << 30) if quick else sorted({8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512} | {1 << 30}):
         if core_minimum > area and core_minimum != 1 << 30:
             continue
-        for method in (merge_pieces, split_pieces):
+        for method in (split_pieces,) if quick else (merge_pieces, split_pieces):
             candidate = cover(mask, cost, core_minimum, method)
             if candidate[0] < best[0]-1e-6:
                 best = candidate
@@ -1032,6 +1046,63 @@ def main():
     sprites['NEEDLE'] = dict(width=4, height=4, scale=1,
                              pixels=[0xff000000 | needle_colour[0] << 16 | needle_colour[1] << 8 | needle_colour[2]]*16)
 
+    # ---- the rolling start's overlay ----------------------------------------
+    # Last in the table (index >= NM_HUD_TIGHT_EARLY): the race's hot table nm_hud_tight keeps its place and size.
+    early_sprites = len(sprites)
+    if any(program_word(a) != v for a, v in ROLLING_WORDS.items()):
+        raise ValueError('unexpected rolling start overlay ab78, d438')
+
+    def block_sprite(name, address):
+        width, height, tiles = block_tiles(main_data, address)
+        tile_sprite(name, width, height, tiles)
+        return width, height, tiles
+    rolling_words = {}
+    for name, key in (('ROLL_ACCEL', 'hint_accel'), ('ROLL_AUTO', 'hint_auto')):
+        width, _, tiles = block_sprite(name, ROLLING[key][0])
+        layout[name] = cell(ROLLING[key][1])
+        rolling_words[key] = tiles[:width]
+    width, _, tiles = block_sprite('ROLL_GO', ROLLING['go'][0])
+    layout['ROLL_GO'] = cell(ROLLING['go'][1])
+    rolling_words['go'] = tiles[4*width:5*width]      # tile row 18 of the screen
+    rolling_words['digits'] = []
+    for digit, address in enumerate(ROLLING['digits'], 1):
+        width, _, tiles = block_sprite(f'ROLL_DIGIT_{digit}', address)
+        rolling_words['digits'].append(tiles[2*width:3*width])  # tile row 18 too
+    layout['ROLL_DIGIT'] = cell(ROLLING['digit_at'])
+    width, _, car_tiles = block_sprite('ROLL_CAR', ROLLING['car'][0])
+    layout['ROLL_CAR'] = cell(ROLLING['car'][1])
+    wide, tall, tiles = block_tiles(main_data, ROLLING['banner'][0])
+    rolling_words['row24'] = car_tiles[:width]+tiles[wide:2*wide]
+    # The banner's backdrop is a stipple of one colour on every other pixel: at 640x480 it would alias, and all of it
+    # would be textured for the alpha test. The art keeps the letters; the backdrop is a translucent panel of that
+    # colour at half opacity (as the CONDITION panel), its rectangles the stipple's outline row by row.
+    tile_sprite('ROLL_BANNER', wide, tall, tiles)
+    record = sprites.pop('ROLL_BANNER')
+    px = np.array(record['pixels'], dtype=np.uint32).reshape(record['height'], record['width'])
+    colours, counts = np.unique(px[px != 0], return_counts=True)
+    back = int(colours[counts.argmax()])
+    ys, xs = np.nonzero(px == back)
+    if len(set((xs+ys) & 1)) != 1:
+        raise ValueError('the banner backdrop is not a stipple')
+    # A row's outline to whole pairs of columns: the stipple starts on every other column from row to row.
+    panel_rows = [(int(np.flatnonzero(row)[0]) & ~1, (int(np.flatnonzero(row)[-1])+2) & ~1) for row in px != 0]
+    banner_panel = []
+    for y, span in enumerate(panel_rows):
+        if banner_panel and banner_panel[-1][0] == span[0] and banner_panel[-1][2] == span[1]:
+            banner_panel[-1][3] = y+1
+        else:
+            banner_panel.append([span[0], y, span[1], y+1])
+    px[px == back] = 0
+    x0, y0 = cell(ROLLING['banner'][1])
+    for index, (first, last) in enumerate(((0, ROLLING_SPLIT*8), (ROLLING_SPLIT*8, wide*8))):
+        part = px[:, first:last]
+        sprites[f'ROLL_BANNER_{index}'] = dict(width=int(part.shape[1]), height=int(part.shape[0]), scale=1,
+                                               pixels=[int(v) for v in part.flatten()])
+        layout[f'ROLL_BANNER_{index}'] = (x0+first, y0)
+    banner_panel_argb = 0x80000000 | back & 0xffffff
+    print(f'rolling banner: backdrop #{back & 0xffffff:06x}, {len(banner_panel)} translucent rectangles, '
+          f'{sum((b[2]-b[0])*(b[3]-b[1]) for b in banner_panel)} arcade pixels')
+
     # ---- palette banks and atlases -----------------------------------------
     for record in sprites.values():
         w, h, px = record['width'], record['height'], record['pixels']
@@ -1040,9 +1111,9 @@ def main():
         y0, y1 = min(y for _, y in ink), max(y for _, y in ink)+1
         record['crop'] = (x0, y0, x1-x0, y1-y0)
         record['colours'] = {p for p in px if p}
-    # The gear indicator's sprites (b0c0) are placed after all others, in banks and on sheets: the others keep the
-    # banks and atlas places they had before it, and its own go on the space left or a further sheet.
-    late = lambda n: n.startswith('GEAR_')
+    # The gear indicator's sprites (b0c0) and the rolling start's are placed after all others, in banks and on sheets:
+    # the others keep the banks and atlas places they had before them, and these go on the space left or further sheets.
+    late = lambda n: n.startswith(('GEAR_', 'ROLL_'))
     banks = []
     for name in sorted(sprites, key=lambda n: (late(n), -len(sprites[n]['colours']))):
         used = sprites[name]['colours']
@@ -1136,7 +1207,7 @@ def main():
         fixed = record['scale'] == 1 and 'origin' not in record and name != 'NEEDLE'
         whole_cost = float(cost(w, h, 0 if mask.all() else w*h))
         if fixed:
-            model_cost, cores, pieces, textured = tight_pieces(mask, cost)
+            model_cost, cores, pieces, textured = tight_pieces(mask, cost, name.startswith('ROLL_'))
         else:
             cores, pieces = ([(0, 0, w, h)], []) if mask.all() else ([], [(0, 0, w, h)])
             textured = 0 if mask.all() else w*h
@@ -1184,18 +1255,32 @@ def main():
     for name in names:
         t = tight[name]
         lines.append('    '+''.join('{%d,%d,%d,%d},' % r for r in t['rectangles'])+' /* %s */' % name)
-    lines += ['};', 'static const nm_hud_tight_t nm_hud_tight[NM_HUD_SPRITE_COUNT]={']
-    lines += ['    {%d,%d,%d,%d,%d}, /* %s: %d of %d texels opaque; cores %d texels, pieces texture %d; model %d ns (one quad %d) */' % (
+    tight_row = lambda n: '    {%d,%d,%d,%d,%d}, /* %s: %d of %d texels opaque; cores %d texels, pieces texture %d; model %d ns (one quad %d) */' % (
         tight[n]['first'], tight[n]['cores'], tight[n]['pieces'], tight[n]['fixed'], tight[n]['priority'], n,
         tight[n]['opaque'], tight[n]['texels'], tight[n]['core_texels'], tight[n]['textured'], tight[n]['cost_ns'],
-        tight[n]['whole_ns']) for n in names]
-    lines += ['};', '/* Element origins in the arcade 496x384 layout (tile destinations of a6b4..b25c, a818). */', 'enum {']
+        tight[n]['whole_ns'])
+    lines += ['};', '/* Two parts: nm_hud_tight lies in the race\'s hot data block at a fixed size (config/hot_layout.tsv); the',
+              ' * sprites of the start and the messages, placed out of line (nm_hud_late_sprite), follow in their own table. */',
+              f'enum {{ NM_HUD_TIGHT_EARLY={early_sprites} }};',
+              'static const nm_hud_tight_t nm_hud_tight[NM_HUD_TIGHT_EARLY]={']
+    lines += [tight_row(n) for n in names[:early_sprites]]
+    lines += ['};', 'static const nm_hud_tight_t nm_hud_tight_late[NM_HUD_SPRITE_COUNT-NM_HUD_TIGHT_EARLY]={']
+    lines += [tight_row(n) for n in names[early_sprites:]]
+    lines += ['};', '#define NM_HUD_TIGHT_OF(sprite) ((sprite)<NM_HUD_TIGHT_EARLY ? nm_hud_tight+(sprite) : '
+              'nm_hud_tight_late+((sprite)-NM_HUD_TIGHT_EARLY))',
+              '/* Element origins in the arcade 496x384 layout (tile destinations of a6b4..b25c, a818). */', 'enum {']
     lines += [f'    NM_HUD_{name}_X={x}, NM_HUD_{name}_Y={y},' for name, (x, y) in layout.items()]
     lines += ['    NM_HUD_LAP_ROW_Y=32, NM_HUD_LAP_NUMBER_X=24, NM_HUD_LAP_TIME_X=40', '};',
               '#define NM_HUD_REVERSE_BLOCK 1 /* a818 wrong-way message: sprite NM_HUD_REVERSE at NM_HUD_REVERSE_X/Y. */',
               '#define NM_HUD_EXTENSION_BLOCK 1 /* ae98: sprite NM_HUD_EXTENSION at NM_HUD_EXTENSION_X/Y (row 12) or _LOW_X/Y (row 16). */',
               '#define NM_HUD_PIT_BLOCK 1 /* ab2c "PIT WORK!": sprite NM_HUD_PIT at NM_HUD_PIT_X/Y. */',
               '#define NM_HUD_GEAR 1 /* b0c0: GEAR_LEVER_0..6 at NM_HUD_GEAR_LEVER_X/Y, GEAR_OPEN there too, GEAR_DIGIT_1..4, GEAR_CLOSE, GEAR_LABEL. */',
+              '#define NM_HUD_ROLLING 1 /* ab78, d438: ROLL_ACCEL, ROLL_AUTO, ROLL_GO, ROLL_DIGIT_1..3, ROLL_CAR, ROLL_BANNER_0, _1. */',
+              '/* The banner\'s backdrop: translucent rectangles x0, y0, x1, y1 from its origin. */',
+              '#define NM_HUD_ROLL_PANEL_ARGB 0x%08xu' % banner_panel_argb,
+              f'enum {{ NM_HUD_ROLL_PANEL_RECTS={len(banner_panel)} }};',
+              'static const uint16_t nm_hud_roll_panel[NM_HUD_ROLL_PANEL_RECTS][4]={'+','.join(
+                  '{%d,%d,%d,%d}' % tuple(b) for b in banner_panel)+'};',
               '/* CONDITION panel (12c98..13208), fitted at zoom NM_HUD_RADAR_ZOOM (the icon sprites\' size): an',
               ' * opponent\'s icon at centre + B*zoom*(dx cos a0, dx sin a0, dz cos a0, dz sin a0), turned by its',
               ' * heading minus a0 (the sprite turn of nm_hud_sprite times NM_HUD_RADAR_TURN), every icon scaled by',
@@ -1238,6 +1323,7 @@ def main():
                sprites={n: dict(sheet=sprites[n]['sheet'], bank=sprites[n]['bank'], scale=sprites[n]['scale'], crop=sprites[n]['crop'], at=sprites[n]['at'],
                                 origin=sprites[n].get('origin', (0, 0))) for n in names},
                layout=layout, gear=gear_words, steady_frames=steady, reverse_row25=reverse_row, extension_row=extension_row,
+               rolling=rolling_words,
                course_maps={slot: dict(affine=o['affine'].tolist(), affine_leader=o['affine_leader'].tolist(), polygons=o['polygons'],
                                        residual=o['residual'], residual_leader=o['residual_leader'], steady_frames=o['steady'])
                             for slot, o in course_maps.items()},

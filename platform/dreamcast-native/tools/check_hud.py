@@ -94,6 +94,29 @@ def decode(row, fit):
                 out[f'extension{bit}'] = '1'
             elif all(w in BLANKS for w in cells):
                 out[f'extension{bit}'] = '0'
+    # The rolling start's overlay (ab78, d438): the hint on row 19, the digit or GO! on row 18, the banner and its car on
+    # row 24 with the scroll of their lines. Frames with other art on a row are not compared on it.
+    if 'R19' in row and 'rolling' in fit:
+        r = fit['rolling']
+        hint, cells = words('R19'), words('R18')
+        banner = words('R24')
+        if hint == r['hint_accel']:
+            out['hint'] = '1'
+        elif hint[0] in BLANKS and hint[1:24] == r['hint_auto'] and hint[24] in BLANKS:
+            out['hint'] = '2'
+        elif all(w in BLANKS for w in hint):
+            out['hint'] = '0'
+        if cells == r['go']:
+            out['go'] = '1'; out['digit'] = '0'
+        elif all(w in BLANKS for w in cells):
+            out['go'] = '0'; out['digit'] = '0'
+        elif all(w in BLANKS for w in cells[:6]+cells[15:]) and cells[6:15] in r['digits']:
+            out['go'] = '0'; out['digit'] = str(r['digits'].index(cells[6:15])+1)
+        if banner == r['row24']:
+            out['banner'] = '1'
+            out['scroll'] = str((-int(row['lscroll'], 16)) & 1023)
+        elif all(w in BLANKS for w in banner):
+            out['banner'] = '0'
     # b0c0, the gear indicator (packs with 'gear'): rows 9..11 of columns 33..36 (S9..S11 start at column 22).
     # The lever frame f (3x3 tiles at column 34) or the digit d between its brackets with the label below,
     # '_' when not drawn; frames with other art there are not compared.
@@ -124,6 +147,8 @@ def display_rows(path):
         if 'extension' in fields:
             fields['extension1'] = str(int(fields['extension']) & 1)
             fields['extension2'] = str(int(fields['extension']) >> 1 & 1)
+        if 'roll' in fields:
+            fields.update(hint=fields['roll'][0], digit=fields['roll'][1], go=fields['roll'][2], banner=fields['roll'][3])
         result[int(fields['frame'])] = fields
     return result
 
@@ -201,6 +226,7 @@ def main():
     extensions = [0, 0]  # time extension message cells compared, of them drawn
     gears = [0, 0, 0]  # gear indicator frames compared, of them with the lever, with the digit
     radar = dict(frames=0, icons=0, zoom=0, worst=0.0, panel_frames=0)
+    overlay, drawn = {}, {}  # the rolling start's overlay: frames compared and frames it is drawn on, by element
     for row in reference:
         frame = int(row['frame'])
         started = started or row['active'] == '22'
@@ -219,7 +245,12 @@ def main():
                 fail('panel zoom', frame, (row['zix'], row['zoom']), d['zoom'])
         if 'gear' in shown and 'gear' in d:
             gears[0] += 1; gears[1] += shown['gear'][0] != '_'; gears[2] += shown['gear'][1] != '_'
-        for kind in ('timer', 'lap', 'rank', 'count', 'speed', 'rows', 'reverse', 'extension1', 'extension2', 'gear'):
+        for kind in ('hint', 'digit', 'go', 'banner', 'scroll'):
+            if kind in shown and kind in d:
+                overlay[kind] = overlay.get(kind, 0)+1
+                drawn[kind] = drawn.get(kind, 0)+(shown[kind] != '0')
+        for kind in ('timer', 'lap', 'rank', 'count', 'speed', 'rows', 'reverse', 'extension1', 'extension2', 'gear',
+                     'hint', 'digit', 'go', 'banner', 'scroll'):
             if kind not in shown or kind not in d:
                 continue
             if shown[kind] != d[kind]:
@@ -304,6 +335,9 @@ def main():
         print(f'  time extension message (ae98): compared on {extensions[0]} cells (rows 12 and 16 of a frame), drawn on {extensions[1]}')
     if gears[0]:
         print(f'  gear indicator (b0c0): compared on {gears[0]} frames, lever drawn on {gears[1]}, digit on {gears[2]}')
+    if overlay:
+        print('  rolling start overlay (ab78, d438): '+', '.join(f'{kind} compared on {count} frames, drawn on {drawn[kind]}'
+                                                                 for kind, count in overlay.items()))
     if messages[0]:
         print(f'  wrong-way message (a818): compared on {messages[0]} frames, drawn on {messages[1]}')
     if stale:

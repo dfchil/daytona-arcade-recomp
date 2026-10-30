@@ -51,7 +51,11 @@ int nm_hud_render_enqueue(int flat) { (void)flat;return 0; }
  * closes that list. Off by default (project decision, 16 October 2026: about
  * 100x102 blended pixels a frame on the translucent list are not worth the
  * fill rate); make NATIVE_HUD_RADAR_PANEL=1 draws it. The icons are drawn
- * either way. */
+ * either way. The rolling start's banner has a backdrop of the same kind
+ * (hud_data.h nm_hud_roll_panel: a stipple in the original too), under the same
+ * option: about 25,500 arcade pixels while it is on the screen, where the
+ * stipple as punch-through texels would cost 1.2 ms a frame (28.4 ns a textured
+ * pixel) and alias at 640x480. */
 #ifndef NM_HUD_RADAR_PANEL
 #define NM_HUD_RADAR_PANEL 0
 #endif
@@ -79,6 +83,9 @@ static enj_texture_info_t textures[NM_HUD_SHEET_COUNT];
 alignas(32) static pvr_poly_hdr_t headers[HUD_HEADERS][NM_HUD_SHEET_COUNT];
 alignas(32) static hud_record_t panel[5]; /* Header and one sprite (NATIVE_HUD_STRIPS: a strip of four) for the translucent list. */
 static unsigned panel_records;
+/* The same for the rolling start's banner: a header and its rectangles, built on the ticks it shows. */
+alignas(32) static hud_record_t roll_panel[1+4*NM_HUD_ROLL_PANEL_RECTS];
+static unsigned roll_panel_records;
 alignas(32) static nm_hud_quad_t quads[NM_HUD_MAX_QUADS];
 alignas(32) static hud_record_t records[2][HUD_RECORDS]; /* Opaque list, punch-through list. */
 alignas(32) static hud_span_t spans[NM_HUD_RECTANGLE_COUNT],whole_spans[NM_HUD_SPRITE_COUNT];
@@ -113,7 +120,7 @@ static int spans_prepare(void) {
     if(HUD_LINES==2 && !nm_hud_uv16_valid()) return 0;
     for(unsigned k=0;k<NM_HUD_RECTANGLE_COUNT+NM_HUD_SPRITE_COUNT;++k) {
         unsigned sprite=k-NM_HUD_RECTANGLE_COUNT;
-        if(k<NM_HUD_RECTANGLE_COUNT) for(sprite=0;sprite+1<NM_HUD_SPRITE_COUNT && nm_hud_tight[sprite+1].first<=k;++sprite) {}
+        if(k<NM_HUD_RECTANGLE_COUNT) for(sprite=0;sprite+1<NM_HUD_SPRITE_COUNT && NM_HUD_TIGHT_OF(sprite+1)->first<=k;++sprite) {}
         const nm_hud_sprite_t *p=nm_hud_sprites+sprite;
         const uint8_t full[4]={0,0,p->width,p->height};
         hud_span_t *o=k<NM_HUD_RECTANGLE_COUNT ? spans+k : whole_spans+sprite;
@@ -192,19 +199,22 @@ int nm_hud_render_load(const char *root) {
 #endif
         }
     }
-    {   /* The CONDITION panel: an untextured translucent sprite, its colour in the header. */
+    {   /* The CONDITION panel and the banner's: an untextured translucent sprite, its colour in the header. */
 #ifdef NATIVE_HUD_STRIPS
         pvr_poly_cxt_t c;
         pvr_poly_cxt_col(&c,PVR_LIST_TR_POLY);
         c.gen.culling=PVR_CULLING_NONE;c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
         c.gen.shading=PVR_SHADE_FLAT;
         pvr_poly_compile(&panel[0].header,&c);
+        roll_panel[0].header=panel[0].header;
 #else
         pvr_sprite_cxt_t c;
         pvr_sprite_cxt_col(&c,PVR_LIST_TR_POLY);
         c.gen.culling=PVR_CULLING_NONE;c.depth.comparison=PVR_DEPTHCMP_GEQUAL;c.depth.write=PVR_DEPTHWRITE_DISABLE;
         pvr_sprite_compile((pvr_sprite_hdr_t *)&panel[0].header,&c);
+        roll_panel[0].header=panel[0].header;
         panel[0].word[4]=NM_HUD_RADAR_PANEL_ARGB;panel[0].word[5]=panel[0].word[6]=panel[0].word[7]=0;
+        roll_panel[0].word[4]=NM_HUD_ROLL_PANEL_ARGB;roll_panel[0].word[5]=roll_panel[0].word[6]=roll_panel[0].word[7]=0;
 #endif
     }
     /* In the program's palette format (palette_ram.h), read back. */
@@ -333,17 +343,48 @@ static void panel_build(float sx,float sy) {
     panel_records=3;
 #endif
 }
+/* The banner's backdrop (a stipple in the original), under the option of the CONDITION panel: the rectangles on the
+ * screen, by the depth of the panel. */
+static void roll_panel_build(float sx,float sy) {
+    roll_panel_records=0;
+    if(!hud->roll_banner) return;
+    const float ax=(float)(nm_hud_roll_x(hud)+NM_HUD_ROLL_BANNER_0_X),ay=(float)NM_HUD_ROLL_BANNER_0_Y,z=NM_HUD_DEPTH-1.0f;
+    hud_record_t *r=roll_panel+1;
+    for(unsigned i=0;i<NM_HUD_ROLL_PANEL_RECTS;++i) {
+        const uint16_t *rect=nm_hud_roll_panel[i];
+        const float x0=(ax+(float)rect[0])*sx,y0=(ay+(float)rect[1])*sy,x1=(ax+(float)rect[2])*sx,y1=(ay+(float)rect[3])*sy;
+        if(x1<=0.0f || x0>=496.0f*sx) continue;
+#ifdef NATIVE_HUD_STRIPS
+        const float corner[4][2]={{x0,y1},{x0,y0},{x1,y1},{x1,y0}};
+        for(unsigned k=0;k<4;++k,++r) {
+            pvr_vertex_t *v=&r->vertex;
+            v->flags=k==3 ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+            v->x=corner[k][0];v->y=corner[k][1];v->z=z;v->u=v->v=0.0f;v->argb=NM_HUD_ROLL_PANEL_ARGB;v->oargb=0;
+        }
+#else
+        r[0].word[0]=PVR_CMD_VERTEX_EOL;
+        r[0].f[1]=x0;r[0].f[2]=y1;r[0].f[3]=z;
+        r[0].f[4]=x0;r[0].f[5]=y0;r[0].f[6]=z;
+        r[0].f[7]=x1;r[1].f[0]=y0;r[1].f[1]=z;
+        r[1].f[2]=x1;r[1].f[3]=y1;
+        for(unsigned k=4;k<8;++k) r[1].word[k]=0;
+        r+=2;
+#endif
+    }
+    if(r>roll_panel+1) roll_panel_records=(unsigned)(r-roll_panel);
+}
 static void records_build(int flat) {
     const float sx=(640.0f/496.0f)*ENJ_XSCALE,sy=480.0f/384.0f;
     count=nm_hud_place(hud,quads,hud_sincos,0);
 #if NM_HUD_RADAR_PANEL
     panel_build(sx,sy);
+    roll_panel_build(sx,sy);
 #else
-    (void)panel_build;panel_records=0;
+    (void)panel_build;(void)roll_panel_build;panel_records=0;
 #endif
     /* The table's rectangle counts bound nm_hud_quad_pieces(q,0) from above. */
     unsigned need=0,level=0;
-    for(unsigned i=0;i<count;++i) need+=(unsigned)nm_hud_tight[quads[i].sprite].cores+nm_hud_tight[quads[i].sprite].pieces;
+    for(unsigned i=0;i<count;++i) { const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(quads[i].sprite);need+=(unsigned)t->cores+t->pieces; }
     while(need>NM_HUD_MAX_PIECES) {
         need=0;
         for(unsigned i=0;i<count;++i) need+=nm_hud_quad_pieces(quads+i,level);
@@ -359,7 +400,7 @@ static void records_build(int flat) {
     for(unsigned sheet=0;sheet<NM_HUD_SHEET_COUNT;++sheet) for(unsigned i=0;i<count;++i) {
         const nm_hud_quad_t *q=quads+i;
         if(q->sheet!=sheet) continue;
-        const nm_hud_tight_t *t=nm_hud_tight+q->sprite;
+        const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(q->sprite);
         const float z=depth; /* Flat too (depth ALWAYS): the rank keeps the panel off every sprite. */
         depth+=2.0f;
         if(!nm_hud_quad_fixed(q)) { /* One quad as it was; opaque when the sprite has no transparent texel. */
@@ -398,6 +439,9 @@ static void render_panel(void *data) {
     for(unsigned n=0;n<panel_records;++n) {
         hud_record_t *out=pvr_dr_target();*out=panel[n];pvr_dr_commit(out);
     }
+    for(unsigned n=0;n<roll_panel_records;++n) {
+        hud_record_t *out=pvr_dr_target();*out=roll_panel[n];pvr_dr_commit(out);
+    }
 }
 static void render(void *data) {
     if(!ready) return;
@@ -417,7 +461,7 @@ int nm_hud_render_enqueue(int flat) {
     if(record_count[0]) enj_render_list_add(PVR_LIST_OP_POLY,render,(void *)(uintptr_t)0);
     enj_render_list_add(PVR_LIST_PT_POLY,render,(void *)(uintptr_t)1);
 #ifndef NM_DIAG_LISTS
-    if(panel_records) enj_render_list_add(PVR_LIST_TR_POLY,render_panel,NULL);
+    if(panel_records || roll_panel_records) enj_render_list_add(PVR_LIST_TR_POLY,render_panel,NULL);
 #endif
     return 1;
 }

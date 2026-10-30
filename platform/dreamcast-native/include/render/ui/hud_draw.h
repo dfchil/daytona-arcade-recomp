@@ -12,7 +12,7 @@
 #else
 #define NM_HUD_SHEET_BANK(sheet) ((unsigned)(sheet))
 #endif
-enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons. */
+enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1+6 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons, the rolling start's overlay. */
 /* Strip order. sprite, at and turn repeat the placement (nm_hud_tight below). */
 typedef struct { float xy[4][2], uv[4][2]; uint8_t sheet, sprite; float at[2], turn[2]; } nm_hud_quad_t;
 
@@ -20,6 +20,7 @@ typedef struct { float xy[4][2], uv[4][2]; uint8_t sheet, sprite; float at[2], t
  * rectangles (nm_hud_quad_fixed below), which are placed by `at` alone. */
 typedef struct { nm_hud_quad_t *quads; unsigned count; int corners; } nm_hud_list_t;
 
+static inline void nm_hud_corners(nm_hud_quad_t *q, const nm_hud_sprite_t *p, float x, float y, float c, float s);
 /* Sprite at an element origin; (c,s) turn its offsets as o*c + (J*o)*s. */
 static inline void nm_hud_sprite(nm_hud_list_t *list, unsigned sprite, float x, float y, float c, float s) {
     if(sprite>=NM_HUD_SPRITE_COUNT || list->count>=NM_HUD_MAX_QUADS) return;
@@ -29,6 +30,9 @@ static inline void nm_hud_sprite(nm_hud_list_t *list, unsigned sprite, float x, 
 #ifdef NM_HUD_TIGHT
     if(!list->corners && nm_hud_tight[sprite].fixed && c==1.0f && s==0.0f) return;
 #endif
+    nm_hud_corners(q,p,x,y,c,s);
+}
+static inline void nm_hud_corners(nm_hud_quad_t *q, const nm_hud_sprite_t *p, float x, float y, float c, float s) {
     const float inverse=1.0f/(float)p->scale;
     const float iw=1.0f/(float)nm_hud_sheets[p->sheet][0],ih=1.0f/(float)nm_hud_sheets[p->sheet][1];
     for(unsigned corner=0;corner<4;++corner) {
@@ -38,6 +42,17 @@ static inline void nm_hud_sprite(nm_hud_list_t *list, unsigned sprite, float x, 
         q->xy[corner][1]=y+oy*c+(nm_hud_map_turn[1][0]*ox+nm_hud_map_turn[1][1]*oy)*s;
         q->uv[corner][0]=(float)(p->u+dx)*iw;q->uv[corner][1]=(float)(p->v+dy)*ih;
     }
+}
+/* A sprite of the table's second part (index >= NM_HUD_TIGHT_EARLY: the rolling start's and the messages'), on whole
+ * pixels and never turned, skipped when it lies off the 496 arcade columns. Out of line, as they are: nm_hud_place
+ * and nm_hud_tight keep their places in the race's hot layout. */
+static __attribute__((noinline, unused)) void nm_hud_late_sprite(nm_hud_list_t *list, unsigned sprite, int x, int y) {
+    const nm_hud_sprite_t *p=nm_hud_sprites+sprite;
+    if(sprite>=NM_HUD_SPRITE_COUNT || list->count>=NM_HUD_MAX_QUADS) return;
+    if(x+p->origin_x>=496 || x+p->origin_x+p->width<=0) return;
+    nm_hud_quad_t *q=list->quads+list->count++;
+    q->sheet=p->sheet;q->sprite=(uint8_t)sprite;q->at[0]=(float)x;q->at[1]=(float)y;q->turn[0]=1.0f;q->turn[1]=0.0f;
+    if(list->corners) nm_hud_corners(q,p,(float)x,(float)y,1.0f,0.0f);
 }
 static inline void nm_hud_cell(nm_hud_list_t *list, unsigned family, unsigned glyph, int x, int y) {
     if(glyph!=NM_HUD_BLANK) nm_hud_sprite(list,family+glyph,(float)x,(float)y,1.0f,0.0f);
@@ -75,6 +90,25 @@ static inline void nm_hud_radar_place(nm_hud_list_t *list, const nm_hud_t *h, nm
                 nm_hud_radar_matrix[1][2]*f[2]+nm_hud_radar_matrix[1][3]*f[3],c*k,NM_HUD_RADAR_TURN*s*k);
     }
     nm_hud_sprite(list,NM_HUD_RADAR_PLAYER,nm_hud_radar_centre[0],nm_hud_radar_centre[1],k,0.0f);
+}
+#ifndef NM_HUD_ROLLING
+#error "hud_data.h has no rolling start overlay (ab78, d438): make the HUD pack again with tools/prepare_hud.py (NATIVE_HUD_DIR)"
+#endif
+/* The car of the banner on the screen: column 0 of the tile layer in the 1024-pixel ring, as -512..511; the car and
+ * the banner lie within the ring's first 512 pixels, so one place shows all of them. */
+static inline int nm_hud_roll_x(const nm_hud_t *h) { return (int)((1536u-h->roll_scroll)&1023u)-512; }
+/* The rolling start's overlay (nm_hud_overlay). Tile layer 0 lies over the map's polygons, as the paint order here. */
+static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t *list, const nm_hud_t *h) {
+    if(h->roll_banner) {
+        const int x=nm_hud_roll_x(h);
+        nm_hud_late_sprite(list,NM_HUD_ROLL_CAR,x+NM_HUD_ROLL_CAR_X,NM_HUD_ROLL_CAR_Y);
+        nm_hud_late_sprite(list,NM_HUD_ROLL_BANNER_0,x+NM_HUD_ROLL_BANNER_0_X,NM_HUD_ROLL_BANNER_0_Y);
+        nm_hud_late_sprite(list,NM_HUD_ROLL_BANNER_1,x+NM_HUD_ROLL_BANNER_1_X,NM_HUD_ROLL_BANNER_1_Y);
+    }
+    if(h->roll_hint==1) nm_hud_late_sprite(list,NM_HUD_ROLL_ACCEL,NM_HUD_ROLL_ACCEL_X,NM_HUD_ROLL_ACCEL_Y);
+    if(h->roll_hint==2) nm_hud_late_sprite(list,NM_HUD_ROLL_AUTO,NM_HUD_ROLL_AUTO_X,NM_HUD_ROLL_AUTO_Y);
+    if(h->roll_digit) nm_hud_late_sprite(list,NM_HUD_ROLL_DIGIT_1+h->roll_digit-1u,NM_HUD_ROLL_DIGIT_X,NM_HUD_ROLL_DIGIT_Y);
+    if(h->roll_go) nm_hud_late_sprite(list,NM_HUD_ROLL_GO,NM_HUD_ROLL_GO_X,NM_HUD_ROLL_GO_Y);
 }
 /* The panel under the icons: a stipple of one colour in the original, one translucent rectangle here
  * (x0, y0, x1, y1 in arcade pixels, colour NM_HUD_RADAR_PANEL_ARGB) behind every HUD sprite, drawn
@@ -197,6 +231,7 @@ static inline unsigned nm_hud_place(const nm_hud_t *h, nm_hud_quad_t quads[NM_HU
 #ifdef NM_HUD_GEAR
     if(h->gear_lever<=6 || h->gear_digit) nm_hud_gear_place(&list,h);
 #endif
+    if(h->roll_banner || h->roll_digit || h->roll_go) nm_hud_overlay_place(&list,h);
     return list.count;
 }
 static inline unsigned nm_hud_quads(const nm_hud_t *h, nm_hud_quad_t quads[NM_HUD_MAX_QUADS], nm_hud_sincos_t sincos) {
@@ -275,11 +310,11 @@ static inline void nm_hud_span_place(const nm_hud_span_t *span, const float at[2
 }
 
 static inline int nm_hud_quad_fixed(const nm_hud_quad_t *q) {
-    return nm_hud_tight[q->sprite].fixed && q->turn[0]==1.0f && q->turn[1]==0.0f;
+    return NM_HUD_TIGHT_OF(q->sprite)->fixed && q->turn[0]==1.0f && q->turn[1]==0.0f;
 }
 /* Rectangles of a quad when sprites below `level` are drawn whole. */
 static inline unsigned nm_hud_quad_pieces(const nm_hud_quad_t *q, unsigned level) {
-    const nm_hud_tight_t *t=nm_hud_tight+q->sprite;
+    const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(q->sprite);
     return nm_hud_quad_fixed(q) && t->priority>=level ? (unsigned)t->cores+t->pieces : 1u;
 }
 
@@ -300,7 +335,7 @@ static inline unsigned nm_hud_tight_pieces(const nm_hud_quad_t *quads, unsigned 
     for(unsigned sheet=0;sheet<NM_HUD_SHEET_COUNT;++sheet) for(unsigned i=0;i<count;++i) {
         const nm_hud_quad_t *q=quads+i;
         if(q->sheet!=sheet) continue;
-        const nm_hud_tight_t *t=nm_hud_tight+q->sprite;
+        const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(q->sprite);
         const float z=NM_HUD_DEPTH+2.0f*(float)rank++;
         if(!nm_hud_quad_fixed(q)) { /* One quad as it was; opaque when the sprite has no transparent texel. */
             nm_hud_piece_t *o=out+total++;
@@ -339,7 +374,7 @@ static inline int nm_hud_uv16_exact(float value) {
 static inline int nm_hud_uv16_valid(void) {
     for(unsigned sprite=0;sprite<NM_HUD_SPRITE_COUNT;++sprite) {
         const nm_hud_sprite_t *p=nm_hud_sprites+sprite;
-        const nm_hud_tight_t *t=nm_hud_tight+sprite;
+        const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(sprite);
         const uint8_t full[4]={0,0,p->width,p->height};
         for(unsigned k=0;k<=(unsigned)t->cores+t->pieces;++k) {
             if(k<(unsigned)t->cores+t->pieces && t->first+k>=NM_HUD_RECTANGLE_COUNT) return 0;
@@ -369,7 +404,7 @@ static inline int nm_hud_tight_valid(unsigned sheet, const uint8_t *payload, con
     const unsigned sw=nm_hud_sheets[sheet][0],sh=nm_hud_sheets[sheet][1];
     for(unsigned sprite=0;sprite<NM_HUD_SPRITE_COUNT;++sprite) {
         const nm_hud_sprite_t *p=nm_hud_sprites+sprite;
-        const nm_hud_tight_t *t=nm_hud_tight+sprite;
+        const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(sprite);
         if(p->sheet!=sheet) continue;
         const unsigned n=(unsigned)t->cores+t->pieces;
         if(!n || t->first+n>NM_HUD_RECTANGLE_COUNT || p->u+p->width>sw || p->v+p->height>sh) return 0;

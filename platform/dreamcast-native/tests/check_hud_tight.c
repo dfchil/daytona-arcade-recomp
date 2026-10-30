@@ -192,6 +192,11 @@ static void row_parse(const char *line,nm_hud_t *h) {
     const char *gear=strstr(line," gear="); /* b0c0's lever frame and digit, '_' none; rows made before have none. */
     h->gear_lever=gear && gear[6]>='0' && gear[6]<='6' ? (uint8_t)(gear[6]-'0') : NM_HUD_BLANK;
     h->gear_digit=gear && gear[7]>='1' && gear[7]<='4' ? (uint8_t)(gear[7]-'0') : 0;
+    const char *roll=strstr(line," roll="); /* The rolling start's overlay; rows made before the field have none. */
+    if(roll) {
+        h->roll_hint=(uint8_t)(roll[6]-'0');h->roll_digit=(uint8_t)(roll[7]-'0');h->roll_go=(uint8_t)(roll[8]-'0');
+        h->roll_banner=(uint8_t)(roll[9]-'0');h->roll_scroll=(uint16_t)strtoul(field(line,"scroll"),NULL,10);
+    }
     const char *needle=field(line,"needle");
     h->needle=(uint8_t)strtoul(needle,&end,10);h->needle_angle=(uint16_t)strtoul(end+1,NULL,10);
     h->map=(uint8_t)strtoul(field(line,"map"),NULL,10);
@@ -242,8 +247,9 @@ int main(int argc,char **argv) {
     }
     unsigned rectangles=0,cores=0,single=0;
     for(unsigned sprite=0;sprite<NM_HUD_SPRITE_COUNT;++sprite) {
-        rectangles+=(unsigned)nm_hud_tight[sprite].cores+nm_hud_tight[sprite].pieces;cores+=nm_hud_tight[sprite].cores;
-        single+=nm_hud_tight[sprite].cores+nm_hud_tight[sprite].pieces==1;
+        const nm_hud_tight_t *t=NM_HUD_TIGHT_OF(sprite);
+        rectangles+=(unsigned)t->cores+t->pieces;cores+=t->cores;
+        single+=t->cores+t->pieces==1;
     }
     printf("tight table: %u sprites, %u rectangles (%u opaque cores, %u punch-through pieces), %u sprites of one rectangle, "
         "cost model %u ns a TA record, %u records a rectangle; %s\n",

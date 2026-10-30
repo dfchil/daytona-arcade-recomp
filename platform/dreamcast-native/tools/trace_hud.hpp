@@ -169,6 +169,16 @@ struct HudTrace {
         words("X16", 0x01000000 + 16 * 0x80 + 19 * 2, 24);
         std::fprintf(file, " ext=%d lapmsg=%d", std::bit_cast<int32_t>(b.read_dword(0x5010d4)),
             std::bit_cast<int32_t>(b.read_dword(0x5010dc)));
+        // ad34, the lap message: the label's row 15 from column 24 (its time is in X16); 5010d8 bit1 hides it.
+        words("M15", 0x01000000 + 15 * 0x80 + 24 * 2, 14);
+        // The rolling start's overlay: the hint (ab78, d438) on row 19 from column 19, the digits and GO! on row 18
+        // from column 21, the banner and its car (d448..d46c) on row 24, their line scroll (d56c..d5a4: lines
+        // 184..239, first word), the accelerator 501054 the hint reads and the start stage 501850.
+        words("R19", 0x01000000 + 19 * 0x80 + 19 * 2, 25);
+        words("R18", 0x01000000 + 18 * 0x80 + 21 * 2, 20);
+        words("R24", 0x01000000 + 24 * 0x80, 64);
+        std::fprintf(file, " lscroll=%x accel=%u stage=%d flags8=%x", b.read_word(0x01008170), b.read_word(0x501054),
+            int16_t(b.read_word(0x501850)), b.read_dword(0x5010d8));
         // CONDITION panel 12c98..13208: the player's yaw offset +d6, the map task's zoom +34 and its index +53,
         // and every opponent of the list 501224 as id,x,z,+58,+d6 (positions as float bits).
         std::fprintf(file, " pd6=%d", int16_t(b.read_word(player + 0xd6)));

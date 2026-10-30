@@ -88,6 +88,8 @@ int main(int argc,char **argv) {
             const long message=number(line,"lapmsg",10);
             race.award=number(line,"ext",10)==128;race.lap_line=message>lap_message;lap_message=message;
         }
+        /* The rolling start's: traces made before these fields show no overlay. */
+        if(field(line,"stage")) { race.stage=(int16_t)number(line,"stage",10);race.accel=(uint16_t)number(line,"accel",10); }
         /* The CONDITION panel's inputs. */
         cars.math=math;
         if(field(line,"cars")) {

@@ -55,6 +55,7 @@ typedef struct {
     /* Diagnostic only: the part of nm_race_scene_step that ran last
      * (NM_RACE_STAGE_*); a rejected tick reports it with shared.updating. */
     uint8_t stage;
+    uint16_t accel; /* 501054 of the last tick: only the HUD reads it (d480). */
 } nm_race_scene_t;
 enum { NM_RACE_STAGE_CHECK=0, NM_RACE_STAGE_PHASE, NM_RACE_STAGE_MOVEMENT, NM_RACE_STAGE_INTERACTIONS,
        NM_RACE_STAGE_FINISH_ACTOR, NM_RACE_STAGE_DONE };
@@ -344,7 +345,7 @@ static inline int nm_race_scene_step(nm_race_scene_t *s,const nm_drive_params_t 
      * term ecc8 of the same tick reads the rpm it has just revved. */
     if(s->active_phase==20 && !nm_race_start_signal(math,&s->cars[0].car,s->start_timer,s->start_stage,
            s->cars[0].car.checkpoints.total_laps,input->active.controls.accel,restored,preset)) return 0;
-    s->stage=NM_RACE_STAGE_MOVEMENT;
+    s->stage=NM_RACE_STAGE_MOVEMENT;s->accel=(uint16_t)input->active.controls.accel;
     if(!nm_race_movement_step(s->cars,s->count,&s->shared,s->rolling,&s->start_flags,
         math,speed,contact,road,paths,&tick,&s->award,marks,mark_capacity,rows,row_count)) return 0;
     /* df08..df20: the pit release resets the camera with 637c below view 2 (pit.h), with 62b4 from view 2 up:
