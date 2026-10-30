@@ -324,7 +324,7 @@ static inline int nm_pit_crew_tick(const nm_pit_data_t *data, nm_pit_t *pit, nm_
         for(unsigned c=0;c<NM_PIT_CREW;++c) {
             const nm_pit_crew_record_t *r=data->crew+c;
             if(!r->script_count || (uint32_t)r->script+r->script_count>data->script_count) return 0;
-            pit->crews[c]=(nm_pit_crew_t){.motion=r->motion,.models=r->models,.frames=r->frames,.items=4};
+            pit->crews[c]=(nm_pit_crew_t){.frames=r->frames,.motion=r->motion,.models=r->models,.items=4};
         }
         pit->crew_start=0;
         return 1;
