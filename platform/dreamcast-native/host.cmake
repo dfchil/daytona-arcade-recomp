@@ -322,9 +322,11 @@ if(Python3_FOUND)
         add_test(NAME native_heap_budget
             COMMAND Python3::Interpreter ${DN}/tests/test_heap_budget.py)
     endif()
-    add_test(NAME native_material_residency
-        COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
-                $<TARGET_FILE:Python3::Interpreter> ${DN}/tests/test_material_residency.py)
+    if(ZLIB_FOUND)
+        add_test(NAME native_material_residency
+            COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
+                    $<TARGET_FILE:Python3::Interpreter> ${DN}/tests/test_material_residency.py)
+    endif()
     # Palette RAM format (make NATIVE_PAL16): conversion rules, and with the heap check's race assets (and the HUD
     # pack) every palette the program writes against its ARGB8888 source, default build and ARGB1555.
     set(NATIVE_PALETTE_TEST_ARGS)
