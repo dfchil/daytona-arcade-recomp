@@ -205,7 +205,8 @@ table left: the tables and their generator lived in build directories that are g
 
 - `dreamcast-native/tests/stream_sim/gen_frames.py OUT.frm ASSETS HEADERS [--course N] [--views TICK:VR,...]
   [--attract TICKS]` writes tables from the game's own code: the frame assembly of `render/scene/practice.c`, sliced
-  into `tests/trace_race_native.c`, replays a recipe's race script through the podium. A script holds no view button;
+  into `tests/trace_race_native.c`, replays a recipe's race script through the podium (`--script script-manual`: the
+  manual car). A script holds no view button;
   `--views` presses them, and the race then leaves the script's course (what is drawn feeds the opponents). Tables are
   ROM-derived: `build/` only. 12,000 ticks at `--step 20` are about 4 MB.
 - FRM5 carries each frame's road depth scale, as `practice_road_depth_pick` chose it on every tick. The simulator sets
@@ -219,8 +220,8 @@ table left: the tables and their generator lived in build directories that are g
 - Reference: z is q times one factor, class depth times layer factor, the renderer's form. `(q*layer)*scale` agreed
   only at 0.5. Frame-counter groups (`NM_OBJECT_CLOCK`) are outside its object selection.
 - Not covered: the frame-counter animations, knocked cones and damaged bodies are not in the tables (the damaged
-  bodies have `SIM_DAMAGE_CHECK`); the manual car; the fence sweep and mutants 29 and 30 need a pack with stipple groups;
-  `SIM_SIDE` (the PVR work model's sky and HUD) has no generator now.
+  bodies have `SIM_DAMAGE_CHECK`); the fence sweep and mutants 29 and 30 need a pack with stipple groups; `SIM_SIDE`
+  (the PVR work model's sky and HUD) has no generator now.
 
 ### 19 October: the placed actors' lighting (branch actor-cost)
 

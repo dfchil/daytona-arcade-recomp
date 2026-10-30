@@ -1,6 +1,7 @@
 """Frame tables for the stream simulator from the game's own code (FRM5, sim_main.c): the tick loop of
 tests/trace_race_native.c plus the frame assembly of code/render/scene/practice.c, sliced from the tree, write the
 car and world instance tables of sampled ticks. No renderer, no PVR. Every table is ROM-derived: keep it under build/.
+Needs cc and SH4ZAM's headers (extern/sh4zam, scripts/fetch_sh4zam.sh: the scene struct holds its types).
 
 usage: gen_frames.py OUT.frm ASSETS HEADERS [--course N] [--script NAME] [--step TICKS] [--last TICK]
            [--views TICK:VR,TICK:VR,...] [--attract TICKS] [--work DIR]
@@ -210,6 +211,7 @@ patch('                if(advanced && podium.cleanup) {',
 # Assets loaded: set up; attract-only mode.
 patch('    FILE *out=fopen(argv[3],"wx");', r'''    frame_course=(unsigned)course;
     if(getenv("FRAMES_OUT") && !frame_setup(argv[1])) { fputs("frame setup failed\n",stderr);return 2; }
+    if(fs) fs->transmission=(uint8_t)transmission; /* the player's parts and body (player_parts.h) */
     if(getenv("FRAMES_ATTRACT")) {
         const long limit=strtol(getenv("FRAMES_ATTRACT"),NULL,10);
         if(!nm_intro_scene_start(&presentation,math,&road,paths) || !nm_intro_scene_detail(&presentation,math,&scenery)) return 1;
@@ -247,6 +249,7 @@ else:
     # The race script as a reference trace (the fields the production mode reads), the podium's ticks after it.
     script = args.script or {0: 'script-fast', 1: 'script-expert-finish', 2: 'script-advanced-finish'}[args.course]
     text = (H/script/'race_script_data.h').read_text()
+    manual = int('NM_RACE_SCRIPT_MANUAL' in text)
     ticks = re.findall(r'\{(-?\d+),(\d+),(\d+),(\d+)\}', text[text.index('nm_race_script[NM_RACE_SCRIPT_TICKS]'):])
     views = {}
     for item in filter(None, args.views.split(',')):
@@ -256,12 +259,13 @@ else:
     for n in range(len(ticks)+4000):
         steer, accel, brake, edges = ticks[n] if n < len(ticks) else (0, 0, 0, 0)
         rows.append(f'T n={n+1} frame={n+1} entry=0 steer={steer} accel={accel} brake={brake} gearsel={int(edges) >> 3 & 7} '
-                    f'manual=0 difficulty=0 penalty=0 suppress=0 blocked=0 variant=0 recover={int(edges) >> 2 & 1} gate=0 hold=0 '
+                    f'manual={manual} difficulty=0 penalty=0 suppress=0 blocked=0 variant=0 recover={int(edges) >> 2 & 1} gate=0 hold=0 '
                     f'guided=0 vr={views.get(n, 0)}\n')
     (work/'script.trace').write_text(''.join(rows))
     (work/'out.trace').unlink(missing_ok=True)
     run = subprocess.run([str(work/'frame_gen'), args.assets, str(work/'script.trace'), str(work/'out.trace'), '1', str(len(rows)),
-                          'production', '--course', str(args.course), '--counter-base', '2368'], env=env, capture_output=True, text=True)
+                          'production', '--course', str(args.course), '--counter-base', '2368',
+                          '--transmission', 'manual' if manual else 'automatic'], env=env, capture_output=True, text=True)
 print(run.stdout[-1500:])
 if run.returncode:
     raise SystemExit(run.stderr[-3000:] or f'frame_gen exit {run.returncode}')
