@@ -245,7 +245,8 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # (frontend-X.trace, race-X.trace: m2segment --trace-frontend --trace-race --trace-attract).
     set(NATIVE_GAMES_TEST_TRACES "" CACHE STRING "Dirs with frontend-X.trace and race-X.trace of games-X.txt (';')")
     add_executable(trace_attract_native ${DN}/tests/trace_attract_native.c ${DN}/code/drive.c
-        ${DN}/code/contact.c ${DN}/code/road.c ${DN}/code/path.c ${DN}/code/visibility.c)
+        ${DN}/code/contact.c ${DN}/code/road.c ${DN}/code/path.c ${DN}/code/visibility.c
+        ${DN}/code/props.c ${DN}/code/props_scene.c ${DN}/code/expert_actors.c)
     native_c_target(trace_attract_native)
     target_include_directories(trace_attract_native PRIVATE ${NATIVE_SLOT_TEST_INCLUDES})
     target_compile_options(trace_attract_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)

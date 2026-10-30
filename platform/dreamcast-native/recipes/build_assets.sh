@@ -267,7 +267,7 @@ trace_race1f() { rm -f $X/race-expert-finish.trace $X/clock-expert-finish.txt
 bg_step trace_race1f trace_race1f
 DESC_trace_attract="attract reference trace: 13000 frames without input, the loop over courses 0, 2, 1, 0 with their V.R. demos (--trace-race --trace-attract, --trace-clock)"
 trace_attract() { rm -f $X/attract.trace $X/clock-attract.txt
-  $M $R 13000 --trace-race $X/attract.trace --trace-attract --trace-clock $X/clock-attract.txt; }
+  $M $R 13000 --trace-race $X/attract.trace --trace-attract --trace-clock $X/clock-attract.txt --trace-clock-expert; }
 bg_step trace_attract trace_attract
 DESC_trace_attract_2d="attract 2D reference: the tile RAM of every 4th frame 180..12300 without input (--dump-2d: layer A, the line table; the pens of frame 180)"
 trace_attract_2d() { fresh $X/attract-2d; mkdir -p $X/attract-2d; $M $R 12300 --dump-2d $X/attract-2d 180 12300 4 > /dev/null; }
@@ -794,11 +794,16 @@ attract_lockstep() {
   local d=$W/attract
   fresh $d; mkdir -p $d/assets
   cc -std=c11 -O2 -fno-fast-math -ffp-contract=off -I$DN/include -I$W/intro -I$HD/intent-data -I$HD/race-start-data \
-     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_attract_native.c $DN/code/{drive,contact,road,path,visibility}.c -lm \
+     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_attract_native.c $DN/code/{drive,contact,road,path,visibility,props,props_scene,expert_actors}.c -lm \
      -o $d/trace_attract_native
   ln -s $P/drive.dnd $P/course0.dn[cr] $P/course0-route*.dnp $P/scenery.dnv $P2/course2.dn[crv] $P2/course2-route*.dnp \
      $P1/course1.dn[crv] $P1/course1-route*.dnp $G2/packs/course2-actors.dna $d/assets/
-  $d/trace_attract_native $d/assets $d/native.trace 4 --clock $d/clock-native.txt $X/attract.trace
+  $d/trace_attract_native $d/assets $d/native.trace 4 --clock $d/clock-native.txt $X/attract.trace --actors 2
+  # Expert's actors (and Advanced's animations above), cinematic and demo, against the original's draws.
+  ln -s $G1/packs/course1-actors.dna $d/assets/
+  $d/trace_attract_native $d/assets $d/native-expert.trace 4 --clock $d/clock-expert.txt $X/attract.trace --actors 1
+  python3 -I $DN/tests/test_expert_lockstep.py $G1/sources/clock.json $d/clock-expert.txt $X/clock-attract.txt
+  rm -f $d/native-expert.trace $d/clock-expert.txt
   # Fails on any difference (the accepted rows are counted in the last lines).
   python3 -I $DN/tests/test_attract_lockstep.py $X/attract.trace $d/native.trace > $d/compare.txt || { tail -20 $d/compare.txt; return 1; }
   tail -2 $d/compare.txt
@@ -827,7 +832,7 @@ games_lockstep() {
      -I$HD/record-data -I$HD/podium-data $DN/tests/trace_race_native.c $DN/code/{drive,contact,road,path,visibility,props,props_scene,expert_actors}.c -lm \
      -o $d/trace_race_native
   cc -std=c11 -O2 -fno-fast-math -ffp-contract=off -I$DN/include -I$W/intro -I$HD/intent-data -I$HD/race-start-data \
-     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_attract_native.c $DN/code/{drive,contact,road,path,visibility}.c -lm \
+     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_attract_native.c $DN/code/{drive,contact,road,path,visibility,props,props_scene,expert_actors}.c -lm \
      -o $d/trace_attract_native
   ln -s $P/drive.dnd $P/course0.dn[cr] $P/course0-route*.dnp $P/scenery.dnv $P2/course2.dn[crv] $P2/course2-route*.dnp \
      $P1/course1.dn[crv] $P1/course1-route*.dnp $d/assets/

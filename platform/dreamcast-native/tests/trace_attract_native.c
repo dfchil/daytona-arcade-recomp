@@ -6,7 +6,7 @@
  * counted (the frame counter 5010b0), then the next course (nm_attract_next_course), with what the scenes carry
  * (nm_attract_carry_t).
  *
- * usage: trace_attract_native ASSET_DIR NEW_OUTPUT LOOPS [--course C] [--clock CLOCK_OUT REFERENCE_TRACE]
+ * usage: trace_attract_native ASSET_DIR NEW_OUTPUT LOOPS [--course C] [--clock CLOCK_OUT REFERENCE_TRACE [--actors C]]
  *            [--enter STATE] [--credit FRONTEND_TRACE --leave NEW_STATE]
  *   --enter: the loop after a game (trace_race_native --leave, tests/game_chain.h) instead of power-on: its frame
  *   counter, course and pool. --credit: the original's next credit in the front-end trace (the first game start after
@@ -18,6 +18,9 @@
  *   light (camera object +60..+68, +84: tunnel_light.h through the course's ranges); C rows the cars' state (spawn index = entity order).
  *   --clock: the frame-counter animations' frames (clock_scene.h, nm_clock_frame) of every tick on a course with a
  *   courseN-actors.dna, keyed by the reference frame whose pass had that 5010b0 (test_clock_lockstep.py).
+ *   --actors C (with --clock): course C alone, its cinematic and V.R. demo, with the props and actors stepped as
+ *   code/practice.c steps them (code/props_scene.c) and each actor group's frame and "P" placement as
+ *   tests/trace_race_native.c --clock writes them, the demo's ticks from 100000 (test_expert_lockstep.py).
  * Build with -fno-fast-math -ffp-contract=off (as trace_race_native). ROM-derived headers and packs stay under build/. */
 #undef NDEBUG
 #include "intro_scene.h"
@@ -30,6 +33,7 @@
 #include "vr_demo.h"
 #include "frontend.h"
 #include "game_chain.h"
+#include "props_scene.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -78,12 +82,13 @@ static int load(const char *assets, unsigned course) {
 /* --clock */
 static FILE *clock_out;
 static void *clock_data;
-static unsigned clock_course = 99;
+static unsigned clock_course = 99, actors_course = 99;
 static long *frame_of;          /* reference frame by 5010b0 (the last frame whose row ended with it), -1: none */
 static uint32_t frame_of_count;
 static int clock_open(const char *assets, unsigned course) {
     char path[1024];
     free(clock_data); clock_data = NULL; clock_course = course;
+    if (actors_course != 99 && course != actors_course) return 1;
     if (!nm_course_asset(path, sizeof(path), assets, course, NM_COURSE_ACTORS, 0)) return 0;
     FILE *in = fopen(path, "rb");
     if (!in) return 1; /* no animations on this course */
@@ -115,17 +120,30 @@ static int reference_frames(const char *path) {
     fclose(in);
     return frame_of_count != 0;
 }
-static void clock_row(uint32_t counter) {
+/* One tick's K row (and P rows): CINEMATIC 1 the attract's scene, 0 the demo's race scene with its camera's cells. */
+static void clock_row_of(uint32_t counter, long tick, const nm_race_scene_t *r, const nm_intro_scene_t *v, int cinematic) {
     if (!clock_out || !clock_data || counter >= frame_of_count || frame_of[counter] < 0) return;
     uint32_t bitmaps[16];
     nm_clock_input_t in;
-    const int have = nm_scenery_bitmaps(&scene.cells_previous, bitmaps) &&
-        nm_clock_scene_input(&in, &race, &scene, 1, 0, bitmaps);
-    fprintf(clock_out, "K tick=%" PRIu32 " frame=%ld c=%" PRIu32 " stage=-1", scene.ticks, frame_of[counter], have ? in.counter : 0u);
+    const int have = nm_scenery_bitmaps(&v->cells_previous, bitmaps) &&
+        nm_clock_scene_input(&in, r, v, cinematic, 0, bitmaps);
+    fprintf(clock_out, "K tick=%ld frame=%ld c=%" PRIu32 " stage=-1", tick, frame_of[counter], have ? in.counter : 0u);
     const nm_clock_header_t *h = clock_data;
-    for (unsigned g = 0; g < h->groups; ++g)
-        fprintf(clock_out, " %d", have ? nm_clock_frame(nm_clock_groups(clock_data) + g, &in) : -1);
+    const nm_xa_draw_t *draws = actors_course != 99 ? nm_props_world_actor_draws(cinematic) : NULL;
+    int frames[NM_CLOCK_GROUPS_MAX];
+    for (unsigned g = 0; g < h->groups; ++g) {
+        const nm_clock_group_t *group = nm_clock_groups(clock_data) + g;
+        frames[g] = !have ? -1 : group->cond != NM_CLOCK_ACTOR ? nm_clock_frame(group, &in) : draws ? draws[g].frame : -1;
+        fprintf(clock_out, " %d", frames[g]);
+    }
     fputc('\n', clock_out);
+    for (unsigned g = 0; g < h->groups && draws; ++g) {
+        if (frames[g] < 0 || !draws[g].count) continue;
+        float m[12]; nm_xa_pose_matrix(draws + g, m);
+        fprintf(clock_out, "P tick=%ld g=%u", tick, g);
+        for (unsigned i = 0; i < 12; ++i) fprintf(clock_out, " %08" PRIx32, bits(m[i]));
+        fputc('\n', clock_out);
+    }
 }
 
 static void row(FILE *out, long n, unsigned course, unsigned phase) {
@@ -227,6 +245,7 @@ static int run_demo(FILE *out, long *n, unsigned course, unsigned count, uint32_
     nm_frontend_pool_from_intro(&pool, &scene, &road);
     if (!nm_demo_start(&demo_race, &demo, math, &contact, &road, paths, count, pool.view, nm_race_view_presets,
             &marks, road.profile_count, &pool, counter & 3u)) { fprintf(stderr, "course %u: demo start refused\n", course); return 0; }
+    demo_race.counter_base = counter + 1u; /* code/practice.c: the clock actors' 5010b0 */
     const char *first = nm_demo_view_start(&demo_race, &demo_view, math, &scenery, &cameras, &pool);
     if (first) { fprintf(stderr, "course %u: demo start camera pass: %s\n", course, first); return 0; }
     demo_row(out, (*n)++, counter, 6);
@@ -237,9 +256,11 @@ static int run_demo(FILE *out, long *n, unsigned course, unsigned count, uint32_
                 t + 1 < NM_DEMO_TICKS || b0 == credit_counter ? course : nm_attract_next_course(course))) {
             fprintf(stderr, "course %u: demo tick %u refused (car %u)\n", course, t, demo_race.shared.updating); return 0;
         }
+        if (actors_course != 99) (void)nm_props_race_step(&demo_race, math, &contact); /* code/practice.c */
         const char *why = nm_race_camera_pass(&demo_race, &demo_view, math, &scenery, &cameras, 0);
         if (why) { fprintf(stderr, "course %u: demo tick %u camera pass: %s\n", course, t, why); return 0; }
         demo_row(out, (*n)++, b0, 7);
+        clock_row_of(b0, 100000 + (long)t, &demo_race, &demo_view, 0);
         if (b0 == credit_counter) {
             if (credit_phase != 7) { fprintf(stderr, "the credit at 5010b0 %" PRIu32 " is in phase %u, here 7\n", b0, credit_phase); return 0; }
             if (!nm_demo_game_start(&demo_race, math, &nm_intro_speeds, &contact, &road, paths, &marks, road.profile_count,
@@ -270,7 +291,8 @@ int main(int argc, char **argv) {
             if (!(clock_out = fopen(argv[++i], "wx")) || !reference_frames(argv[++i])) {
                 fputs("--clock: cannot create the output or read the reference trace\n", stderr); return 2;
             }
-        } else if (!strcmp(argv[i], "--enter") && i + 1 < argc) enter_file = argv[++i];
+        } else if (!strcmp(argv[i], "--actors") && i + 1 < argc) actors_course = (unsigned)strtoul(argv[++i], NULL, 10);
+        else if (!strcmp(argv[i], "--enter") && i + 1 < argc) enter_file = argv[++i];
         else if (!strcmp(argv[i], "--credit") && i + 1 < argc) credit_file = argv[++i];
         else if (!strcmp(argv[i], "--leave") && i + 1 < argc) leave_file = argv[++i];
         else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
@@ -297,6 +319,7 @@ int main(int argc, char **argv) {
         const nm_podium_course_t *graph = course < 3 ? nm_attract_courses + course : NULL;
         if (!graph || !graph->stages || !load(assets, course)) { fprintf(stderr, "course %u: no attract graph or packs\n", course); return 1; }
         if (clock_out && clock_course != course && !clock_open(assets, course)) { fprintf(stderr, "course %u: bad actors file\n", course); return 1; }
+        if (actors_course != 99) nm_props_world_actors(clock_data, course);
         ++counter; /* phase 2 */
         if (!nm_intro_scene_start_attract(&scene, graph->stages, graph->count, math, &road, paths) ||
             !nm_intro_scene_detail(&scene, math, &scenery)) { fprintf(stderr, "course %u: attract start refused\n", course); return 1; }
@@ -311,8 +334,9 @@ int main(int argc, char **argv) {
             if (!nm_intro_scene_step(&scene, math, &contact, &road, paths) || !nm_intro_scene_detail(&scene, math, &scenery)) {
                 fprintf(stderr, "course %u: attract tick %" PRIu32 " refused\n", course, scene.ticks); return 1;
             }
+            if (actors_course != 99) nm_props_intro_step(&scene, math, &contact); /* code/practice.c */
             row(out, n++, course, phase);
-            clock_row(scene.object_clock + scene.ticks);
+            clock_row_of(scene.object_clock + scene.ticks, scene.ticks, &race, &scene, 1);
             if (scene.object_clock + scene.ticks == credit_counter) {
                 if (credit_phase != phase) { fprintf(stderr, "the credit at 5010b0 %" PRIu32 " is in phase %u, here %u\n", credit_counter, credit_phase, phase); return 1; }
                 if (!nm_frontend_game_start(&scene, math, &contact, &road, paths, &pool)) { fprintf(stderr, "course %u: game start refused\n", course); return 1; }
