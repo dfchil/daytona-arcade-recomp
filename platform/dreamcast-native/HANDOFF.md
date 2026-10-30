@@ -176,13 +176,12 @@ script (11,168 ticks) both match the host on every checkpoint row (260 and
 Step 2 of the plan is therefore done for course 0 with automatic
 transmission; next are the HUD and the front-end.
 
-Open: the original keeps each car's collision-tracking words (+0x28c..298,
-+0x27d, +0x2a4) from the scene that ran before the race (the course-select
-background scene); a cold native start zeroes them. It matters only when a
-car collides on the very tick it enters the 14-car window, but then the two
-sides choose different responses (seen at tick 1503 of the 9th-place run).
-Seeding those words from the reference makes that race bit-identical. The
-course-select scene will set them once it exists.
+The original keeps each car's collision-tracking words (+0x28c..298, +0x27d,
++0x2a4) from the scene that ran before the race; a cold native start zeroes
+them. It matters only when a car collides on the very tick it enters the
+14-car window, but then the two sides choose different responses (seen at tick
+1503 of the 9th-place run). The owner since 30 October is the pool
+(`include/frontend_pool.h`, "30 October: games one after another").
 
 Podium, from the reference: entry arms the graph and the cars spawn one tick
 later; after cleanup at timer 384 the original shows a static
@@ -242,6 +241,68 @@ music pack on `music-handoff` reproduces every delivered output, 2,174 of
 check, disk); on integrate2 the same, 2,174 of 2,174 rows
 (`build/dc-native-int2.recipe`, "16 October").
 `run_hw.sh` records video only with `VIDEO=1` (the disk filled up).
+
+### 30 October: games one after another (branch second-game)
+
+A second game after a race, and a game started from the title or the V.R. demo, are bit-exact with the original: one
+carried pool from power-on (`include/frontend_pool.h`, owned by `code/practice.c`), which every scene's exit fills and
+every scene's start reads, as the original's 44 entities, never cleared. `nm_attract_carry_t` and the cold pool are gone.
+
+- **How the list was made.** A local probe in the board's read and write paths (not committed: per byte of 500000..5fffff,
+  was the first access after the select's last iteration a read) and RAM snapshots per phase, for game 1 and game 2 of
+  one script, then the same from phase 29 to the next credit against power-on. Words read first and different between
+  the two runs are the candidates; each was then followed to its code. Reads that only feed a mask or an overwritten
+  value (+0, +30 at a grid reset, which keeps it only without a road hit) carry nothing. A word read first only on some
+  paths shows up only where a run takes the path (+260 on Advanced's standing start): for entity 0 the whole struct is
+  therefore kept and the entry's own writes applied (`nm_player_carried`), not a list.
+- **What is carried.** 5010b0 (`nm_practice_game_over`, then the name mode: phase 29's iteration plus one a frame of
+  phase 30). All entities, each scene's exit: +28c..+298, +27d, +2a4 (as before), +244 the neighbour 136e8 avoids
+  (`remembered`), +60, +6a (a race's rank: the opponents' first step reads it, 10e10, before the sort pass writes it), and of an entity the next
+  grid does not run, +1c, +24, +13e (136e8 measures the distance to it through +244: a smaller grid than the last one).
+  Entity 0 across a game: everything e20c and c7ec do not write (`nm_player_carried`): +194/+198, the wheels' surfaces
+  +1a8..+1b4 and heights 501100..50110c, +1f0, +22c, +248, +24c, +25c, +260, +264..+26c, +270 and the rest; c7ec writes
+  +148 and +215 (done in the start), the player's start c940 zeroes the masks +1ba..+1c0 in phase 2. +b0 is a 32-bit
+  word: the race's whole, then the cinematic's low half (caf4: -(profile +2) on every tick of d230). On a rolling start
+  the first tick rewrites it, off course 0 e93c filters from it, which is why a first game on Advanced needs it too.
+  Globals: 503680 the crash orientation (never reset, every scene's), 5010cc the race clock (stays through the attract;
+  15ae4 spins a car only above 1920, so a demo after a game differs from one before it), 5014ba, 501710. After a podium the
+  entities of its largest stage (40 on Beginner) hold its tracking words, not the race's; the rank key, lap and sort
+  lists stay the race's, and the podium scene starts with 503680 and 5010cc of the race (`nm_frontend_podium_start`).
+- **Not carried, on purpose.** The opponents' wheel phases +5a (drawn only). +138, +144 (phase 2 clears +144). +27e/+280/+284 the
+  height sample: `sampled_tick` stays "five ticks old" (a sample would have to be exactly 65536 iterations old to count).
+  501800.. and 501600.. (drawn), the sound queue, 53e5f0 and 53e600 (interrupt counters). 501884 and the other sound
+  words stay in their statics in `code/audio/race_sound.c`, but no lockstep compares a second game's sound yet.
+- **The game start on the demo and the title.** The credit's iteration in phase 7 is an ordinary demo tick (2028 -> 20bc,
+  before the timer and 2058, so the course stays); then phase 12 (the opponents run, the player's c9c4 takes only e078,
+  1210c) and phase 17 (objects off, 1210c once more): `nm_demo_game_start`. Phase 8 at a demo's natural end does the
+  same off-pass (`nm_demo_field_off`), and from then to phase 18 no entity word changes: a credit in the title needs no
+  game start at all (`NM_CREDIT_TITLE`).
+- **Two faults that were not carry.** The start signal object 504900 runs before the player 504e00 (the chain 1838 goes by
+  address), so ecc8 reads the rpm it has just revved: it ran after the cars here, wrong on any tick the accelerator moves
+  in a standing start. In the one-game traces that moves 8 `pitch` rows on Advanced and on Expert, to the reference's.
+  And `input.active.variant` was `ticks & 1` where 503690 is `5010b0 & 1`: same on an even counter base only.
+- **Harness.** `tests/game_chain.h`: `trace_race_native --leave` writes the pool and the counter, `trace_attract_native --enter
+  S --credit TRACE --leave S2` runs the attract after it (or from power-on) to the original's credit and the game start
+  on whichever scene it finds, `trace_race_native --enter S2 --frontend TRACE` the select and the race, so each process
+  has one course's packs. A name entry runs no scene there: its length comes from the F rows (with no record the count
+  must equal them). `tests/test_games_lockstep.py` chains that from power-on over `recipes/inputs/games-{A..J}.txt`
+  (step `games_lockstep`, CTest `native_games_lockstep`).
+- **Result.** 10 runs, 18 games: compare_race_trace --require-equal, every field of every car and the timeline (tracking
+  words included; `display` aside, as everywhere, and the rows sampled inside a pass at the race's load), and the attract
+  before each game, every tick, the demo included: 8 runs of two games: Beginner -> Beginner, Beginner -> Advanced manual,
+  Advanced -> Beginner, Expert -> Advanced, credits in the cinematic, ranking, demo and title, and Beginner to the podium
+  and a name entry -> Beginner; 2 first games from the title and the demo. The attract after a game with no credit:
+  8,274 of 8,274 rows over three loops (courses 2, 1, 0). One-game traces against 9da2e50: fast, manual, attract, front
+  end A and B byte-identical; E differs only in `str` of row 0 and Advanced and Expert only in those `pitch` rows, each
+  now the reference's value; checkpoint rows identical on all four. `test_frontend_lockstep.py` no longer skips `str`.
+- **Not run:** a console, and the step `games_lockstep` inside a whole recipe (a recipe held the lock): its body ran alone
+  on the delivered outputs, 13 minutes, 4 traces at a time. make check of the play ELF: 79 PASS + the 5 known FAIL lines;
+  heap 349,608 never taken, 703,520 free while racing. Hot layout 160 of 160 needed `nm_hud_tick` marked noinline: the
+  unit's other growth (the demo's game start, 4.6 KB of text) inlined it. The probe of the first point:
+  `build/dc-native-game2.work/probe.patch` (`M2_PROBE_DIR`, `M2_PROBE_FROM`, `_NEXT`, `_TO`; `M2_SNAP_DIR`).
+- **Open.** Time attack is still not native. A second game's sound commands are not compared (trace_race_native's sound
+  statics do not cross its processes). A `+244` link to an entity past a smaller grid is carried by reading 136e8 only: in
+  runs D and F no link pointed past the grid (D's one link at the race entry: entity 13 to 15).
 
 ### 30 October: the stream simulator (branch sim-net)
 
@@ -933,11 +994,9 @@ traces `ref/`, select art `sel/`), asset set `build/dc-native-frontend.assets` (
   34 banks, loaded at the select's start. `code/render/ui/select_render.c` draws by state; wipes, slide-in and
   palette fades are cut (same tick counts). `tests/test_select_render.py`: the host build of the renderer against
   the original's three screens, every pixel equal but the maps and the transmission screen's two cars.
-- **Not done:** the transmission screen's two turning cars (3D, car pack); the ranking overlay (phase 5) and the
-  V.R. demo race (phases 6/7: not native, so a credit there or in the title has no exact pool); the second game's
-  carried player state (a probe: the player's axle loads +194/+198 survive e20c; restoring them alone
-  makes a second game's race positions equal for 1500 ticks; plus entities 21-39 keep the previous race's words);
-  the counter after a game; time attack; courses 1/2 data.
+- **Not done:** the transmission screen's two turning cars (3D, car pack); the ranking overlay (phase 5); time attack;
+  courses 1/2 data. (The second game, the counter after a game and a credit in the demo or title: "30 October: games
+  one after another".)
 - make check of the play ELF: 75 PASS + the 5 known FAIL lines; heap 3,002,536 never taken / 3,290,960 free while
   racing. Not run on hardware.
 - Code placement (branch fe-merge): the unpinned LTO build moved 23 of 32 registration functions against

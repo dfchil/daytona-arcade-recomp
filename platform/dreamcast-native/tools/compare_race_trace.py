@@ -127,6 +127,8 @@ def events(rows, label, limit, start=0):
     """Decision milestones of one side, by its own row index."""
     out, previous = [], None
     for index, row in enumerate(rows, start):
+        if 0 not in row["C"]:   # --trace-attract's rows without cars (the title)
+            continue
         t, p = row["T"], row["C"][0]
         state = (t["phase"], t["active"], p.get("lap"), p.get("done"), t.get("rolling", "?"), t.get("normal", "?"), int(t["clock"]) > 0)
         if previous is not None and state != previous:

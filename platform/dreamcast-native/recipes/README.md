@@ -223,6 +223,7 @@ fast race in order.
 | `inputs/inputs-advanced-timeout.txt` | Advanced (slot 2): the menu of `recipes/inputs/course_advanced.txt` (steering 0xa0 held through the accelerator confirm), then full accelerator and steering 0x98 to the time-out and the results (8000 frames; the reference of the step `course2_lockstep`) |
 | `inputs/inputs-damage-{A,C,E,F,G,H}.txt` | the fast race's script to frame 3149, then steering/braking into the walls and against the traffic to frame 7600 (time up in lap 1): the original's runs of `tests/test_damage_lockstep.py` (`m2segment ROM 7600 --inputs ... --trace-race reference-damage-X.trace`) |
 | `inputs/frontend-{A,B,C,D,E}.txt` | credits at different points of the cinematic attract and different course/transmission choices, timeouts and confirms: the original's runs of `tests/test_frontend_lockstep.py` (`m2segment ROM N --inputs ... --trace-frontend frontend-X.trace --trace-race race-X.trace`; A, B, E with a race) |
+| `inputs/games-{A..J}.txt` | a game started in the title or the V.R. demo, and two games on the same or another course, with the credit in the cinematic, the ranking overlay, the demo or the title, one after a podium and a name entry: the original's runs of `tests/test_games_lockstep.py` (`m2segment ROM N --inputs ... --trace-frontend frontend-X.trace --trace-race race-X.trace --trace-attract`) |
 | `expected.sha256` | sha256 of the asset sets and headers as delivered on 14 October 2026 (assets-ssfar4cf3 added that night, assets-ssfar4cf3r, assets-ssfar4e, assets-ssfar4eu and assets-ssfar4f on 15 October; car-damage.dnb and the music/ rows of every set that night) |
 | `music-expected.sha256` | sha256 of the default outputs of `build_music.sh` (AICAflow c6b116dd and f448121, AICAforge e77de852) |
 
@@ -381,6 +382,12 @@ The attract loop over the three courses (18 October):
                                                        (fails on any difference in a car, the camera key tick,
                                                        the cells, the scene light or the view beyond 0.25 units but
                                                        what the V.R. demo before leaves: not native, listed apart)
+
+Games one after another (30 October; the step games_lockstep, no output):
+  M N inputs/games-X.txt --trace-frontend --trace-race --trace-attract -> frontend-X.trace, race-X.trace (deleted after use)
+  tests/test_games_lockstep.py: for each game of a run, from power-on, trace_attract_native (--enter, --credit, --leave),
+  trace_race_native (--enter, --frontend, --leave), compare_race_trace --require-equal, every field of every car and
+  test_attract_lockstep.py                             (fails on any difference; tests/game_chain.h)
 ```
 
 ## Where the historical intermediates differ

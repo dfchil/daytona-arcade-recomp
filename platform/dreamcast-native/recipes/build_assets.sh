@@ -819,6 +819,31 @@ attract_2d() {
   rm -rf $d
 }
 step attract_2d attract_2d
+DESC_games_lockstep="games lockstep: the original's runs of two games and of games from the demo and the title (inputs/games-A..J), each game through trace_attract_native and trace_race_native chained, every car on every row, tracking words included"
+games_lockstep() {
+  local d=$W/games x n i=0
+  fresh $d; mkdir -p $d/assets $d/traces
+  cc -std=c11 -O2 -fno-fast-math -ffp-contract=off -I$DN/include -I$W/intro -I$HD/intent-data -I$HD/race-start-data \
+     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_race_native.c $DN/code/{drive,contact,road,path,visibility,props,props_scene,expert_actors}.c -lm \
+     -o $d/trace_race_native
+  cc -std=c11 -O2 -fno-fast-math -ffp-contract=off -I$DN/include -I$W/intro -I$HD/intent-data -I$HD/race-start-data \
+     -I$HD/record-data -I$HD/podium-data $DN/tests/trace_attract_native.c $DN/code/{drive,contact,road,path,visibility}.c -lm \
+     -o $d/trace_attract_native
+  ln -s $P/drive.dnd $P/course0.dn[cr] $P/course0-route*.dnp $P/scenery.dnv $P2/course2.dn[crv] $P2/course2-route*.dnp \
+     $P1/course1.dn[crv] $P1/course1-route*.dnp $d/assets/
+  for x in A B C D E F G H I J; do
+    n=$(awk '$1=="frames" { print $2; exit }' $RC/inputs/games-$x.txt)
+    $M $R $n --inputs $RC/inputs/games-$x.txt --trace-frontend $d/traces/frontend-$x.trace --trace-race $d/traces/race-$x.trace \
+       --trace-attract > $d/traces/$x.log 2>&1 &
+    (( (++i)%JOBS )) || wait
+  done
+  wait
+  for x in A B C D E F G H I J; do [[ -s $d/traces/race-$x.trace ]] || { print -r -- "no reference of games-$x"; return 1; }; done
+  python3 -I $DN/tests/test_games_lockstep.py $d/trace_race_native $d/trace_attract_native $d/assets $d/traces > $d/compare.txt || { tail -20 $d/compare.txt; return 1; }
+  tail -19 $d/compare.txt
+  fresh $d/traces
+}
+step games_lockstep games_lockstep
 if (( ! KEEP )); then rm -rf $X/attract-2d; fi
 if (( ! KEEP )); then rm -rf $X/hud-trace $X/hud-trace2 $X/hud-trace1 $X/race.trace $X/race.sound $X/reference-manual.trace $X/reference-manual.sound $X/race-advanced.trace $X/race-expert.trace $X/race-advanced-finish.trace $X/race-expert-finish.trace $X/clock-advanced.txt $X/clock-advanced-finish.txt $X/clock-expert.txt $X/clock-expert-finish.txt $X/attract.trace $X/clock-attract.txt; fi
 

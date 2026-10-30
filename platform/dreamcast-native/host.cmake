@@ -240,6 +240,20 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
                 $<TARGET_FILE:trace_frontend_native> $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS}
                 "${NATIVE_FRONTEND_TEST_TRACES}")
     set_tests_properties(native_frontend_lockstep PROPERTIES SKIP_RETURN_CODE 77)
+    # Games one after another (tests/test_games_lockstep.py, include/frontend_pool.h): the scenes chained through
+    # trace_attract_native and trace_race_native against the original's runs of recipes/inputs/games-X.txt
+    # (frontend-X.trace, race-X.trace: m2segment --trace-frontend --trace-race --trace-attract).
+    set(NATIVE_GAMES_TEST_TRACES "" CACHE STRING "Dirs with frontend-X.trace and race-X.trace of games-X.txt (';')")
+    add_executable(trace_attract_native ${DN}/tests/trace_attract_native.c ${DN}/code/drive.c
+        ${DN}/code/contact.c ${DN}/code/road.c ${DN}/code/path.c ${DN}/code/visibility.c)
+    native_c_target(trace_attract_native)
+    target_include_directories(trace_attract_native PRIVATE ${NATIVE_SLOT_TEST_INCLUDES})
+    target_compile_options(trace_attract_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)
+    add_test(NAME native_games_lockstep
+        COMMAND Python3::Interpreter ${DN}/tests/test_games_lockstep.py
+                $<TARGET_FILE:trace_race_native> $<TARGET_FILE:trace_attract_native> ${NATIVE_SLOT_TEST_ASSETS}
+                "${NATIVE_GAMES_TEST_TRACES}")
+    set_tests_properties(native_games_lockstep PROPERTIES SKIP_RETURN_CODE 77)
     # Live-play edge states (tests/test_negative_speed_lockstep.py): a negative speed index (the drag words before
     # and after the tables, NaN included) and the yaw step's cvtri overflow, against the original's runs in
     # NATIVE_NEGSPEED_TEST_TRACES (m2segment --trace-race, the speed written by M2_POKE_ROW/M2_POKE_SPEED).
