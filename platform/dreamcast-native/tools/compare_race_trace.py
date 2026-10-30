@@ -27,6 +27,10 @@ trace prints the race field). Reference rows of frames in which the board's
 logic did not run (the loads after the race) are dropped first. The podium
 camera is reported, not checked: its largest view-matrix difference.
 
+--view-limit U (with --require-equal) also checks the view matrix 501560 of the race rows (phases 20..24) under the
+follow and in-car views (camera mode 0, 2) and the crash camera (mode 1, 501713 = 0), within U a word: the keyed
+start and pit tracks and the rows the evidence rule below accepts are left out.
+
 Two kinds of reference rows hold no state of a whole logic pass, and --require-equal
 accepts them only on that evidence (counted and listed apart):
   mid-pass: the board's frame ended inside a pass (the start's scene loads, the
@@ -154,6 +158,7 @@ def main():
     parser.add_argument("--require-equal", action="store_true", help="exit 1 unless timeline and every car agree")
     parser.add_argument("--skip-rows", default="", help="native rows the check skips (comma-separated)")
     parser.add_argument("--podium", action="store_true", help="with --require-equal: the race ends on the podium")
+    parser.add_argument("--view-limit", type=float, help="with --require-equal: largest view word difference on race rows")
     args = parser.parse_args()
     ref_header, ref = parse(args.reference)
     nat_header, nat = parse(args.native)
@@ -320,6 +325,7 @@ def main():
         bad = []
         kinds = {"race": 0, "podium": 0, "timeline": 0}
         podium, view_worst = False, (0.0, None)
+        race_view_rows, race_view_worst = 0, (0.0, None)
         explained = {"mid-pass": [], "caught-up stall": []}
 
         def differs(a, b, keys, timeline, kind):
@@ -374,6 +380,13 @@ def main():
                     bad.append(i)
             if view is not None and not why:   # a row without a whole pass shows the camera of the pass before
                 view_worst = max(view_worst, (view, i), key=lambda v: v[0])
+            if args.view_limit is not None and kind == "race" and not why and 20 <= int(b["T"]["active"]) <= 24 and \
+                    "view" in a["T"] and "view" in b["T"] and (a["T"].get("camera") != "1" or a["T"].get("ctr") == "0"):
+                worst = max(abs(number("x", x) - number("x", y)) for x, y in zip(a["T"]["view"].split("."), b["T"]["view"].split(".")))
+                race_view_rows += 1
+                race_view_worst = max(race_view_worst, (worst, i), key=lambda v: v[0])
+                if worst > args.view_limit:
+                    bad.append(i)
         for why, rows in explained.items():
             if rows:
                 print(f"\n{why} reference rows (accepted on their evidence): {len(rows)}, native rows {rows}")
@@ -384,6 +397,8 @@ def main():
             print(f"\npodium: {kinds['race']} race rows, {kinds['podium']} podium rows (cars compared), {kinds['timeline']} rows timeline"
                   f" only (entry, stage setups, results); podium camera: largest view difference {view_worst[0]:.4g}"
                   f" (native row {view_worst[1]})")
+        if args.view_limit is not None:
+            print(f"\nrace views: {race_view_rows} rows, largest view difference {race_view_worst[0]:.4g} (native row {race_view_worst[1]})")
         print(f"\nrequire-equal: {len(pairs) - len(skip & set(range(len(pairs))))} rows, {len(nat[0]['C'])} cars: {verdict}")
         return 1 if bad else 0
     return 0

@@ -78,6 +78,24 @@ static inline float nm_race_view_eye_z(float z,unsigned view,int16_t spin) {
     return nm_force_float(nm_force_bits(scaled)^UINT32_C(0x80000000));
 }
 
+/* 69b4..6a8c, after 6938, for every camera mode: off course 0 (501460), in all views but VR4 (501710 = 3), a camera
+ * entity pitch +28 of -546 or less turns the eye about x by pitch + 546, clamped at -1092 (1d/1e: the sine table, TGP 1
+ * and 0 for the sums). +28 is half the ground pitch in modes 0 and 2 (6598), the full one under the crash camera (669c)
+ * and 0 under the start and pit tracks (667c, 501713 = 1). The source turns the negated words r5, r6 and keeps them in
+ * registers: +b8, +bc and the scenery anchor keep the unturned eye. Returns 1 when it turned. */
+static inline int nm_race_view_eye_turn(const nm_drive_params_t *p,unsigned course,unsigned view,int16_t pitch,float eye[3]) {
+    if(!course || view==3 || pitch>-546) return 0;
+    const int32_t angle=pitch+546<-1092 ? -1092 : pitch+546;
+    const float sine=nm_drive_sine(p,(uint16_t)angle),cosine=nm_drive_sine(p,(uint16_t)(angle+16384));
+    const float r5=nm_force_float(nm_force_bits(eye[1])^UINT32_C(0x80000000));
+    const float r6=nm_force_float(nm_force_bits(eye[2])^UINT32_C(0x80000000));
+    const float g0=cosine*r6,g1=sine*r5,g2=sine*r6,g3=cosine*r5;
+    const float y=g3+g2,z=g0-g1;
+    eye[1]=nm_force_float(nm_force_bits(y)^UINT32_C(0x80000000));
+    eye[2]=nm_force_float(nm_force_bits(z)^UINT32_C(0x80000000));
+    return 1;
+}
+
 /* The camera entity's angles and heading in modes 0 and 2 (6518..6590): mode 0 the body yaw +2a, mode 2 the drawn
  * yaw +4e, each plus +ee and the shake 501834; the heading 5014a8 adds +d6 in mode 2. Pitch is the ground
  * pitch shifted right once, roll the ground roll. */
@@ -92,10 +110,10 @@ static inline int nm_race_view_angles(const nm_player_t *car,int16_t angles[3],i
     return 1;
 }
 
-/* 6510..6b58 in modes 0 and 2 for the selected view (course 0: 69b4 skips the pitch-dependent eye turn of the
- * other courses): Rz Rx Ry(501738..) T(-eye) [Ry(-+d6) in mode 2 with +d6 nonzero, 6b90..6bb0] Rz Rx Ry(-angles)
- * T(-position), with the live eye words and angles. Mode 0 in view 2 is nm_follow_view. */
-static inline int nm_race_view_camera(const nm_drive_params_t *p,const nm_player_t *car,unsigned view,
+/* 6510..6b58 in modes 0 and 2 for the selected view: Rz Rx Ry(501738..) T(-eye) [Ry(-+d6) in mode 2 with +d6 nonzero,
+ * 6b90..6bb0] Rz Rx Ry(-angles) T(-position), with the live eye words (6938, 69b4) and angles. Mode 0 in view 2 is
+ * nm_follow_view on course 0 and off it above the turn's pitch. */
+static inline int nm_race_view_camera(const nm_drive_params_t *p,const nm_player_t *car,unsigned course,unsigned view,
         float out[12],int16_t *heading) {
     if(!p || !car || !out || !heading || view>3) return 0;
     int16_t angles[3],yaw;
@@ -103,6 +121,7 @@ static inline int nm_race_view_camera(const nm_drive_params_t *p,const nm_player
     float eye[3];
     for(unsigned a=0;a<3;++a) eye[a]=nm_force_float(car->camera_words[a]);
     eye[2]=nm_race_view_eye_z(eye[2],view,car->inhibit_angle);
+    (void)nm_race_view_eye_turn(p,course,view,angles[0],eye);
     const int16_t spin=car->camera_mode==2 ? car->inhibit_angle : 0;
     if(!nm_car_relative_view_spin(p,car->boundary.ground.position,angles,spin,eye,car->camera_angles,out)) return 0;
     *heading=yaw;return 1;

@@ -722,7 +722,7 @@ course2_lockstep() {
      production --course 2 --counter-base auto --script-header $HD/script-advanced/race_script_data.h \
      --checkpoints $W/script-advanced/expected-checkpoints-advanced.txt --clock $W/script-advanced/clock-native.txt
   python3 $T/compare_race_trace.py $X/race-advanced.trace $W/script-advanced/native.trace --first $first --require-equal \
-     --skip-rows 0,1 > $W/script-advanced/compare.txt
+     --skip-rows 0,1 --view-limit 0.001 > $W/script-advanced/compare.txt
   tail -1 $W/script-advanced/compare.txt
   # The frame-counter animations as the native draws them against the original's draws, every tick.
   python3 -I $DN/tests/test_clock_lockstep.py $G2/sources/clock.json $W/script-advanced/clock-native.txt $X/clock-advanced.txt
@@ -745,7 +745,7 @@ course1_lockstep() {
      production --course 1 --counter-base auto --script-header $HD/script-expert/race_script_data.h \
      --checkpoints $W/script-expert/expected-checkpoints-expert.txt --clock $W/script-expert/clock-native.txt
   python3 $T/compare_race_trace.py $X/race-expert.trace $W/script-expert/native.trace --first $first --require-equal \
-     --skip-rows 0,1 > $W/script-expert/compare.txt
+     --skip-rows 0,1 --view-limit 0.001 > $W/script-expert/compare.txt
   tail -1 $W/script-expert/compare.txt
   # Expert's world actors as the native draws them against the original's draws and matrices, every tick.
   python3 -I $DN/tests/test_expert_lockstep.py $G1/sources/clock.json $W/script-expert/clock-native.txt $X/clock-expert.txt
@@ -769,7 +769,7 @@ course_finish() {
   local clock=(); [[ -n $clocks ]] && { ln -s $clocks:h:h/packs/course$slot-actors.dna $d/assets/; clock=(--clock $d/clock-native.txt); }
   $d/trace_race_native $d/assets $trace $d/native.trace $first 18000 production --course $slot --counter-base auto \
      --script-header $HD/script-$name/race_script_data.h --checkpoints $d/expected-checkpoints-$name.txt $clock
-  python3 $T/compare_race_trace.py $trace $d/native.trace --first $first --require-equal --podium --skip-rows 0,1 > $d/compare.txt
+  python3 $T/compare_race_trace.py $trace $d/native.trace --first $first --require-equal --podium --skip-rows 0,1 --view-limit 0.001 > $d/compare.txt
   grep -E '^(podium|require-equal):' $d/compare.txt
   # The frame-counter animations (Advanced) or Expert's world actors against the original's draws, race, podium
   # and results.

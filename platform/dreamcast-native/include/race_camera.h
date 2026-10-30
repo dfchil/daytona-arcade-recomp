@@ -32,18 +32,19 @@ static inline const char *nm_race_camera_pass(nm_race_scene_t *race,nm_intro_sce
     nm_player_t *player=&race->cars[0].car;
     float origin[2];uint16_t cell;nm_scenery_cells_t next;
     if(race->camera_restart) { pr->camera_cursor=(nm_intro_cursor_t){0};race->camera_restart=0; }
-    /* The driver's view scales the eye's forward offset in the keyed modes too (6938, nm_race_view_eye_z). */
+    /* The driver's view scales the eye's forward offset in the keyed modes too (6938, nm_race_view_eye_z); the crash
+     * camera turns it with the car's pitch as well (69b4, nm_race_view_eye_turn), the start and pit tracks hold +28 at 0. */
     const int pulled=race->view==0 && player->inhibit_angle;
     if(player->camera_mode==1 && !player->camera_transition) {
         /* Crash camera (5c14): car-relative keys until 637c restores the view. */
         if(!nm_race_crash_camera(player,math,scenery,cams->crash_keys,cams->crash_times,cams->crash_count,
             &pr->camera_cursor,&pr->camera,pr->view,&pr->heading,&pr->sky_scroll,&next)) return "crash camera";
-        if(pulled) {
+        const nm_wheels_state_t *g=&player->boundary.ground;
+        float eye[3]={pr->camera.position[0],pr->camera.position[1],pr->camera.position[2]};
+        eye[2]=nm_race_view_eye_z(eye[2],race->view,player->inhibit_angle);
+        if(nm_race_view_eye_turn(math,race->course,race->view,g->pitch,eye) || pulled) {
             int16_t authored[3];
-            const nm_wheels_state_t *g=&player->boundary.ground;
             const int16_t angles[3]={g->pitch,player->body_yaw,g->roll};
-            float eye[3]={pr->camera.position[0],pr->camera.position[1],pr->camera.position[2]};
-            eye[2]=nm_race_view_eye_z(eye[2],0,player->inhibit_angle);
             if(!nm_intro_camera_angles(math,&pr->camera,authored) ||
                !nm_car_relative_view(math,g->position,angles,eye,authored,pr->view)) return "crash camera eye";
         }
@@ -58,7 +59,7 @@ static inline const char *nm_race_camera_pass(nm_race_scene_t *race,nm_intro_sce
             if(!nm_intro_camera_view(math,&camera,pr->view,&heading,NULL)) return "start camera eye";
         }
     } else {
-        if(!nm_race_view_camera(math,player,race->view,pr->view,&pr->heading)) return "view";
+        if(!nm_race_view_camera(math,player,race->course,race->view,pr->view,&pr->heading)) return "view";
         if(!nm_race_view_scenery_origin(math,player,pr->heading,origin,&cell)) return "scenery origin";
         if(!nm_scenery_select(scenery,math,cell,(uint16_t)player->phase[0],
             origin[0],origin[1],pr->heading,&next)) return "scenery select";
