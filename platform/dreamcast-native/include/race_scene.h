@@ -315,6 +315,10 @@ static inline int nm_race_scene_step(nm_race_scene_t *s,const nm_drive_params_t 
     tick.active.input_counter=nm_gears_signed(s->award.remaining);
     s->shared.tick=(uint16_t)s->ticks;
     const uint32_t keyed=s->cars[0].car.auxiliary_flags>>31;
+    /* The object chain 1838 runs in address order: the start signal 504900 before the player 504e00, so the drive
+     * term ecc8 of the same tick reads the rpm it has just revved. */
+    if(s->active_phase==20 && !nm_race_start_signal(math,&s->cars[0].car,s->start_timer,s->start_stage,
+           s->cars[0].car.checkpoints.total_laps,input->active.controls.accel,restored,preset)) return 0;
     s->stage=NM_RACE_STAGE_MOVEMENT;
     if(!nm_race_movement_step(s->cars,s->count,&s->shared,s->rolling,&s->start_flags,
         math,speed,contact,road,paths,&tick,&s->award,marks,mark_capacity,rows,row_count)) return 0;
@@ -327,8 +331,6 @@ static inline int nm_race_scene_step(nm_race_scene_t *s,const nm_drive_params_t 
         &s->collisions,math,road,tick.award.penalty,collision_phase,record_flags,tick.active.dynamics.curve)) return 0;
     crash|=s->cars[0].car.boundary.damage.auxiliary_request|
         (!keyed && (s->cars[0].car.auxiliary_flags>>31));
-    if(s->active_phase==20 && !nm_race_start_signal(math,&s->cars[0].car,s->start_timer,s->start_stage,
-           s->cars[0].car.checkpoints.total_laps,input->active.controls.accel,restored,preset)) return 0;
     if(s->shared.pit.camera_arm) {
         /* The aux object 501270 runs in this tick's camera pass (row 58, after the interactions): 5af8 set
          * by the pit entry dc44 this tick, or 5b20 set by the crew's first standing tick (1b00c) the tick
