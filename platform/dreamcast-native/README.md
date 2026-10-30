@@ -159,7 +159,9 @@ define (`native_runtime`, `native_refcore`), so `runtime` and the tests that use
 it are the same with the option on or off.
 
 Developed on macOS with Clang; the recipes need `zsh`, and the tests call `cc`
-with GCC-style flags. MSVC is not a host for this: `include/geometry.h` and the
+with GCC-style flags. GCC builds and passes everything but `m2segment`: as C++ it
+refuses the out-of-order designated initializer at `include/pit.h:327`, so the
+recipe needs Clang. MSVC is not a host for this: `include/geometry.h` and the
 tests use GCC and Clang attributes.
 
 ## Running
