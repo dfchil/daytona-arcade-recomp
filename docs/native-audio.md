@@ -120,13 +120,13 @@ and the GPU22 device-log findings.
 ## Dreamcast: sound effects (AICAflow)
 
 The Dreamcast-native port does not run this backend. Its music is the
-recordings of `dreamcast-native/recipes/build_music.sh`; its effects and voices
-are prepared offline by `dreamcast-native/recipes/build_sfx.sh` with this
-backend's sequencer: `dreamcast-native/tools/prepare_sfx.cpp` plays each
+recordings of `platform/dreamcast-native/recipes/build_music.sh`; its effects and voices
+are prepared offline by `platform/dreamcast-native/recipes/build_sfx.sh` with this
+backend's sequencer: `platform/dreamcast-native/tools/prepare_sfx.cpp` plays each
 effect command into a MultiPCM VGM for AICAforge's `afx_vgm`, which needs the
 driver's register values, so `VoiceEvent` carries them (`rate_code`, `level`,
 `pan_code`) and `tracks_idle()` tells when a sequence is over. Desktop and Vita
-behaviour is unchanged. Playback on the console: `dreamcast-native/include/audio/sfx.h`;
+behaviour is unchanged. Playback on the console: `platform/dreamcast-native/include/audio/sfx.h`;
 the commands the native game derives from gameplay state:
-`dreamcast-native/include/race_sound.h`; how they are checked against the
-original: `dreamcast-native/recipes/README.md`, "Sound effects".
+`platform/dreamcast-native/include/race_sound.h`; how they are checked against the
+original: `platform/dreamcast-native/recipes/README.md`, "Sound effects".

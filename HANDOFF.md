@@ -2,14 +2,14 @@
 
 ## The native Dreamcast port added (28 October 2026)
 
-`dreamcast-native/` is added on top of upstream main as a second Dreamcast
+`platform/dreamcast-native/` is added on top of upstream main as a second Dreamcast
 port, next to `platform/dreamcast`. The gameplay is reimplemented in C and
 checked against this repository's recompiled game (`tools/m2segment`), the
 renderer is PVR-native, and the assets are converted from the user's
-`daytona93` set at build time (`dreamcast-native/recipes/build_assets.sh`).
-Its entry point is `dreamcast-native/README.md`, and its engineering state is
-`dreamcast-native/HANDOFF.md`. The history of that work is
-`dreamcast-native/HISTORY.md`.
+`daytona93` set at build time (`platform/dreamcast-native/recipes/build_assets.sh`).
+Its entry point is `platform/dreamcast-native/README.md`, and its engineering state is
+`platform/dreamcast-native/HANDOFF.md`. The history of that work is
+`platform/dreamcast-native/HISTORY.md`.
 
 - The four host-side headers the converters share with the tests
   (`material_pack.hpp`, `pvr_geometry.hpp`, `system24.hpp`,

@@ -211,12 +211,12 @@ Vendored checkouts live in git-ignored `extern/` and are never committed.
 
 | Component | Upstream | Commit | Licence | Use | Changes |
 | --- | --- | --- | --- | --- | --- |
-| enDjinn | https://github.com/dfchil/enDjinn | `725f8b192c18ba56298eca1b5eaf8abc216e67be` (origin main, 28 October 2026), fetched into `extern/endjinn` by `scripts/fetch_endjinn.sh`; `dreamcast-native/Makefile` and `recipes/build_assets.sh` use it unless `ENDJINN_ROOT` names another checkout | MIT | Dreamcast frontend framework: initialization, mode/update loop, input, PVR lists, quick font, `base_link.mk`/`environ.sh` build integration and build-time asset tools. Linked into the native ELF (`libenDjinn.a`). | None. |
+| enDjinn | https://github.com/dfchil/enDjinn | `725f8b192c18ba56298eca1b5eaf8abc216e67be` (origin main, 28 October 2026), fetched into `extern/endjinn` by `scripts/fetch_endjinn.sh`; `platform/dreamcast-native/Makefile` and `recipes/build_assets.sh` use it unless `ENDJINN_ROOT` names another checkout | MIT | Dreamcast frontend framework: initialization, mode/update loop, input, PVR lists, quick font, `base_link.mk`/`environ.sh` build integration and build-time asset tools. Linked into the native ELF (`libenDjinn.a`). | None. |
 | SH4ZAM | https://github.com/gyrovorbis/sh4zam | `0fd3a1e1fa0809d33198c062632b1494ec2f57df` (v0.9.0), fetched into `extern/sh4zam` and built there (`lib/libsh4zam.a`) by `scripts/fetch_sh4zam.sh` | MIT | Linked into the native ELF for presentation math (transforms, lighting, clipping) and the `nm_mem` copy/fill dispatchers; not used for gameplay-visible results, which stay exact. `NATIVE_SH4ZAM_ROOT=` links KOS's installed copy instead. | None. |
 | KallistiOS | https://github.com/KallistiOS/KallistiOS | `368a2eb9584a7d130a6e77e299468c0b64fa1a9f` (the installed tree the port is built and measured with) | KOS License (BSD-3-Clause; bundled tools/components have their own licenses) | SH-4 toolchain integration and Dreamcast runtime, PVR, Maple input and loader/fileserver support. | None by this project. |
 | AICAflow | https://github.com/dfchil/aicaflow | `f4481210a8a9fa8248a74b6e6e56da38c0df5c61` (origin main, 16 October 2026; firmware ABI 8), fetched into `extern/aicaflow` by `scripts/fetch_aicaflow.sh` | MIT | Dreamcast AICA audio runtime: SH4 library `driver/sh4/libaicaflow_host.a`, checked-in ARM7 firmware `firmware/aicaflow.drv` (sha256 matches its `manifest.json`), host validator `driver/build/afx_validate` used by `recipes/build_music.sh`. Linked into the native ELF (`include/audio/sound.h`), firmware embedded; KOS's own sound startup is wrapped away. It takes the AICA's SH4 interrupt (`ASIC_EVT_SPU_IRQ`) for the firmware's status reports; nothing else may hook it. | None. Its `dependencies/enDjinn` submodule is not initialised; the port uses its own enDjinn. |
-| AICAforge | https://github.com/dfchil/AICAforge | `e77de85282035a679887f3166cf7caf6a0d61b16` (origin main and AICAflow's pin), at `extern/aicaflow/dependencies/AICAforge`, initialised and pinned by `scripts/fetch_aicaflow.sh`; its own AICAflow SDK pin `53c464db213066d95fd9fd4390e2737e193a4c5f` | MIT | Host authoring tools; `afx_vgm` converts the MultiPCM VGZ logs below into AFB/AFX/AFC/AFV, and the effect VGMs of `dreamcast-native/tools/prepare_sfx.cpp` (`recipes/build_sfx.sh`); `afx_bank --merge` makes the effect bank. Invoked locally, not linked into any target. `prepare_sfx.cpp` links AICAflow's `driver/format/src/codec.c` (MIT) and restates `afx_vgm.c`'s MultiPCM-to-AICA formulas (`source_pitch`, `source_pan`, `source_mix`) so its engine tables agree with the flows. | None. |
-| vgmrips "Daytona USA (Sega Model 2)" pack | https://vgmrips.net/packs/pack/daytona-usa-sega-model-2 | Archive sha256 `ac086fd5a246a9cfc125374dd43084d35e0d79dd7ef837b0bdf04784035234a2` (13,639,027 bytes) | Game-derived: Sega's music and MultiPCM samples, logged by vgmrips. Not redistributable by this project. | User-supplied input of `recipes/build_music.sh` (downloaded in a browser, like the ROM set) and of `dreamcast-native/tools/check_music_map.py`. Outputs stay in ignored `build/`; only their sha256 are committed (`recipes/music-expected.sha256`). | None. |
+| AICAforge | https://github.com/dfchil/AICAforge | `e77de85282035a679887f3166cf7caf6a0d61b16` (origin main and AICAflow's pin), at `extern/aicaflow/dependencies/AICAforge`, initialised and pinned by `scripts/fetch_aicaflow.sh`; its own AICAflow SDK pin `53c464db213066d95fd9fd4390e2737e193a4c5f` | MIT | Host authoring tools; `afx_vgm` converts the MultiPCM VGZ logs below into AFB/AFX/AFC/AFV, and the effect VGMs of `platform/dreamcast-native/tools/prepare_sfx.cpp` (`recipes/build_sfx.sh`); `afx_bank --merge` makes the effect bank. Invoked locally, not linked into any target. `prepare_sfx.cpp` links AICAflow's `driver/format/src/codec.c` (MIT) and restates `afx_vgm.c`'s MultiPCM-to-AICA formulas (`source_pitch`, `source_pan`, `source_mix`) so its engine tables agree with the flows. | None. |
+| vgmrips "Daytona USA (Sega Model 2)" pack | https://vgmrips.net/packs/pack/daytona-usa-sega-model-2 | Archive sha256 `ac086fd5a246a9cfc125374dd43084d35e0d79dd7ef837b0bdf04784035234a2` (13,639,027 bytes) | Game-derived: Sega's music and MultiPCM samples, logged by vgmrips. Not redistributable by this project. | User-supplied input of `recipes/build_music.sh` (downloaded in a browser, like the ROM set) and of `platform/dreamcast-native/tools/check_music_map.py`. Outputs stay in ignored `build/`; only their sha256 are committed (`recipes/music-expected.sha256`). | None. |
 | pvrtex (host tool, `utils/pvrtex` of the installed KOS tree) | https://github.com/KallistiOS/KallistiOS/tree/master/utils/pvrtex | KOS tree at `368a2eb9584a7d130a6e77e299468c0b64fa1a9f` (pvrtex 2.00, last changed in 833c4c3d) | LGPL: its README says it uses FFmpeg code (LGPL) and so is LGPL as a whole, and that files not from FFmpeg may also be used as public domain/BSD/MIT. The FFmpeg-derived files (`elbg.c`, `avstring.c`, `mem.c`, `log.c`, ...) carry LGPL-2.1-or-later headers; the stb headers are MIT/public domain. KOS's `doc/LICENSE.md` says utils carry their own licences. | Invoked at build time (`recipes/build_assets.sh`, found on PATH after sourcing enDjinn's `environ.sh`) for twiddled/VQ texture encoding and previews. Not linked, copied or distributed; only its output (from the user's ROM) is used, and that stays in ignored `build/`. | None. |
 | Pillow (already-installed host package) | https://github.com/python-pillow/Pillow | Installed 12.2.0 | MIT-CMU | Optional `check_materials.py --previews` PNG reading to cross-check actual decoded VQ bytes. Not needed by the default checker, ROM-free tests or Dreamcast target. | None. |
 | Intel 80960KB Programmer's Reference Manual | https://www.arithmazium.org/classroom/lib/Intel_80960KB_Programmers_Reference_Manual_Mar88.pdf | March1988; archived PDF SHA256 `5ffd02f50251498875766421e484bf9451b70c2b4b3dab6cea63027200b1fbbd` | Intel copyrighted public documentation; read only | Pages12-23 and11-50, visually checked for masked NaN conversion and distinct magnitude-overflow behavior. | No copied manual text or distributed PDF; analysis and native implementation are our own. |
@@ -263,19 +263,19 @@ BSD-3-Clause (`LICENSE`).
 
 ## Shader compilers (tools only)
 
-The native drive helper `dreamcast-native/include/drive.h` adapts the sine-table
+The native drive helper `platform/dreamcast-native/include/drive.h` adapts the sine-table
 quadrant lookup from `src/runtime/tgp.cpp`, following the MAME TGP I/O row
 above (same pinned commit and BSD-3-Clause holders). It reads one bounded
 quarter-wave table directly, retaining reflection, endpoint clamp and sign
 bits; no TGP program, bus, register state or scheduling is imported.
 `prepare_drive.py` uses the same reciprocal-port exponent/index semantics to
 precompute the fixed divisor2000's refined reciprocal from the owned table ROM.
-`dreamcast-native/include/force_math.h` also adapts that row's reciprocal,
+`platform/dreamcast-native/include/force_math.h` also adapts that row's reciprocal,
 inverse-square-root and arctangent table indexing/exponent/quadrant semantics
 into pure vehicle math functions. No register file, FIFO, dispatcher, program
 or instruction execution is imported; BSD-3 holders and pinned provenance
 remain the same.
-`dreamcast-native/include/tires.h` reuses those existing math functions for the
+`platform/dreamcast-native/include/tires.h` reuses those existing math functions for the
 locally analysed tire-response operation; no additional third-party code or
 target TGP runtime is introduced. Its three coefficients are extracted only
 into the user's ignored DND7 pack, never embedded in source.
@@ -349,24 +349,24 @@ codebook pixels are retained, and original VQ loss is not claimed removed.
 The optional native framebuffer comparison calls KOS's existing
 `vid_screen_shot_data` API; no screenshot implementation is copied or modified.
 
-The native source-mesh extractor (`dreamcast-native/tools/export_models.hpp`)
+The native source-mesh extractor (`platform/dreamcast-native/tools/export_models.hpp`)
 follows the geometrizer row above for object point order, strip linking,
 texture addresses/header deltas and the transform oracle. BSD-3-Clause
 attribution is retained. The optional host observer leaves the reference
 pipeline intact; no geometrizer runtime is linked into the native DC target.
-The complete scenery-table exporter (`dreamcast-native/tools/export_course.hpp`)
+The complete scenery-table exporter (`platform/dreamcast-native/tools/export_course.hpp`)
 reuses that decoder and an isolated `Geo` inspection snapshot. Its new host entry
 point copies mutable state and borrows ROM storage; it invokes the existing
 object command rather than transplanting another parser. No additional upstream
 code or dependency is introduced, and sampled reference output is checked.
 
-The native triangle projector (`dreamcast-native/code/geometry.c`) follows
+The native triangle projector (`platform/dreamcast-native/code/geometry.c`) follows
 the renderer row's center/CRTC/viewport and perspective-UV conventions. Its
 bounded homogeneous clipper and vertex cache are local frontend code; the
 old PVR adapter and an independent double-precision clipper are host-test
 oracles. Neither the CPU rasterizer nor a board runtime enters the DC target.
 
-The native face-light function (`dreamcast-native/include/lighting.h`) transplants
+The native face-light function (`platform/dreamcast-native/include/lighting.h`) transplants
 the geometrizer row's normal/cross-product, diffuse/specular and rear-bit
 equations into a bounded operation on view-space inputs. BSD-3-Clause notice
 is retained. No command stream, board runtime or guest state is imported.

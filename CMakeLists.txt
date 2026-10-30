@@ -251,7 +251,7 @@ if(EXISTS ${GEN_DIR}/gen_table.cpp AND EXISTS ${TGP_GEN})
     add_library(runtime_silent STATIC src/runtime/game_loop.cpp)
     target_compile_definitions(runtime_silent PUBLIC M2_NO_SOUND)
     target_link_libraries(runtime_silent PUBLIC runtime)
-    add_executable(m2segment tools/m2segment/main.cpp dreamcast-native/code/drive.c dreamcast-native/code/contact.c dreamcast-native/code/path.c dreamcast-native/code/road.c dreamcast-native/code/expert_actors.c ${GEN_SOURCES} ${TGP_GEN})
+    add_executable(m2segment tools/m2segment/main.cpp platform/dreamcast-native/code/drive.c platform/dreamcast-native/code/contact.c platform/dreamcast-native/code/path.c platform/dreamcast-native/code/road.c platform/dreamcast-native/code/expert_actors.c ${GEN_SOURCES} ${TGP_GEN})
     target_link_libraries(m2segment PRIVATE runtime_silent refcore)
     if(NOT MSVC)
         set_source_files_properties(${GEN_SOURCES} ${TGP_GEN} PROPERTIES COMPILE_OPTIONS "-Wno-unused-label")
@@ -366,32 +366,32 @@ add_test(NAME geo_clip COMMAND test_geo_clip)
 add_executable(test_geo_stream tests/test_geo_stream.cpp)
 target_include_directories(test_geo_stream PRIVATE src)
 add_test(NAME geo_stream COMMAND test_geo_stream)
-add_executable(test_native_models dreamcast-native/tests/test_export_models.cpp)
+add_executable(test_native_models platform/dreamcast-native/tests/test_export_models.cpp)
 target_include_directories(test_native_models PRIVATE src)
 add_test(NAME native_models COMMAND test_native_models)
-add_executable(test_native_visibility dreamcast-native/tests/test_visibility.c dreamcast-native/code/visibility.c)
+add_executable(test_native_visibility platform/dreamcast-native/tests/test_visibility.c platform/dreamcast-native/code/visibility.c)
 set_property(TARGET test_native_visibility PROPERTY C_STANDARD 11)
 if(UNIX AND NOT APPLE)
     target_link_libraries(test_native_visibility PRIVATE m)
 endif()
 add_test(NAME native_visibility COMMAND test_native_visibility)
-add_executable(test_native_road dreamcast-native/tests/test_road.c dreamcast-native/code/road.c)
+add_executable(test_native_road platform/dreamcast-native/tests/test_road.c platform/dreamcast-native/code/road.c)
 add_test(NAME native_road COMMAND test_native_road)
-add_executable(test_native_drive dreamcast-native/tests/test_drive.c dreamcast-native/code/drive.c)
+add_executable(test_native_drive platform/dreamcast-native/tests/test_drive.c platform/dreamcast-native/code/drive.c)
 set_property(TARGET test_native_drive PROPERTY C_STANDARD 11)
 add_test(NAME native_drive COMMAND test_native_drive)
-add_executable(test_native_contact dreamcast-native/tests/test_contact.c dreamcast-native/code/contact.c dreamcast-native/code/drive.c)
+add_executable(test_native_contact platform/dreamcast-native/tests/test_contact.c platform/dreamcast-native/code/contact.c platform/dreamcast-native/code/drive.c)
 set_property(TARGET test_native_contact PROPERTY C_STANDARD 11)
 add_test(NAME native_contact COMMAND test_native_contact)
 set(NATIVE_RACE_TEST_ASSETS "" CACHE PATH "Owned prepared course0 packs for the autonomous native race check")
 set(NATIVE_RACE_TEST_HEADERS "" CACHE PATH "Owned generated intro_drive_data.h directory for the native race check")
 set(NATIVE_RACE_TEST_INTENTS "" CACHE PATH "Owned generated race_intent_data.h directory for silent native race events")
 if(NATIVE_RACE_TEST_ASSETS AND NATIVE_RACE_TEST_HEADERS)
-    add_executable(test_native_race_movement dreamcast-native/tests/test_race_movement.c
-        dreamcast-native/code/drive.c dreamcast-native/code/contact.c
-        dreamcast-native/code/road.c dreamcast-native/code/path.c dreamcast-native/code/visibility.c)
+    add_executable(test_native_race_movement platform/dreamcast-native/tests/test_race_movement.c
+        platform/dreamcast-native/code/drive.c platform/dreamcast-native/code/contact.c
+        platform/dreamcast-native/code/road.c platform/dreamcast-native/code/path.c platform/dreamcast-native/code/visibility.c)
     set_property(TARGET test_native_race_movement PROPERTY C_STANDARD 11)
-    target_include_directories(test_native_race_movement PRIVATE dreamcast-native/include ${NATIVE_RACE_TEST_HEADERS})
+    target_include_directories(test_native_race_movement PRIVATE platform/dreamcast-native/include ${NATIVE_RACE_TEST_HEADERS})
     if(NATIVE_RACE_TEST_INTENTS)
         target_include_directories(test_native_race_movement PRIVATE ${NATIVE_RACE_TEST_INTENTS})
         target_compile_definitions(test_native_race_movement PRIVATE NATIVE_INTENT_DATA)
@@ -403,51 +403,51 @@ if(NATIVE_RACE_TEST_ASSETS AND NATIVE_RACE_TEST_HEADERS)
         ${NATIVE_RACE_TEST_ASSETS}/drive.dnd ${NATIVE_RACE_TEST_ASSETS}/course0.dnc
         ${NATIVE_RACE_TEST_ASSETS}/course0.dnr ${NATIVE_RACE_TEST_ASSETS})
 endif()
-add_executable(test_native_practice dreamcast-native/tests/test_practice.c
-    dreamcast-native/code/drive.c dreamcast-native/code/contact.c
-    dreamcast-native/code/road.c dreamcast-native/code/path.c
-    dreamcast-native/code/geometry.c dreamcast-native/code/meshpack.c
-    dreamcast-native/code/material_pack.c dreamcast-native/code/visibility.c)
+add_executable(test_native_practice platform/dreamcast-native/tests/test_practice.c
+    platform/dreamcast-native/code/drive.c platform/dreamcast-native/code/contact.c
+    platform/dreamcast-native/code/road.c platform/dreamcast-native/code/path.c
+    platform/dreamcast-native/code/geometry.c platform/dreamcast-native/code/meshpack.c
+    platform/dreamcast-native/code/material_pack.c platform/dreamcast-native/code/visibility.c)
 set_property(TARGET test_native_practice PROPERTY C_STANDARD 11)
 # Requires user-owned prepared packs, passed explicitly; no ROM test fixture.
 if(UNIX AND NOT APPLE)
     target_link_libraries(test_native_practice PRIVATE m)
 endif()
-add_executable(test_native_path dreamcast-native/tests/test_path.c dreamcast-native/code/path.c dreamcast-native/code/drive.c)
+add_executable(test_native_path platform/dreamcast-native/tests/test_path.c platform/dreamcast-native/code/path.c platform/dreamcast-native/code/drive.c)
 set_property(TARGET test_native_path PROPERTY C_STANDARD 11)
 add_test(NAME native_path COMMAND test_native_path)
-add_executable(test_native_slot_machine dreamcast-native/tests/test_slot_machine.c)
+add_executable(test_native_slot_machine platform/dreamcast-native/tests/test_slot_machine.c)
 set_property(TARGET test_native_slot_machine PROPERTY C_STANDARD 11)
 add_test(NAME native_slot_machine COMMAND test_native_slot_machine)
-add_executable(test_native_wrong_way dreamcast-native/tests/test_wrong_way.c)
+add_executable(test_native_wrong_way platform/dreamcast-native/tests/test_wrong_way.c)
 set_property(TARGET test_native_wrong_way PROPERTY C_STANDARD 11)
 add_test(NAME native_wrong_way COMMAND test_native_wrong_way)
-add_executable(test_native_contact_clear dreamcast-native/tests/test_contact_clear.c)
+add_executable(test_native_contact_clear platform/dreamcast-native/tests/test_contact_clear.c)
 set_property(TARGET test_native_contact_clear PROPERTY C_STANDARD 11)
 add_test(NAME native_contact_clear COMMAND test_native_contact_clear)
-add_executable(check_native_meshpack dreamcast-native/tests/check_meshpack.c dreamcast-native/code/meshpack.c)
+add_executable(check_native_meshpack platform/dreamcast-native/tests/check_meshpack.c platform/dreamcast-native/code/meshpack.c)
 set_property(TARGET check_native_meshpack PROPERTY C_STANDARD 11)
-add_executable(check_native_material_pack dreamcast-native/tests/check_material_pack.c dreamcast-native/code/material_pack.c)
+add_executable(check_native_material_pack platform/dreamcast-native/tests/check_material_pack.c platform/dreamcast-native/code/material_pack.c)
 set_property(TARGET check_native_material_pack PROPERTY C_STANDARD 11)
 find_package(ZLIB REQUIRED)
 target_link_libraries(check_native_material_pack PRIVATE ZLIB::ZLIB)
 target_link_libraries(test_native_practice PRIVATE ZLIB::ZLIB)
-add_executable(test_native_geometry dreamcast-native/tests/test_geometry.cpp
-    dreamcast-native/code/geometry.c dreamcast-native/code/meshpack.c)
+add_executable(test_native_geometry platform/dreamcast-native/tests/test_geometry.cpp
+    platform/dreamcast-native/code/geometry.c platform/dreamcast-native/code/meshpack.c)
 set_property(TARGET test_native_geometry PROPERTY C_STANDARD 11)
 target_include_directories(test_native_geometry PRIVATE src)
 target_compile_options(test_native_geometry PRIVATE -ffp-contract=off)
 add_test(NAME native_geometry COMMAND test_native_geometry)
-# The tight HUD geometry (dreamcast-native/include/render/ui/hud_draw.h) against the whole quads it
+# The tight HUD geometry (platform/dreamcast-native/include/render/ui/hud_draw.h) against the whole quads it
 # replaced: every recorded HUD state rasterised both ways, compared pixel for pixel
-# (dreamcast-native/tests/check_hud_tight.c). NATIVE_HUD_TEST_PACK: tools/prepare_hud.py output
+# (platform/dreamcast-native/tests/check_hud_tight.c). NATIVE_HUD_TEST_PACK: tools/prepare_hud.py output
 # (hud_data.h, hud/); NATIVE_HUD_TEST_ROWS: files of `trace_race_native --hud` rows, ";" between them.
 set(NATIVE_HUD_TEST_PACK "" CACHE PATH "Prepared HUD pack (hud_data.h, hud/) for the tight HUD geometry check")
 set(NATIVE_HUD_TEST_ROWS "" CACHE STRING "HUD row files of recorded races (trace_race_native --hud) for the tight HUD geometry check")
 if(NATIVE_HUD_TEST_PACK AND NATIVE_HUD_TEST_ROWS)
-    add_executable(check_native_hud_tight dreamcast-native/tests/check_hud_tight.c)
+    add_executable(check_native_hud_tight platform/dreamcast-native/tests/check_hud_tight.c)
     set_property(TARGET check_native_hud_tight PROPERTY C_STANDARD 11)
-    target_include_directories(check_native_hud_tight PRIVATE dreamcast-native/include ${NATIVE_HUD_TEST_PACK})
+    target_include_directories(check_native_hud_tight PRIVATE platform/dreamcast-native/include ${NATIVE_HUD_TEST_PACK})
     target_compile_options(check_native_hud_tight PRIVATE -fno-fast-math -ffp-contract=off)
     if(UNIX AND NOT APPLE)
         target_link_libraries(check_native_hud_tight PRIVATE m)
@@ -462,7 +462,7 @@ foreach(native_target IN ITEMS m2segment test_native_visibility test_native_road
         check_native_material_pack test_native_geometry test_native_slot_machine
         test_native_wrong_way test_native_contact_clear)
     if(TARGET ${native_target})
-        target_include_directories(${native_target} PRIVATE dreamcast-native/include)
+        target_include_directories(${native_target} PRIVATE platform/dreamcast-native/include)
     endif()
 endforeach()
 
@@ -639,7 +639,7 @@ add_test(NAME trace COMMAND test_trace ${CMAKE_CURRENT_BINARY_DIR})
 
 # The MAME plugin's Lua core against the C++ trace library (needs lupa).
 find_package(Python3 COMPONENTS Interpreter)
-# Slot machine lockstep (dreamcast-native/tests/test_slot_lockstep.py): the native race harness in production mode
+# Slot machine lockstep (platform/dreamcast-native/tests/test_slot_lockstep.py): the native race harness in production mode
 # against the original's runs with START presses. ROM output only, passed explicitly: INCLUDES the generated header
 # directories (intro_drive_data.h of work/intro, race_intent_data.h, race_start_data.h, race_record_data.h,
 # podium_data.h; ";" between them), ASSETS the course0 packs, TRACES the directories holding reference-slot-*.trace
@@ -649,25 +649,25 @@ set(NATIVE_SLOT_TEST_ASSETS "" CACHE PATH "drive.dnd, course0.dn*, scenery.dnv, 
 set(NATIVE_SLOT_TEST_TRACES "" CACHE STRING "Dirs with reference-slot-*.trace / reference-finish-fast.trace (';')")
 set(NATIVE_DAMAGE_TEST_TRACES "" CACHE STRING "Dirs with reference-damage-*.trace (';')")
 if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
-    add_executable(trace_race_native dreamcast-native/tests/trace_race_native.c dreamcast-native/code/drive.c
-        dreamcast-native/code/contact.c dreamcast-native/code/road.c dreamcast-native/code/path.c
-        dreamcast-native/code/visibility.c dreamcast-native/code/meshpack.c dreamcast-native/code/render/scene/damage_bodies.c
-        dreamcast-native/code/props.c dreamcast-native/code/props_scene.c dreamcast-native/code/expert_actors.c)
+    add_executable(trace_race_native platform/dreamcast-native/tests/trace_race_native.c platform/dreamcast-native/code/drive.c
+        platform/dreamcast-native/code/contact.c platform/dreamcast-native/code/road.c platform/dreamcast-native/code/path.c
+        platform/dreamcast-native/code/visibility.c platform/dreamcast-native/code/meshpack.c platform/dreamcast-native/code/render/scene/damage_bodies.c
+        platform/dreamcast-native/code/props.c platform/dreamcast-native/code/props_scene.c platform/dreamcast-native/code/expert_actors.c)
     set_property(TARGET trace_race_native PROPERTY C_STANDARD 11)
-    target_include_directories(trace_race_native PRIVATE dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES})
+    target_include_directories(trace_race_native PRIVATE platform/dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES})
     target_compile_options(trace_race_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)
     target_compile_definitions(trace_race_native PRIVATE NM_TRACE_PARTS=1) # --parts (meshpack.c, damage_bodies.c)
     if(UNIX AND NOT APPLE)
         target_link_libraries(trace_race_native PRIVATE m)
     endif()
-    # Live-play robustness (dreamcast-native/tests/fuzz_race_native.c): seeded random races with abusive pad input
+    # Live-play robustness (platform/dreamcast-native/tests/fuzz_race_native.c): seeded random races with abusive pad input
     # (grass, spins, walls, wrong way, START at the slot machine, time out) through the production tick of
     # code/practice.c; the original never rejects a tick, so any reject fails, naming the step and the state.
-    add_executable(fuzz_race_native dreamcast-native/tests/fuzz_race_native.c dreamcast-native/code/drive.c
-        dreamcast-native/code/contact.c dreamcast-native/code/road.c dreamcast-native/code/path.c
-        dreamcast-native/code/visibility.c)
+    add_executable(fuzz_race_native platform/dreamcast-native/tests/fuzz_race_native.c platform/dreamcast-native/code/drive.c
+        platform/dreamcast-native/code/contact.c platform/dreamcast-native/code/road.c platform/dreamcast-native/code/path.c
+        platform/dreamcast-native/code/visibility.c)
     set_property(TARGET fuzz_race_native PROPERTY C_STANDARD 11)
-    target_include_directories(fuzz_race_native PRIVATE dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES})
+    target_include_directories(fuzz_race_native PRIVATE platform/dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES})
     target_compile_options(fuzz_race_native PRIVATE -O2 -fno-fast-math -ffp-contract=off)
     if(UNIX AND NOT APPLE)
         target_link_libraries(fuzz_race_native PRIVATE m)
@@ -678,14 +678,14 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     add_test(NAME native_race_fuzz COMMAND fuzz_race_native ${NATIVE_SLOT_TEST_ASSETS} 1 300 40000)
     add_test(NAME native_race_fuzz_finish COMMAND fuzz_race_native ${NATIVE_SLOT_TEST_ASSETS} 435 1 40000)
     add_test(NAME native_slot_lockstep
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_slot_lockstep.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_slot_lockstep.py
                 $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_SLOT_TEST_TRACES}")
     set_tests_properties(native_slot_lockstep PROPERTIES SKIP_RETURN_CODE 77)
     # Damage/wrong-way lockstep (tests/test_damage_lockstep.py): every player field on every row of the original's
     # wall-hit runs (reference-damage-*.trace from recipes/inputs/inputs-damage-*.txt, m2segment --trace-race), and
     # every opponent field (production: but the previous scene's tracking words; carry mode: all).
     add_test(NAME native_damage_lockstep
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_damage_lockstep.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_damage_lockstep.py
                 $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_DAMAGE_TEST_TRACES}")
     set_tests_properties(native_damage_lockstep PROPERTIES SKIP_RETURN_CODE 77)
     # Pit stop lockstep (tests/test_pit_lockstep.py, include/pit.h): every player, timeline and opponent field on every
@@ -693,7 +693,7 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # --trace-race), the pit camera's view and the native pit state by the spec's rules (production and carry modes).
     set(NATIVE_PIT_TEST_TRACES "" CACHE STRING "Dirs with reference-pit-*.trace (';')")
     add_test(NAME native_pit_lockstep
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_pit_lockstep.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_pit_lockstep.py
                 $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_PIT_TEST_TRACES}")
     set_tests_properties(native_pit_lockstep PROPERTIES SKIP_RETURN_CODE 77)
     # Pit presentation (tests/test_pit_render.py): the native race of run P (--parts, --hud) against the pit log
@@ -703,21 +703,21 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # logs are in the log directories.
     set(NATIVE_PIT_TEST_LOGS "" CACHE STRING "Dirs with the pit log log-P.bin (';')")
     add_test(NAME native_pit_render
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_pit_render.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_pit_render.py
                 $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_PIT_TEST_TRACES}" "${NATIVE_PIT_TEST_LOGS}")
     set_tests_properties(native_pit_render PROPERTIES SKIP_RETURN_CODE 77)
     # The same with the crew's SH4ZAM chains (pit_crew.h NM_PIT_CREW_SHZ; SH4ZAM's software back-end from a checkout,
     # NATIVE_SH4ZAM_DIR with include/ and source/): every crew matrix also against the scalar reference.
     set(NATIVE_SH4ZAM_DIR "" CACHE PATH "SH4ZAM checkout (include/, source/) for the host check of the crew's SH4ZAM chains")
     if(NATIVE_SH4ZAM_DIR)
-        add_executable(trace_race_native_shz dreamcast-native/tests/trace_race_native.c dreamcast-native/code/drive.c
-            dreamcast-native/code/contact.c dreamcast-native/code/road.c dreamcast-native/code/path.c
-            dreamcast-native/code/visibility.c dreamcast-native/code/meshpack.c dreamcast-native/code/render/scene/damage_bodies.c
+        add_executable(trace_race_native_shz platform/dreamcast-native/tests/trace_race_native.c platform/dreamcast-native/code/drive.c
+            platform/dreamcast-native/code/contact.c platform/dreamcast-native/code/road.c platform/dreamcast-native/code/path.c
+            platform/dreamcast-native/code/visibility.c platform/dreamcast-native/code/meshpack.c platform/dreamcast-native/code/render/scene/damage_bodies.c
             ${NATIVE_SH4ZAM_DIR}/source/sw/shz_xmtrx_sw.c ${NATIVE_SH4ZAM_DIR}/source/shz_xmtrx.c
             ${NATIVE_SH4ZAM_DIR}/source/shz_matrix.c)
         set_property(TARGET trace_race_native_shz PROPERTY C_STANDARD 11)
         set_property(TARGET trace_race_native_shz PROPERTY C_EXTENSIONS ON)
-        target_include_directories(trace_race_native_shz PRIVATE dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES}
+        target_include_directories(trace_race_native_shz PRIVATE platform/dreamcast-native/include ${NATIVE_SLOT_TEST_INCLUDES}
             ${NATIVE_SH4ZAM_DIR}/include)
         target_compile_options(trace_race_native_shz PRIVATE -O2 -fno-fast-math -ffp-contract=off)
         target_compile_definitions(trace_race_native_shz PRIVATE NM_TRACE_PARTS=1 NM_PIT_CREW_SHZ=1)
@@ -725,7 +725,7 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
             target_link_libraries(trace_race_native_shz PRIVATE m)
         endif()
         add_test(NAME native_pit_render_shz
-            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_pit_render.py
+            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_pit_render.py
                     $<TARGET_FILE:trace_race_native_shz> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_PIT_TEST_TRACES}" "${NATIVE_PIT_TEST_LOGS}")
         set_tests_properties(native_pit_render_shz PROPERTIES SKIP_RETURN_CODE 77)
     endif()
@@ -734,11 +734,11 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # recipes/inputs/frontend-X.txt, m2segment --trace-frontend), and the races entered through the native attract,
     # game start and select (trace_race_native --frontend) on every row and field, collision tracking words included.
     set(NATIVE_FRONTEND_TEST_TRACES "" CACHE STRING "Dirs with frontend-*.trace and race-*.trace (';')")
-    add_executable(trace_frontend_native dreamcast-native/tests/trace_frontend_native.c)
+    add_executable(trace_frontend_native platform/dreamcast-native/tests/trace_frontend_native.c)
     set_property(TARGET trace_frontend_native PROPERTY C_STANDARD 11)
-    target_include_directories(trace_frontend_native PRIVATE dreamcast-native/include)
+    target_include_directories(trace_frontend_native PRIVATE platform/dreamcast-native/include)
     add_test(NAME native_frontend_lockstep
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_frontend_lockstep.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_frontend_lockstep.py
                 $<TARGET_FILE:trace_frontend_native> $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS}
                 "${NATIVE_FRONTEND_TEST_TRACES}")
     set_tests_properties(native_frontend_lockstep PROPERTIES SKIP_RETURN_CODE 77)
@@ -747,23 +747,23 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # NATIVE_NEGSPEED_TEST_TRACES (m2segment --trace-race, the speed written by M2_POKE_ROW/M2_POKE_SPEED).
     set(NATIVE_NEGSPEED_TEST_TRACES "" CACHE STRING "Dirs with reference-negspeed-*.trace, reference-yaw-overflow.trace (';')")
     add_test(NAME native_negative_speed_lockstep
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_negative_speed_lockstep.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_negative_speed_lockstep.py
                 $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS} "${NATIVE_NEGSPEED_TEST_TRACES}")
     set_tests_properties(native_negative_speed_lockstep PROPERTIES SKIP_RETURN_CODE 77)
     # The player's drawn parts with damage (tests/test_damage_render.py): the rules of player_parts.h on every
     # race frame of the original's display-list logs (log-E.bin, log-V.bin of spec-damage.md: damage_log v3), and
     # the native race of run E (trace_race_native --parts) against log E, model by model and matrix by matrix.
     set(NATIVE_DAMAGE_TEST_LOGS "" CACHE PATH "Dir with the damage display-list logs log-E.bin, log-V.bin")
-    add_executable(player_parts_check dreamcast-native/tests/player_parts_check.c dreamcast-native/code/drive.c
-        dreamcast-native/code/road.c)
+    add_executable(player_parts_check platform/dreamcast-native/tests/player_parts_check.c platform/dreamcast-native/code/drive.c
+        platform/dreamcast-native/code/road.c)
     set_property(TARGET player_parts_check PROPERTY C_STANDARD 11)
-    target_include_directories(player_parts_check PRIVATE dreamcast-native/include)
+    target_include_directories(player_parts_check PRIVATE platform/dreamcast-native/include)
     target_compile_options(player_parts_check PRIVATE -O2 -fno-fast-math -ffp-contract=off)
     if(UNIX AND NOT APPLE)
         target_link_libraries(player_parts_check PRIVATE m)
     endif()
     add_test(NAME native_damage_render
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_damage_render.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_damage_render.py
                 $<TARGET_FILE:trace_race_native> $<TARGET_FILE:player_parts_check> ${NATIVE_SLOT_TEST_ASSETS}
                 "${NATIVE_DAMAGE_TEST_TRACES}" "${NATIVE_DAMAGE_TEST_LOGS}")
     set_tests_properties(native_damage_render PROPERTIES SKIP_RETURN_CODE 77)
@@ -772,51 +772,51 @@ if(Python3_FOUND AND NATIVE_SLOT_TEST_INCLUDES AND NATIVE_SLOT_TEST_ASSETS)
     # and the native races of the runs with a reference trace against the logs' display lists.
     set(NATIVE_FX_TEST_LOGS "" CACHE STRING "Dirs with the effects logs fx-{A,C,E,F,G,H,V,fast}.fx (';')")
     set(NATIVE_FX_TEST_ROM "" CACHE PATH "Dir with the daytona93 images program.bin, main_data.bin")
-    add_executable(car_effects_check dreamcast-native/tests/car_effects_check.c dreamcast-native/code/drive.c)
+    add_executable(car_effects_check platform/dreamcast-native/tests/car_effects_check.c platform/dreamcast-native/code/drive.c)
     set_property(TARGET car_effects_check PROPERTY C_STANDARD 11)
-    target_include_directories(car_effects_check PRIVATE dreamcast-native/include)
+    target_include_directories(car_effects_check PRIVATE platform/dreamcast-native/include)
     target_compile_options(car_effects_check PRIVATE -O2 -fno-fast-math -ffp-contract=off)
     if(UNIX AND NOT APPLE)
         target_link_libraries(car_effects_check PRIVATE m)
     endif()
     add_test(NAME native_effects_render
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_effects_render.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_effects_render.py
                 $<TARGET_FILE:car_effects_check> $<TARGET_FILE:trace_race_native> ${NATIVE_SLOT_TEST_ASSETS}
                 "${NATIVE_DAMAGE_TEST_TRACES};${NATIVE_SLOT_TEST_TRACES}" "${NATIVE_FX_TEST_LOGS}" "${NATIVE_FX_TEST_ROM}")
     set_tests_properties(native_effects_render PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 if(Python3_FOUND)
     add_test(NAME native_race_intent_assets
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_race_intents.py)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_race_intents.py)
     add_test(NAME native_visibility_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_visibility.py $<TARGET_FILE:test_native_visibility>)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_visibility.py $<TARGET_FILE:test_native_visibility>)
     add_test(NAME native_road_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_road.py $<TARGET_FILE:test_native_road>)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_road.py $<TARGET_FILE:test_native_road>)
     add_test(NAME native_path_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_path.py $<TARGET_FILE:test_native_path>)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_path.py $<TARGET_FILE:test_native_path>)
     add_test(NAME native_contact_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_contact.py $<TARGET_FILE:test_native_contact>)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_contact.py $<TARGET_FILE:test_native_contact>)
     add_test(NAME native_drive_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_drive.py $<TARGET_FILE:test_native_drive>)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_drive.py $<TARGET_FILE:test_native_drive>)
     add_test(NAME native_course
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tools/inspect_course.py --self-test)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tools/inspect_course.py --self-test)
     add_test(NAME native_camera
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tools/check_camera.py --self-test)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tools/check_camera.py --self-test)
     add_test(NAME native_material_decode
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_material_decode.py)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_material_decode.py)
     add_test(NAME native_material_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_materials.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_materials.py
                 $<TARGET_FILE:check_native_material_pack>)
     # The model renderer's PVR stream against the host reference renderer
-    # (dreamcast-native/tests/reference_stream.h) over a recorded script, stages 3 and 5.
+    # (platform/dreamcast-native/tests/reference_stream.h) over a recorded script, stages 3 and 5.
     set(NATIVE_STREAM_TEST_ASSETS "" CACHE PATH "Prepared car/world packs for the native stream reference check")
     set(NATIVE_STREAM_TEST_FRAMES "" CACHE FILEPATH "Frame table (.frm) of a recorded script for the native stream reference check")
     if(NATIVE_STREAM_TEST_ASSETS AND NATIVE_STREAM_TEST_FRAMES)
         add_test(NAME native_stream_reference
-            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/stream_sim/check_stream.py
+            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/stream_sim/check_stream.py
                     ${NATIVE_STREAM_TEST_ASSETS} ${NATIVE_STREAM_TEST_FRAMES})
     endif()
-    # The console heap of a build from its packs (dreamcast-native/tools/heap_budget.py): allocator model,
+    # The console heap of a build from its packs (platform/dreamcast-native/tools/heap_budget.py): allocator model,
     # pack arithmetic, the hardware runs of 13 October 2026 when their asset sets are under build/, and,
     # with NATIVE_HEAP_TEST_ASSETS, that set against the budget (2 MiB never taken at the peak, 3 MiB free
     # while the scene runs) at NATIVE_HEAP_TEST_STAGE, without and with the sample profile's buffer.
@@ -824,15 +824,15 @@ if(Python3_FOUND)
     set(NATIVE_HEAP_TEST_STAGE "6" CACHE STRING "Scenery stage of the native heap budget check")
     if(NATIVE_HEAP_TEST_ASSETS)
         add_test(NAME native_heap_budget
-            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_heap_budget.py
+            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_heap_budget.py
                     ${NATIVE_HEAP_TEST_ASSETS} ${NATIVE_HEAP_TEST_STAGE})
     else()
         add_test(NAME native_heap_budget
-            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_heap_budget.py)
+            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_heap_budget.py)
     endif()
     add_test(NAME native_material_residency
         COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
-                $<TARGET_FILE:Python3::Interpreter> ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_material_residency.py)
+                $<TARGET_FILE:Python3::Interpreter> ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_material_residency.py)
     # Palette RAM format (make NATIVE_PAL16): conversion rules, and with the heap check's race assets (and the HUD
     # pack) every palette the program writes against its ARGB8888 source, default build and ARGB1555.
     set(NATIVE_PALETTE_TEST_ARGS)
@@ -844,45 +844,45 @@ if(Python3_FOUND)
     endif()
     add_test(NAME native_palette_ram
         COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"
-                $<TARGET_FILE:Python3::Interpreter> ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_palette_ram.py
+                $<TARGET_FILE:Python3::Interpreter> ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_palette_ram.py
                 ${NATIVE_PALETTE_TEST_ARGS})
     add_test(NAME native_meshpack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_models.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_models.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_checker_prune
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prune_checker_faces.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prune_checker_faces.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_flat_cutouts
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_flat_cutouts.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_flat_cutouts.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_asset_rules
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_asset_rules.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_asset_rules.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_strip_pack
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_strips.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_strips.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_face_order
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_prepare_face_order.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_prepare_face_order.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME native_split_cutouts
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_split_cutouts.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_split_cutouts.py
                 $<TARGET_FILE:check_native_meshpack>)
     set_tests_properties(native_split_cutouts PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME native_opaque_cores
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_opaque_cores.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_opaque_cores.py
                 $<TARGET_FILE:check_native_meshpack>)
     set_tests_properties(native_opaque_cores PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME native_lod_groups
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_lod_groups.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_lod_groups.py
                 $<TARGET_FILE:check_native_meshpack>)
     set_tests_properties(native_lod_groups PROPERTIES SKIP_RETURN_CODE 77)
-    # NATIVE_DIAG_LATE_CAPTURE (dreamcast-native/code/late_capture.c): frame buffer copy and 2x2 box against numpy,
+    # NATIVE_DIAG_LATE_CAPTURE (platform/dreamcast-native/code/late_capture.c): frame buffer copy and 2x2 box against numpy,
     # slot policy, file and index, tools/late_capture_report.py (needs numpy and Pillow, else skipped).
     add_test(NAME native_late_capture
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_late_capture.py)
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_late_capture.py)
     set_tests_properties(native_late_capture PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME native_meshpack_alignment
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/dreamcast-native/tests/test_align_meshpack.py
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/platform/dreamcast-native/tests/test_align_meshpack.py
                 $<TARGET_FILE:check_native_meshpack>)
     add_test(NAME prepare_dreamcast_textures
         COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/test_prepare_dreamcast_textures.py)

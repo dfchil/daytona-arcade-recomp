@@ -24,7 +24,7 @@ kassere alle fungerende hjælpefunktioner. Kravet om visuel ækvivalens nedenfor
 gælder de bevarede assets og den senere komplette renderer; den midlertidige
 udeladelse af dekorationer er et bevidst valg.
 
-Fortsæt den Dreamcast-native Daytona-version i `dreamcast-native/` frem mod et
+Fortsæt den Dreamcast-native Daytona-version i `platform/dreamcast-native/` frem mod et
 sammenhængende, spilbart raceforløb og dokumenteret framearbejde under 16 ms i
 repræsentative hardwaretests. Brug PC-repoet som adfærdsreference, ikke som en
 board-simulator der skal flyttes til Dreamcast. Bevar PC-adfærden. enDjinn ejer
@@ -68,7 +68,7 @@ først opfyldt, når spilforløb og performance er dokumenteret, ikke når
 opgavekortene er afsluttet.
 
 Denne tekst og arbejdsformen er projektets styrende, opdaterede instruks;
-`dreamcast-native/HANDOFF.md` henviser hertil. Målet er ikke erklæret fuldført.
+`platform/dreamcast-native/HANDOFF.md` henviser hertil. Målet er ikke erklæret fuldført.
 
 ## Hvad vi ved og hvad vi mangler
 
@@ -80,7 +80,7 @@ Denne tekst og arbejdsformen er projektets styrende, opdaterede instruks;
 | Normal cones | Native optimering, ikke en påstand om originalens arkitektur | D15 bruger faktiske FTRV-transformer; target-verifier består 300 ticks; D03 isolerer live-tællere | Alle kameraforløb; usikre grupper bruger stadig per-face CPU-facing |
 | Frametid | Ingen ny originalmåling i denne opdeling | To quiet1800tick-runs den 9. oktober: 17,983/18,007 ms; GPU 8,870/8,875 ms i samplevinduet | Fuld bane med aktiv kørsel, under16 ms og isoleret optimeringsgevinst |
 
-Stier i tabellen er under `dreamcast-native/`. Originalhenvisningerne er
+Stier i tabellen er under `platform/dreamcast-native/`. Originalhenvisningerne er
 kodekommentarernes provenance, ikke en ny uafhængig originalverifikation.
 Gamle bring-up-noter i `HANDOFF.md` er historik; kildekode og konkret evidens
 skal holdes adskilt fra dem.
@@ -120,7 +120,7 @@ Instrumentering kontrolleres mod den uinstrumenterede outputsti.
 
 Accepterede implementeringer integreres som små lokale commits, men kun når
 opgavens ændringer kan isoleres fra andet igangværende arbejde. Ved denne opdeling er
-hele `dreamcast-native/` untracked, og mange andre filer er ændrede. Ingen
+hele `platform/dreamcast-native/` untracked, og mange andre filer er ændrede. Ingen
 `git add .`, nulstilling eller automatisk indlemmelse af dette forarbejde.
 En ren worktree fra HEAD indeholder derfor ikke nødvendigvis det aktuelle spil.
 Registrer en filbaseline før hver worker; afklar snapshot/staging før commits.
@@ -211,7 +211,7 @@ Den historiske D12-probe ovenfor læser aktuelle kilder og reproducerer derfor
 ikke længere den rettede fejl. Brug den nye regression mod de gemte før-headers:
 
 ```sh
-python3 dreamcast-native/tests/test_normal_cones.py \
+python3 platform/dreamcast-native/tests/test_normal_cones.py \
   build/dc-native-cone-fix.2WaB51/scenery_camera.before.h \
   build/dc-native-cone-fix.2WaB51/model_submission.before.h
 # Forventet exitkode 1: gammel cone=-1, faktisk medlemsdot positiv.
@@ -223,10 +223,10 @@ fastlåser aktuelle validators, før assetopgaver udleveres:
 
 ```sh
 cmake --build build --target check_native_meshpack check_native_material_pack -j4
-python3 dreamcast-native/tests/test_prepare_models.py build/check_native_meshpack
-python3 dreamcast-native/tools/inspect_quad_strips.py --self-test
-python3 dreamcast-native/tools/inspect_scenery_components.py --self-test
-python3 dreamcast-native/tests/test_sq_quads.py
+python3 platform/dreamcast-native/tests/test_prepare_models.py build/check_native_meshpack
+python3 platform/dreamcast-native/tools/inspect_quad_strips.py --self-test
+python3 platform/dreamcast-native/tools/inspect_scenery_components.py --self-test
+python3 platform/dreamcast-native/tests/test_sq_quads.py
 ```
 
 På oprettelsesdagen er de sidste tre kommandoer kørt med exitkode 0.
@@ -249,9 +249,9 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
   `group_faces` skriver DNM4 med spatial- og normalgrupper.
 - **Forudsætninger:** `tools/prepare_models.py`, `group_faces`, magic
   `0x344d4e44`; eksisterende `test_prepare_models.py` kontrollerer denne magic.
-- **Skriveområde:** `dreamcast-native/tools/prepare_models.py`, kun hjælpeteksten.
+- **Skriveområde:** `platform/dreamcast-native/tools/prepare_models.py`, kun hjælpeteksten.
 - **Uden for scope:** Ingen format-, parser-, grupperings- eller byteændringer.
-- **Accept:** `python3 dreamcast-native/tools/prepare_models.py --help` viser
+- **Accept:** `python3 platform/dreamcast-native/tools/prepare_models.py --help` viser
   DNM4 og normalgrupper for flaget; diffen indeholder kun teksten.
 - **Stopregel:** Returnér fund, hvis formatet i den aktuelle revision er anderledes.
 - **Leverance:** Diff, kommando/exitkode og den relevante hjælpelinje.
@@ -262,8 +262,8 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
   Float-testen `!=0` accepterer negativt nul; feltet er runtime-cache, ikke input.
 - **Forudsætninger:** `code/meshpack.c:validate`, `include/meshpack.h`,
   `tools/prepare_models.py:group_faces` og eksisterende malformed-pack-fixture.
-- **Skriveområde:** `dreamcast-native/code/meshpack.c` og
-  `dreamcast-native/tests/test_prepare_models.py`.
+- **Skriveområde:** `platform/dreamcast-native/code/meshpack.c` og
+  `platform/dreamcast-native/tests/test_prepare_models.py`.
 - **Uden for scope:** Ingen recordstørrelse, filversion, lysberegning eller
   type-punning med aliasingbrud. Ingen ændring af valide packbytes.
 - **Accept:** Genbyg validator og kør pack-testen ovenfor. Tilføj tilfælde med
@@ -281,8 +281,8 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
 - **Forudsætninger:** Alle læsninger/skrivninger i `model_renderer.c` og
   `model_submission.h`; `nm_render_enqueue_objects` nulstiller allerede andre
   profilfelter før første live frame, og `nm_render_release` rydder ressourcer.
-- **Skriveområde:** `dreamcast-native/code/render/models/model_renderer.c` og
-  `dreamcast-native/tests/test_sq_quads.py`.
+- **Skriveområde:** `platform/dreamcast-native/code/render/models/model_renderer.c` og
+  `platform/dreamcast-native/tests/test_sq_quads.py`.
 - **Uden for scope:** Ingen culling-, tæller-enheds-, render-, timer- eller
   levetidsændringer ud over de fire statistikfelters nulstilling.
 - **Accept:** SQ-testen består; en lille kontrol af faktisk resetkode seed'er
@@ -298,10 +298,10 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
   strips eller outputtrekanter, også når to trekanter sendes som én quadstrip.
 - **Forudsætninger:** `sq_emit_range` og eksisterende host-SQ-fixture. Den
   aktuelle fixture bygger ikke med `NATIVE_PROFILE`; det hul skal dækkes.
-- **Skriveområde:** `dreamcast-native/tests/test_sq_quads.py` alene.
+- **Skriveområde:** `platform/dreamcast-native/tests/test_sq_quads.py` alene.
 - **Uden for scope:** Ingen produktionsrettelse, nye timere eller fake
   performance-tal. Brug rigtig emitterkode, ikke en kopi af tællealgoritmen.
-- **Accept:** `python3 dreamcast-native/tests/test_sq_quads.py` kontrollerer
+- **Accept:** `python3 platform/dreamcast-native/tests/test_sq_quads.py` kontrollerer
   intakt quad=2 inputtrekanter, triangle=1 samt helt afvist og nærplansklippet
   input. Kontroller særskilt overlappende xy-/near-touch-felter. Profileret og
   uprofileret fixture skal afgive identiske headers/vertexer for samme input.
@@ -334,7 +334,7 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
   `make check`, ved siden af strip-værktøjets allerede registrerede self-test.
 - **Forudsætninger:** Værktøjets eksisterende test af delte kanter, isolerede
   komponenter, punktkontakt og degenererede kanter. Ingen ny testalgoritme.
-- **Skriveområde:** `dreamcast-native/Makefile` alene.
+- **Skriveområde:** `platform/dreamcast-native/Makefile` alene.
 - **Uden for scope:** Ingen generel test-discovery, gameplaytests eller omlægning
   af CMake/check-targets.
 - **Accept:** Kommandoen består direkte; den fastlåste native `make check`-log
@@ -352,7 +352,7 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
 - **Skriveområde:** Kun en ny ignoreret mappe under `build/`.
 - **Uden for scope:** Ingen automatisk semantisk klassifikation, geometri-
   fjernelse, mipmap/VQ-encoding eller ændring af assetpakker.
-- **Accept:** Kør `python3 dreamcast-native/tools/inspect_scenery_materials.py
+- **Accept:** Kør `python3 platform/dreamcast-native/tools/inspect_scenery_materials.py
   build/check_native_meshpack build/check_native_material_pack
   "$task_assets/world.dnm" "$task_assets/world.dnt" "$task_output"` med en
   endnu ikke eksisterende output-undermappe. Summen af `faces` i JSON skal
@@ -371,7 +371,7 @@ kørsel skal eksistens, pack-validering og hashes kontrolleres igen.
 - **Skriveområde:** Kun ny ignoreret evidensmappe; ingen sourceændring.
 - **Uden for scope:** Ingen ny stripifier, welding, face-reordering eller
   slutning fra sparede bytes til sparede millisekunder.
-- **Accept:** Kør `python3 dreamcast-native/tools/inspect_quad_strips.py
+- **Accept:** Kør `python3 platform/dreamcast-native/tools/inspect_quad_strips.py
   build/check_native_meshpack "$task_assets/world.dnm" --materials
   "$task_assets/world.dnt" --material-reader build/check_native_material_pack`.
   Rapportér eksisterende JSON-felter for source-order/reordered og stable/

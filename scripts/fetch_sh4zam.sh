@@ -4,7 +4,7 @@
 # v0.10.0 (70dbb17): the apply_* matrix names are deprecated (rotate_*, add_translation, scale_3x3), the vector and
 # quaternion magnitude forms check for zero (the *_fsrra forms are the unchecked ones), shz_memcpy sends short or
 # source-misaligned copies to the C library, and the SH4 dot products use scalar FPU code unless SHZ_SH4_DOT_FIPR
-# is defined (dreamcast-native/local.cfg.mk defines it: the renderer's bounds and face checks mirror FIPR).
+# is defined (platform/dreamcast-native/local.cfg.mk defines it: the renderer's bounds and face checks mirror FIPR).
 # v0.9.0 (0fd3a1e) was the release the renderer was written and measured with.
 set -eu
 SH4ZAM_COMMIT=70dbb177b20c1734fbe4f97df0f8c6ec87a8e8d3

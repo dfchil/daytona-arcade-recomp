@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Fetch enDjinn (Dreamcast game framework on KOS: base_link.mk, environ.sh, the deferred render queue) at the
-# pinned commit into extern/endjinn (git-ignored). MIT. dreamcast-native's Makefile and recipes/build_assets.sh
+# pinned commit into extern/endjinn (git-ignored). MIT. platform/dreamcast-native's Makefile and recipes/build_assets.sh
 # use this checkout when ENDJINN_ROOT is unset; an explicit ENDJINN_ROOT still wins.
 # 725f8b1 was origin main on 28 October 2026.
 set -eu

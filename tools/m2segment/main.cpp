@@ -11,23 +11,23 @@
 #include "../common/nvram.h"
 #include "../common/dreamcast/material_pack.hpp"
 #include "../common/dreamcast/system24.hpp"
-#include "../../dreamcast-native/tools/export_scene.hpp"
-#include "../../dreamcast-native/tools/export_models.hpp"
-#include "../../dreamcast-native/tools/export_name_exit.hpp"
-#include "../../dreamcast-native/tools/export_course.hpp"
-#include "../../dreamcast-native/tools/export_objects.hpp"
-#include "../../dreamcast-native/tools/check_road.hpp"
-#include "../../dreamcast-native/tools/check_contact.hpp"
-#include "../../dreamcast-native/tools/check_path.hpp"
-#include "../../dreamcast-native/tools/check_race.hpp"
-#include "../../dreamcast-native/tools/trace_race.hpp"
-#include "../../dreamcast-native/tools/trace_frontend.hpp"
-#include "../../dreamcast-native/tools/export_select.hpp"
-#include "../../dreamcast-native/tools/trace_hud.hpp"
-#include "../../dreamcast-native/tools/check_visibility.hpp"
-#include "../../dreamcast-native/tools/check_follow_camera.hpp"
-#include "../../dreamcast-native/tools/check_expert_actors.hpp"
-#include "../../dreamcast-native/tools/export_sky.hpp"
+#include "../../platform/dreamcast-native/tools/export_scene.hpp"
+#include "../../platform/dreamcast-native/tools/export_models.hpp"
+#include "../../platform/dreamcast-native/tools/export_name_exit.hpp"
+#include "../../platform/dreamcast-native/tools/export_course.hpp"
+#include "../../platform/dreamcast-native/tools/export_objects.hpp"
+#include "../../platform/dreamcast-native/tools/check_road.hpp"
+#include "../../platform/dreamcast-native/tools/check_contact.hpp"
+#include "../../platform/dreamcast-native/tools/check_path.hpp"
+#include "../../platform/dreamcast-native/tools/check_race.hpp"
+#include "../../platform/dreamcast-native/tools/trace_race.hpp"
+#include "../../platform/dreamcast-native/tools/trace_frontend.hpp"
+#include "../../platform/dreamcast-native/tools/export_select.hpp"
+#include "../../platform/dreamcast-native/tools/trace_hud.hpp"
+#include "../../platform/dreamcast-native/tools/check_visibility.hpp"
+#include "../../platform/dreamcast-native/tools/check_follow_camera.hpp"
+#include "../../platform/dreamcast-native/tools/check_expert_actors.hpp"
+#include "../../platform/dreamcast-native/tools/export_sky.hpp"
 
 #include <cinttypes>
 #include <array>
@@ -89,8 +89,8 @@ void usage() {
     std::fprintf(stderr, "--check-native-contact DNC_PACK DND_PACK checks complete ground/contact after the scenario; with --check-native-drive-live also checks actual ground calls (host only).\n");
     std::fprintf(stderr, "--check-native-path DNP_PACK DND_PACK checks authored rows, cursors and PLAYER guided movement against i960/TGP (host only; includes rejected conversions).\n");
     std::fprintf(stderr, "--trace-race NEW_FILE writes a host-only per-frame race trace (phase, timer, decoded controls, every car) of the original for the free-running native comparison; not combinable with live/reflection observers.\n");
-    std::fprintf(stderr, "--trace-clock NEW_FILE with --trace-race: the calls of 1786c the frame-counter animations of Advanced make (dreamcast-native/include/clock_actors.h), for tests/test_clock_lockstep.py.\n");
-    std::fprintf(stderr, "--trace-clock-expert with --trace-clock: also the draws of Expert's world actors with the TGP's matrix and the view each frame (dreamcast-native/include/expert_actors.h), for tests/test_expert_lockstep.py.\n");
+    std::fprintf(stderr, "--trace-clock NEW_FILE with --trace-race: the calls of 1786c the frame-counter animations of Advanced make (platform/dreamcast-native/include/clock_actors.h), for tests/test_clock_lockstep.py.\n");
+    std::fprintf(stderr, "--trace-clock-expert with --trace-clock: also the draws of Expert's world actors with the TGP's matrix and the view each frame (platform/dreamcast-native/include/expert_actors.h), for tests/test_expert_lockstep.py.\n");
     std::fprintf(stderr, "--dump-frames DIR FIRST LAST EVERY writes the screen of the frames FIRST..LAST (every EVERY-th) as raw 0xAARRGGBB dumps DIR/frame_N.rgb (scripts/rgb2png.py), their tile RAM DIR/tiles_N.bin and final pen colours DIR/pens_N.bin (host only, game output: keep under build/).\n");
     std::fprintf(stderr, "--dump-2d DIR FIRST LAST EVERY as --dump-frames without the screens: the tile RAM of each frame, the pens of the first (tools/prepare_attract_2d.py, tests/test_attract_2d.c).\n");
     std::fprintf(stderr, "--trace-attract with --trace-race: rows in the attract loop too (phases 2..11; cars in the cinematic and the V.R. demo, 3..7), for tests/test_attract_lockstep.py.\n");
@@ -111,7 +111,7 @@ void usage() {
     std::fprintf(stderr, "--all-solid-lights includes every luma for discovered native solid materials (no extra textures).\n");
     std::fprintf(stderr, "--native-model-all-lights DECIMAL_ADDRESS selects a ROM part and exports every luma/UV union; repeat for multiple parts, all must occur.\n");
     std::fprintf(stderr, "--export-native-cells NEW_DIR inspects all authored scenery cells using a visible cell's render state; separate from --export-native-models.\n");
-    std::fprintf(stderr, "--export-native-objects LISTS_TXT NEW_DIR extracts the models of the named 16-byte object lists (hex data ROM addresses) with a visible cell's render state; see dreamcast-native/tools/prepare_world_objects.py.\n");
+    std::fprintf(stderr, "--export-native-objects LISTS_TXT NEW_DIR extracts the models of the named 16-byte object lists (hex data ROM addresses) with a visible cell's render state; see platform/dreamcast-native/tools/prepare_world_objects.py.\n");
     std::fprintf(stderr, "--race-scenery-lights prepares static world-space cell materials for the normal-race light and rigid views; requires --export-native-cells.\n");
     std::fprintf(stderr, "--translation-lights RADIUS exports possible supplied-normal shades in a +/-RADIUS view-translation box; includes --all-solid-lights.\n");
     std::fprintf(stderr, "--check-native-title MOTION_BIN checks the first no-input title against native poses.\n");
@@ -120,7 +120,7 @@ void usage() {
     std::fprintf(stderr, "--export-native-2d NEW_DIR exports a static source-art layout (refuses 3D frames).\n");
     std::fprintf(stderr, "--export-result-label-colors NEW_FILE runs the result source oracle and exports its shared5454 palette/current colour translation.\n");
     std::fprintf(stderr, "--export-name-label-colors NEW_FILE exports the name5454+5460 palette/current colour translation after its source checks.\n");
-    std::fprintf(stderr, "--nvram DIR starts from the settings EEPROM and backup RAM in DIR (ioboard_eeprom.bin, backup_ram.bin; tools/common/nvram.h), e.g. operator settings written by dreamcast-native/tools/settings_eeprom.py; a missing file stays the board's erased default. --save-nvram DIR writes them as the run left them (an existing DIR).\n");
+    std::fprintf(stderr, "--nvram DIR starts from the settings EEPROM and backup RAM in DIR (ioboard_eeprom.bin, backup_ram.bin; tools/common/nvram.h), e.g. operator settings written by platform/dreamcast-native/tools/settings_eeprom.py; a missing file stays the board's erased default. --save-nvram DIR writes them as the run left them (an existing DIR).\n");
     std::fprintf(stderr, "usage: m2segment IMAGES_DIR FRAMES [--inputs FILE] [--nvram DIR] [--save-nvram DIR] [--stage NAME:START-END]... [--rom-cache-kib N] [--verify-streaming] [--profile-cache] [--profile-rom] [--profile-system24] [--export-rom-pages NEW_FILE] [--rom-pages-stage NAME] [--load-rom-pages FILE] [--export-textures NEW_DIR] [--export-system24 NEW_DIR] [--catalog NEW_DIR] [--check-materials PACK]\n");
 }
 

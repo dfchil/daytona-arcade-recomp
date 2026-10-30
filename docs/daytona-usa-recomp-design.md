@@ -153,7 +153,7 @@ masked NaN explicitly; since 16 October 2026 finite and infinite overflow
 saturate to the signed endpoint as page 11-50 says (AC 3f001000 masks integer
 overflow, bit 12): live play reaches it in the yaw step (fbd0 converts -inf
 when the front and rear wheel angles are equal), and the reference agrees on
-every row after it (dreamcast-native/tests/test_negative_speed_lockstep.py).
+every row after it (platform/dreamcast-native/tests/test_negative_speed_lockstep.py).
 The scratch oracle substitutes only the documented NaN result before the
 reference's undefined C++ cast. It does not claim CPU exception-flag parity.
 No desktop rounding/conversion semantics were changed.
@@ -306,9 +306,9 @@ The measurements cover these replays, not an assertion about other ROM sets.
 The Dreamcast build neither recompiles the 68000 program nor runs the native
 sequencer: AICAflow (`extern/aicaflow`) plays recordings of the original board.
 The source is vgmrips' Daytona USA pack, converted offline by AICAforge into
-one sample bank and control flow per piece (`dreamcast-native/recipes/
+one sample bank and control flow per piece (`platform/dreamcast-native/recipes/
 build_music.sh`). Gameplay hands the original program's packed sound commands
-to one module (`dreamcast-native/include/audio/sound.h`), which alone decides
+to one module (`platform/dreamcast-native/include/audio/sound.h`), which alone decides
 what plays; which `ae10xx` start produces which recording is proven, not read
 from titles (`tools/check_music_map.py`: the native sequencer above against
 each log's MultiPCM key-ons). The pack holds the music chip only, so effects
@@ -403,7 +403,7 @@ One CMake project, C++20, SDL3 for window, input, haptics, audio and GPU, so pla
 The generated code is plain portable C++20 (no host assembly, no JIT), so the same output compiles for every row above.
 
 **Dreamcast-native direction, 2026-10-03 (supersedes the prototype below).**
-The active target is now `dreamcast-native/`, started independently. This repository is a behavioral/code reference, not a runtime
+The active target is now `platform/dreamcast-native/`, started independently. This repository is a behavioral/code reference, not a runtime
 architecture to squeeze onto Dreamcast. Import validated pieces incrementally;
 do not link the existing GameLoop, board simulation or CPU compositor into
 the new target. enDjinn still owns startup, input, the outer loop and PVR;
@@ -414,7 +414,7 @@ Use 16-bit VQ for richer art, exact PAL4 for suitable UI, and no PAL8.
 SH4ZAM may accelerate validated gameplay/TGP-derived math as well as rendering;
 24bpp without dithering and silent output remain requirements. RAM, VRAM,
 transition overlap and frame time are acceptance criteria before each import.
-The working objective and import gates are in `dreamcast-native/HANDOFF.md`.
+The working objective and import gates are in `platform/dreamcast-native/HANDOFF.md`.
 The desktop reference remains unchanged by this architectural exception.
 
 The native player now starts ate5f4: speed index/wheel phases, impact displacement,
