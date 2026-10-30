@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Field by field: the state's last byte is padding, which a copy need not keep. */
+static int lane_same(const nm_guided_lane_state_t *a,const nm_guided_lane_state_t *b) {
+    return a->target==b->target && a->control==b->control && a->remembered==b->remembered;
+}
+
 int main(int argc, char **argv) {
     _Static_assert(sizeof(nm_path_row_t) == 28 && sizeof(nm_path_cursor_t) == 8,"path layouts");
     nm_path_pack_t p = {0};
@@ -97,11 +102,11 @@ int main(int argc, char **argv) {
     nm_guided_lane_state_t lane={.target=123,.control=1,.remembered=255};
     const nm_guided_lane_state_t lane_before=lane;
     assert(!nm_guided_lane_step(math,&lane_player,&lane_car,&lane_front,NULL,512,0,&lane));
-    assert(!memcmp(&lane,&lane_before,sizeof(lane))); /* Late distance failure rolls back default target. */
+    assert(lane_same(&lane,&lane_before)); /* Late distance failure rolls back default target. */
     assert(!nm_guided_lane_step(math,&lane_player,&lane_car,NULL,NULL,512,0,&lane));
     lane_car.id=44;
     assert(!nm_guided_lane_step(math,&lane_player,&lane_car,&lane_front,NULL,512,0,&lane));
-    assert(!memcmp(&lane,&lane_before,sizeof(lane)));
+    assert(lane_same(&lane,&lane_before));
     lane_car.id=1;lane_player.flags=0x10000000u;
     nm_guided_race_input_t race={.player=&lane_player,.car=&lane_car,.heading_circle={NAN,0,8}};
     in.speed=0;
