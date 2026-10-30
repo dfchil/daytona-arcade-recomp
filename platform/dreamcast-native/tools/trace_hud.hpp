@@ -169,8 +169,10 @@ struct HudTrace {
         words("X16", 0x01000000 + 16 * 0x80 + 19 * 2, 24);
         std::fprintf(file, " ext=%d lapmsg=%d", std::bit_cast<int32_t>(b.read_dword(0x5010d4)),
             std::bit_cast<int32_t>(b.read_dword(0x5010dc)));
-        // ad34, the lap message: the label's row 15 from column 24 (its time is in X16); 5010d8 bit1 hides it.
+        // ad34, the lap message: the label's row 15 from column 24 (its time is in X16) and the lap's ticks +66;
+        // flags8 (5010d8 below): bit1 hides it.
         words("M15", 0x01000000 + 15 * 0x80 + 24 * 2, 14);
+        std::fprintf(file, " lastlap=%u", b.read_word(player + 0x66));
         // The rolling start's overlay: the hint (ab78, d438) on row 19 from column 19, the digits and GO! on row 18
         // from column 21, the banner and its car (d448..d46c) on row 24, their line scroll (d56c..d5a4: lines
         // 184..239, first word), the accelerator 501054 the hint reads and the start stage 501850.

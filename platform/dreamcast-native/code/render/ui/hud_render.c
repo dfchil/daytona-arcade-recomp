@@ -144,11 +144,11 @@ int nm_hud_render_load(const char *root) {
     /* A new race reloads. ponytail: nothing unloads the sheets when the race scene is
      * released; nm_practice_render_release should call nm_hud_render_unload. */
     if(loaded) nm_hud_render_unload();
-    /* Race palette plan: banks 0/1 finish actor, 2..59 cars, 60/61 result labels, 62/63 free. A HUD with another
-     * course's map takes 61 too: the HUD is drawn in phases 20..24 only, the labels are written at the phase-25
-     * hand-off, and the next scene load writes the HUD's palettes again. */
-    _Static_assert(NM_HUD_BANK_FIRST>=61 && NM_HUD_BANK_FIRST*16+NM_HUD_PALETTE_COLORS<=1024,
-        "HUD palette must stay in banks 61..63");
+    /* Race palette plan: banks 0/1 finish actor, 2..59 cars, 60..63 the HUD, in 60/61 the result labels once the HUD
+     * is gone: the HUD is drawn in phases 20..24 only, the labels are written at the phase-25 hand-off, and the next
+     * scene load writes the HUD's palettes again. */
+    _Static_assert(NM_HUD_BANK_FIRST>=60 && NM_HUD_BANK_FIRST*16+NM_HUD_PALETTE_COLORS<=1024,
+        "HUD palette must stay in banks 60..63");
     const unsigned before=pvr_mem_available();
     unsigned bytes=0,largest=0;
     for(unsigned i=0;i<NM_HUD_SHEET_COUNT;++i) {

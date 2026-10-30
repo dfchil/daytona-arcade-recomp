@@ -106,6 +106,10 @@ ROLLING_WORDS = {0xabb0: 0x287679c, 0xaba8: 0x10009a8, 0xabc4: 0x28766c8, 0xabbc
                  0xacfc: 0x1000836, 0xad04: 0x2882e9c, 0xd44c: 0x1000b8e, 0xd454: 0x28829f0, 0xd460: 0x1000c00,
                  0xd468: 0x2882d1a, 0xd4b8: 0x10009a6, 0xd4c0: 0x28766c8, 0xd4f0: 0x10009a8, 0xd4f8: 0x287679c}
 ROLLING_SPLIT = 28  # tile columns of the banner's first sprite: a sheet is 256 texels wide, the banner 456
+# ad34, the lap message: BEST LAP or LAP TIME (blocks) over the time in the 2x3-tile font of 18414 in colour 5.
+LAP_MESSAGE = dict(best=0x28829a0, lap=0x28829c8, label_at=0x10007b0, time_at=0x100082c, colour=5, glyphs='0123456789\'"')
+LAP_MESSAGE_WORDS = {0xad7c: 0x100082c, 0xada0: 0x10007b0, 0xada8: 0x28829a0, 0xadc8: 0x10007b0, 0xadd0: 0x28829c8,
+                     0xad8c: 0x5c181e05, 0xadb4: 0x5c181e05}  # the last two: mov 5,r3 before 501338
 
 
 # CONDITION panel (12c98..13208): zoom table 234dd8 (include/hud.h nm_hud_radar_zooms), the icon of the
@@ -1103,6 +1107,19 @@ def main():
     print(f'rolling banner: backdrop #{back & 0xffffff:06x}, {len(banner_panel)} translucent rectangles, '
           f'{sum((b[2]-b[0])*(b[3]-b[1]) for b in banner_panel)} arcade pixels')
 
+    # ---- the lap message (ad34) -----------------------------------------------
+    if any(program_word(a) != v for a, v in LAP_MESSAGE_WORDS.items()):
+        raise ValueError('unexpected lap message ad34')
+    width, _, best_tiles = block_sprite('MSG_BEST', LAP_MESSAGE['best'])
+    width, _, lap_tiles = block_sprite('MSG_LAP', LAP_MESSAGE['lap'])
+    font = 0x8000+(LAP_MESSAGE['colour'] << 7)
+    for index, glyph in enumerate(LAP_MESSAGE['glyphs']):  # glyph numbers of include/hud.h nm_hud_time
+        tile_sprite(f'MSG_{index}', 2, 3, [font+(ord(glyph)-32)*6+i for i in range(6)])
+    layout['MSG_LABEL'] = cell(LAP_MESSAGE['label_at'])
+    layout['MSG_TIME'] = cell(LAP_MESSAGE['time_at'])
+    lap_words = dict(best=best_tiles[:width], lap=lap_tiles[:width], font=font,
+                     glyphs=[font+(ord(glyph)-32)*6 for glyph in LAP_MESSAGE['glyphs']])
+
     # ---- palette banks and atlases -----------------------------------------
     for record in sprites.values():
         w, h, px = record['width'], record['height'], record['pixels']
@@ -1113,7 +1130,7 @@ def main():
         record['colours'] = {p for p in px if p}
     # The gear indicator's sprites (b0c0) and the rolling start's are placed after all others, in banks and on sheets:
     # the others keep the banks and atlas places they had before them, and these go on the space left or further sheets.
-    late = lambda n: n.startswith(('GEAR_', 'ROLL_'))
+    late = lambda n: n.startswith(('GEAR_', 'ROLL_', 'MSG_'))
     banks = []
     for name in sorted(sprites, key=lambda n: (late(n), -len(sprites[n]['colours']))):
         used = sprites[name]['colours']
@@ -1276,6 +1293,7 @@ def main():
               '#define NM_HUD_PIT_BLOCK 1 /* ab2c "PIT WORK!": sprite NM_HUD_PIT at NM_HUD_PIT_X/Y. */',
               '#define NM_HUD_GEAR 1 /* b0c0: GEAR_LEVER_0..6 at NM_HUD_GEAR_LEVER_X/Y, GEAR_OPEN there too, GEAR_DIGIT_1..4, GEAR_CLOSE, GEAR_LABEL. */',
               '#define NM_HUD_ROLLING 1 /* ab78, d438: ROLL_ACCEL, ROLL_AUTO, ROLL_GO, ROLL_DIGIT_1..3, ROLL_CAR, ROLL_BANNER_0, _1. */',
+              '#define NM_HUD_LAP_MESSAGE 1 /* ad34: MSG_BEST, MSG_LAP at NM_HUD_MSG_LABEL_X/Y, MSG_0.. (nm_hud_time glyphs) from NM_HUD_MSG_TIME_X/Y. */',
               '/* The banner\'s backdrop: translucent rectangles x0, y0, x1, y1 from its origin. */',
               '#define NM_HUD_ROLL_PANEL_ARGB 0x%08xu' % banner_panel_argb,
               f'enum {{ NM_HUD_ROLL_PANEL_RECTS={len(banner_panel)} }};',
@@ -1323,7 +1341,7 @@ def main():
                sprites={n: dict(sheet=sprites[n]['sheet'], bank=sprites[n]['bank'], scale=sprites[n]['scale'], crop=sprites[n]['crop'], at=sprites[n]['at'],
                                 origin=sprites[n].get('origin', (0, 0))) for n in names},
                layout=layout, gear=gear_words, steady_frames=steady, reverse_row25=reverse_row, extension_row=extension_row,
-               rolling=rolling_words,
+               rolling=rolling_words, lap_message=lap_words,
                course_maps={slot: dict(affine=o['affine'].tolist(), affine_leader=o['affine_leader'].tolist(), polygons=o['polygons'],
                                        residual=o['residual'], residual_leader=o['residual_leader'], steady_frames=o['steady'])
                             for slot, o in course_maps.items()},

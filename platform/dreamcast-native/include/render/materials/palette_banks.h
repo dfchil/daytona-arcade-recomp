@@ -18,10 +18,9 @@
  *   banks 60..61  the podium's banner and photo (written on the cinematic's
  *                 first frame), then the result labels (written at the result
  *                 hand-off)
- *   banks 62..63  HUD (written at scene load, render/ui/hud_render.c); with another course's map the HUD takes
- *                 61..63 (tools/prepare_hud.py --first-bank 61): the HUD is drawn in phases 20..24 only, before
- *                 the podium's cinematic and the result labels take 60..61, and writes its banks again at the
- *                 next scene load
+ *   banks 60..63  HUD (written at scene load, render/ui/hud_render.c; tools/prepare_hud.py --first-bank 60): the
+ *                 HUD is drawn in phases 20..24 only, before the podium's cinematic and the result labels take
+ *                 60..61, and writes its banks again at the next scene load
  * A DNT4 car pack uses no palette; the result palettes are still written at
  * the hand-off. Host tools read this header too: constants only.
  * Budget of course 0 (tools/prepare_palette_materials.py --share): the cars

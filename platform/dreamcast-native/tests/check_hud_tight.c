@@ -197,6 +197,18 @@ static void row_parse(const char *line,nm_hud_t *h) {
         h->roll_hint=(uint8_t)(roll[6]-'0');h->roll_digit=(uint8_t)(roll[7]-'0');h->roll_go=(uint8_t)(roll[8]-'0');
         h->roll_banner=(uint8_t)(roll[9]-'0');h->roll_scroll=(uint16_t)strtoul(field(line,"scroll"),NULL,10);
     }
+    const char *message=strstr(line," message="); /* ad34; the time back from its cells to ticks at nm_hud_time's rate. */
+    if(message) {
+        h->lap_label=(uint8_t)(message[9]-'0');
+        if(h->lap_label) {
+            uint8_t t[8];cells(message+11,t,8);
+            const uint32_t hundredths=((t[0]==NM_HUD_BLANK ? 0u : t[0]*10u)+t[1])*6000u+(t[3]*10u+t[4])*100u+t[6]*10u+t[7];
+            uint32_t ticks=hundredths*64u/100u;
+            while((ticks*100u)>>6<hundredths) ++ticks;
+            h->lap_time=(uint16_t)ticks;
+        }
+    }
+    h->overlay=h->roll_banner || h->roll_digit || h->roll_go || h->lap_label;
     const char *needle=field(line,"needle");
     h->needle=(uint8_t)strtoul(needle,&end,10);h->needle_angle=(uint16_t)strtoul(end+1,NULL,10);
     h->map=(uint8_t)strtoul(field(line,"map"),NULL,10);

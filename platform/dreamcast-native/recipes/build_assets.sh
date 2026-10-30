@@ -661,10 +661,10 @@ bg_wait trace_hud
 DESC_hud="HUD pack (prepare_hud.py on the reference trace; the Advanced map from its HUD trace)"
 bg_wait trace_hud2
 bg_wait trace_hud1
-# The Advanced map's colour fills no free entry of the two banks: the HUD takes banks 61..63 (palette_banks.h).
+# The HUD takes banks 60..63 (palette_banks.h): the Advanced map's colour and the lap message's font fill no free entry.
 hud() {
   fresh $HD/hud
-  python3 $T/prepare_hud.py $R $X/hud-trace $HD/hud --course-map 2 $X/hud-trace2 --course-map 1 $X/hud-trace1 --first-bank 61 --max-banks 3
+  python3 $T/prepare_hud.py $R $X/hud-trace $HD/hud --course-map 2 $X/hud-trace2 --course-map 1 $X/hud-trace1 --first-bank 60 --max-banks 4
 }
 step hud hud
 

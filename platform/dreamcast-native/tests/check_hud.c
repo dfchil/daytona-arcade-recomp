@@ -90,6 +90,8 @@ int main(int argc,char **argv) {
         }
         /* The rolling start's: traces made before these fields show no overlay. */
         if(field(line,"stage")) { race.stage=(int16_t)number(line,"stage",10);race.accel=(uint16_t)number(line,"accel",10); }
+        /* ad34's: rows made before these fields show no message. */
+        if(field(line,"lastlap")) { race.lap_last=(uint16_t)number(line,"lastlap",10);race.finish_flags=(uint32_t)number(line,"flags8",16); }
         /* The CONDITION panel's inputs. */
         cars.math=math;
         if(field(line,"cars")) {

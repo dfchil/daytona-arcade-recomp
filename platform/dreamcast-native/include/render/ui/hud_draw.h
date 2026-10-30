@@ -12,7 +12,7 @@
 #else
 #define NM_HUD_SHEET_BANK(sheet) ((unsigned)(sheet))
 #endif
-enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1+6 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons, the rolling start's overlay. */
+enum { NM_HUD_MAX_QUADS=112+4+NM_HUD_RADAR_CARS+1+6+9 }; /* Cells and markers, the gear indicator, the CONDITION panel's icons, nm_hud_overlay_place. */
 /* Strip order. sprite, at and turn repeat the placement (nm_hud_tight below). */
 typedef struct { float xy[4][2], uv[4][2]; uint8_t sheet, sprite; float at[2], turn[2]; } nm_hud_quad_t;
 
@@ -94,10 +94,13 @@ static inline void nm_hud_radar_place(nm_hud_list_t *list, const nm_hud_t *h, nm
 #ifndef NM_HUD_ROLLING
 #error "hud_data.h has no rolling start overlay (ab78, d438): make the HUD pack again with tools/prepare_hud.py (NATIVE_HUD_DIR)"
 #endif
+#ifndef NM_HUD_LAP_MESSAGE
+#error "hud_data.h has no lap message (ad34): make the HUD pack again with tools/prepare_hud.py (NATIVE_HUD_DIR)"
+#endif
 /* The car of the banner on the screen: column 0 of the tile layer in the 1024-pixel ring, as -512..511; the car and
  * the banner lie within the ring's first 512 pixels, so one place shows all of them. */
 static inline int nm_hud_roll_x(const nm_hud_t *h) { return (int)((1536u-h->roll_scroll)&1023u)-512; }
-/* The rolling start's overlay (nm_hud_overlay). Tile layer 0 lies over the map's polygons, as the paint order here. */
+/* nm_hud_overlay's elements. Tile layer 0 lies over the map's polygons, as the paint order here. */
 static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t *list, const nm_hud_t *h) {
     if(h->roll_banner) {
         const int x=nm_hud_roll_x(h);
@@ -109,6 +112,13 @@ static __attribute__((noinline, unused)) void nm_hud_overlay_place(nm_hud_list_t
     if(h->roll_hint==2) nm_hud_late_sprite(list,NM_HUD_ROLL_AUTO,NM_HUD_ROLL_AUTO_X,NM_HUD_ROLL_AUTO_Y);
     if(h->roll_digit) nm_hud_late_sprite(list,NM_HUD_ROLL_DIGIT_1+h->roll_digit-1u,NM_HUD_ROLL_DIGIT_X,NM_HUD_ROLL_DIGIT_Y);
     if(h->roll_go) nm_hud_late_sprite(list,NM_HUD_ROLL_GO,NM_HUD_ROLL_GO_X,NM_HUD_ROLL_GO_Y);
+    if(h->lap_label) {
+        uint8_t cells[8];
+        nm_hud_time(h->lap_time,cells);
+        nm_hud_late_sprite(list,h->lap_label==2 ? NM_HUD_MSG_BEST : NM_HUD_MSG_LAP,NM_HUD_MSG_LABEL_X,NM_HUD_MSG_LABEL_Y);
+        for(unsigned i=0;i<8;++i) if(cells[i]!=NM_HUD_BLANK)
+            nm_hud_late_sprite(list,NM_HUD_MSG_0+cells[i],NM_HUD_MSG_TIME_X+16*(int)i,NM_HUD_MSG_TIME_Y);
+    }
 }
 /* The panel under the icons: a stipple of one colour in the original, one translucent rectangle here
  * (x0, y0, x1, y1 in arcade pixels, colour NM_HUD_RADAR_PANEL_ARGB) behind every HUD sprite, drawn
@@ -231,7 +241,7 @@ static inline unsigned nm_hud_place(const nm_hud_t *h, nm_hud_quad_t quads[NM_HU
 #ifdef NM_HUD_GEAR
     if(h->gear_lever<=6 || h->gear_digit) nm_hud_gear_place(&list,h);
 #endif
-    if(h->roll_banner || h->roll_digit || h->roll_go) nm_hud_overlay_place(&list,h);
+    if(h->overlay) nm_hud_overlay_place(&list,h);
     return list.count;
 }
 static inline unsigned nm_hud_quads(const nm_hud_t *h, nm_hud_quad_t quads[NM_HUD_MAX_QUADS], nm_hud_sincos_t sincos) {

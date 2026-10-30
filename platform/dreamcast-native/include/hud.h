@@ -21,6 +21,7 @@
  *   a818..a968         wrong-way message "逆走" (unit 1 on this board, 53e59a bit0)
  *   ae98..aef0         "TIME EXTENSION!!" after a time award (phase handler 3558)
  *   ab2c..ab74         "PIT WORK!" while the pit's stop count 501a84 is positive (blinks while the car stands)
+ *   ad34..ae94         the lap's time after the lap line, blinking (nm_hud_overlay)
  *   ab78..ad30, d438..d5e0  the rolling start's overlay on course 0 (nm_hud_overlay)
  *   1299c..12c70       course map and its two markers (polygons)
  *   12c98..13208       CONDITION panel: the cars near the player (polygons, with the map)
@@ -37,7 +38,7 @@
  * tick, so nm_hud_tick uses this tick's state for everything; call it once
  * per gameplay tick, after the tick.
  *
- * Not here yet: messages (the lap time message ad34, banners), the 501a80
+ * Not here yet: the 501a80
  * time-attack variants (12f20: record times in place of the CONDITION
  * panel's cars), the START + VR2/VR3/VR4 zoom chord of 1299c..12a04 (the port
  * has no VR buttons: the zoom stays at its default) and the mph branch of b1a4
@@ -58,6 +59,8 @@ typedef struct {
     uint32_t hold;               /* 501a84 after this tick (the pit's stop count, race_field.h timer_hold). */
     int16_t stage;               /* 501850 after this tick (-1 off course 0): the rolling start's sequence. */
     uint16_t accel;              /* 501054 of this tick: d480 chooses the hint by it. */
+    uint16_t lap_last;           /* +66 after this tick: the ticks of the lap just ended. */
+    uint32_t finish_flags;       /* 5010d8 after this tick: bit1 (the last lap's line) hides the lap message. */
 } nm_hud_race_t;
 
 /* CONDITION panel inputs: a car's position and its drawn heading +58 + +d6. */
@@ -126,7 +129,10 @@ typedef struct {
     /* The rolling start's overlay (nm_hud_overlay; last: the fields before keep their offsets). hint: 0 none, 1 "ACCEL ON!",
      * 2 "AUTO DRIVE"; digit: 1..3, 0 none; scroll: 4 * 5010b0 & 1023, how far the banner has run left. */
     uint8_t roll_banner, roll_hint, roll_digit, roll_go;
+    uint8_t lap_label;            /* ad34: 0 not drawn, 1 "LAP TIME", 2 "BEST LAP" */
+    uint8_t overlay;              /* Something of nm_hud_overlay is drawn. */
     uint16_t roll_scroll;
+    uint16_t lap_time;            /* ad34: the ticks it shows. */
 } nm_hud_t;
 
 /* 234dd8: zoom by index (START + VR2/VR3/VR4 select 0, 1, 2; 1 at the map object's start, 12898..128ac).
@@ -285,14 +291,27 @@ static inline void nm_hud_radar(nm_hud_t *hud, const nm_hud_cars_t *c) {
  *    "ACCEL ON!" at column 43 until the next erase: d4d8 erases with the width of the shorter block. Not reproduced.)
  *  - ab78, stages 0..3 (the player 29, 19, 9 profiles before the line): "3", "2", "1" (2882e9c, 2882e24, 2882dac, 9x6
  *    at 27,16) drawn with the stage's step, kept until GO's first erase;
- *  - ac04.. from the line on, stage 5..64: GO! 2882f14 (20x12 at 21,14) drawn while stage & 15 > 7, erased otherwise. */
+ *  - ac04.. from the line on, stage 5..64: GO! 2882f14 (20x12 at 21,14) drawn while stage & 15 > 7, erased otherwise.
+ * The lap message ad34 (the phase handler, after ae98, once the rolling start is over and a lap is done): while 5010dc
+ * runs, unless 5010d8 bit1 (the last lap): drawn when its bit2 is set and it is not 1, else erased, and it stays as
+ * it is once 5010dc is out. "BEST LAP" 28829a0 when +66 equals the best +64, else "LAP TIME" 28829c8 (14x1 at 24,15),
+ * over the time +66 (18544, as nm_hud_time, 2x3 tiles a glyph at 22,16). The call stands before the player's update
+ * and a96c's count, as the handler. ae24..ae90 (" PIT WORK" at 21,22 while +204 is nonzero) never runs: the program's
+ * only store to +204 is e45c's zero. */
 static __attribute__((noinline, unused)) void nm_hud_overlay(nm_hud_t *hud, const nm_hud_race_t *race, const nm_hud_cars_t *c) {
     const int stage=race->stage;
+    if(race->active_phase==22 && !(c->start_flags&1u) && c->completed && hud->lap_ticks>0 && !(race->finish_flags&2u)) {
+        hud->lap_label=0;
+        if(hud->lap_ticks!=1 && (hud->lap_ticks&4)) {
+            hud->lap_label=race->lap_last==c->best_ticks ? 2u : 1u;hud->lap_time=race->lap_last;
+        }
+    }
     hud->roll_banner=(c->start_flags&1u) && race->active_phase!=19;
     hud->roll_scroll=(uint16_t)((race->counter<<2)&1023u);
     hud->roll_hint=hud->roll_banner && !stage && (race->counter&31u)<15u ? (race->accel>128u ? 2u : 1u) : 0u;
     hud->roll_digit=stage>=1 && stage<=3 ? (uint8_t)(4-stage) : 0u;
     hud->roll_go=stage>3 && (stage&15)>7;
+    hud->overlay=hud->roll_banner || hud->roll_digit || hud->roll_go || hud->lap_label;
 }
 
 /* One gameplay tick. `race` and `cars` are the state after the tick. */
@@ -308,6 +327,7 @@ static __attribute__((noinline, unused)) void nm_hud_tick(nm_hud_t *hud, const n
         if(hud->extension_ticks && (hud->extension_ticks&4)) hud->extension|=place;
         else hud->extension&=(uint8_t)~place;
     }
+    nm_hud_overlay(hud,race,c);
     /* The player's update: 13410 and 13534. */
     if(race->lap_line) hud->lap_ticks=128;
     if(race->award) hud->extension_ticks=128;
@@ -367,7 +387,6 @@ static __attribute__((noinline, unused)) void nm_hud_tick(nm_hud_t *hud, const n
         /* ab10..ab20, the end of a96c: the lap message counts down. */
         if(hud->lap_ticks>0) --hud->lap_ticks;
     }
-    nm_hud_overlay(hud,race,c);
     hud->map=race->active_phase==20 || race->active_phase==22 || race->active_phase==24 || race->active_phase==26;
     if(hud->map) {
         hud->player_x=c->x;hud->player_z=c->z;hud->player_yaw=c->yaw;

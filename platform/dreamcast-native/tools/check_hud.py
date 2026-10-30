@@ -117,6 +117,19 @@ def decode(row, fit):
             out['scroll'] = str((-int(row['lscroll'], 16)) & 1023)
         elif all(w in BLANKS for w in banner):
             out['banner'] = '0'
+    # ad34, the lap message: the label on row 15, the time's first tile row in X16 from column 22; the erased cells are
+    # the font's space (six tiles). Frames with other art there are not compared.
+    if 'M15' in row and 'lastlap' in row and 'lap_message' in fit:
+        m = fit['lap_message']
+        label, time = words('M15'), words('X16')[3:19]
+        spaces = {m['font']+i for i in range(6)} | BLANKS
+        glyphs = {word: index for index, word in enumerate(m['glyphs'])}
+        if all(w in spaces for w in label):
+            out['message'] = '0:'
+        elif label in (m['lap'], m['best']):
+            cells = [glyphs.get(time[i], None if time[i] in spaces else -1) for i in range(0, 16, 2)]
+            if -1 not in cells:
+                out['message'] = f"{1+(label == m['best'])}:"+''.join(glyph(c) for c in cells)
     # b0c0, the gear indicator (packs with 'gear'): rows 9..11 of columns 33..36 (S9..S11 start at column 22).
     # The lever frame f (3x3 tiles at column 34) or the digit d between its brackets with the label below,
     # '_' when not drawn; frames with other art there are not compared.
@@ -149,6 +162,8 @@ def display_rows(path):
             fields['extension2'] = str(int(fields['extension']) >> 1 & 1)
         if 'roll' in fields:
             fields.update(hint=fields['roll'][0], digit=fields['roll'][1], go=fields['roll'][2], banner=fields['roll'][3])
+        if fields.get('message', '').startswith('0:'):
+            fields['message'] = '0:'
         result[int(fields['frame'])] = fields
     return result
 
@@ -227,6 +242,7 @@ def main():
     gears = [0, 0, 0]  # gear indicator frames compared, of them with the lever, with the digit
     radar = dict(frames=0, icons=0, zoom=0, worst=0.0, panel_frames=0)
     overlay, drawn = {}, {}  # the rolling start's overlay: frames compared and frames it is drawn on, by element
+    lap_messages = [0, 0, 0]  # lap message (ad34) frames compared, with LAP TIME, with BEST LAP
     for row in reference:
         frame = int(row['frame'])
         started = started or row['active'] == '22'
@@ -249,8 +265,10 @@ def main():
             if kind in shown and kind in d:
                 overlay[kind] = overlay.get(kind, 0)+1
                 drawn[kind] = drawn.get(kind, 0)+(shown[kind] != '0')
+        if 'message' in shown and 'message' in d:
+            lap_messages[0] += 1; lap_messages[1] += shown['message'][0] == '1'; lap_messages[2] += shown['message'][0] == '2'
         for kind in ('timer', 'lap', 'rank', 'count', 'speed', 'rows', 'reverse', 'extension1', 'extension2', 'gear',
-                     'hint', 'digit', 'go', 'banner', 'scroll'):
+                     'hint', 'digit', 'go', 'banner', 'scroll', 'message'):
             if kind not in shown or kind not in d:
                 continue
             if shown[kind] != d[kind]:
@@ -335,6 +353,8 @@ def main():
         print(f'  time extension message (ae98): compared on {extensions[0]} cells (rows 12 and 16 of a frame), drawn on {extensions[1]}')
     if gears[0]:
         print(f'  gear indicator (b0c0): compared on {gears[0]} frames, lever drawn on {gears[1]}, digit on {gears[2]}')
+    if lap_messages[0]:
+        print(f'  lap message (ad34): compared on {lap_messages[0]} frames, LAP TIME drawn on {lap_messages[1]}, BEST LAP on {lap_messages[2]}')
     if overlay:
         print('  rolling start overlay (ab78, d438): '+', '.join(f'{kind} compared on {count} frames, drawn on {drawn[kind]}'
                                                                  for kind, count in overlay.items()))

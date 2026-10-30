@@ -334,7 +334,7 @@ Advanced (course slot 2; the course byte 501460 is the slot of every per-course 
   T/prepare_world_objects clock R objects2 sources course2-world.dnm  -> course2-actors.dna
       (tests/test_clock.c: every frame of every group as the renderer decodes it against the export's lists)
   M 3422 --export-native-sky, T/prepare_sky                            -> course2-sky.dns
-  M 8000 --trace-hud, T/prepare_hud --course-map 2 --first-bank 61 --max-banks 3 -> hud (MAP_C2)
+  M 8000 --trace-hud, T/prepare_hud --course-map 2 --first-bank 60 --max-banks 4 -> hud (MAP_C2)
   M 8000 inputs/inputs-advanced-timeout.txt --trace-race --trace-clock -> race-advanced.trace, clock-advanced.txt
   trace_race_native --course 2 --counter-base auto --clock, compare_race_trace --require-equal --skip-rows 0,1,
   tests/test_clock_lockstep.py                                         -> script-advanced/race_script_data.h

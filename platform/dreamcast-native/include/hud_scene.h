@@ -17,6 +17,7 @@ static inline void nm_hud_observe(const nm_race_scene_t *s, nm_hud_race_t *race,
     /* After a tick, ticks counts it: 5010b0 = base + ticks - 1 (slot_machine.h). */
     race->counter=s->counter_base+s->ticks-1u;race->reverse=s->wrong_way;
     race->hold=s->shared.timer_hold;race->stage=s->start_stage;race->accel=s->accel;
+    race->lap_last=p->lap.last_ticks;race->finish_flags=p->checkpoints.finish_flags;
     cars->start_flags=s->start_flags;
     cars->completed=p->lap.completed;cars->total_laps=p->checkpoints.total_laps;
     cars->rank=s->cars[0].rank;cars->count=s->count;
