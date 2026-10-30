@@ -844,6 +844,20 @@ games_lockstep() {
   fresh $d/traces
 }
 step games_lockstep games_lockstep
+DESC_props_slow="2230ac's slow knock: runs that drive into a prop of Advanced and of Expert at speed index 54 (m2segment --trace-props), tests/test_props.c on every tick, draw and hit sound"
+props_slow() {
+  local d=$W/props-slow
+  fresh $d; mkdir -p $d/assets
+  $M $R 4030 --inputs $RC/inputs/inputs-prop-advanced.txt --trace-race $d/advanced.trace --trace-props $d/advanced.bin > $d/advanced.log 2>&1
+  $M $R 9370 --inputs $RC/inputs/inputs-prop-expert.txt --trace-race $d/expert.trace --trace-props $d/expert.bin > $d/expert.log 2>&1
+  ln -s $P/drive.dnd $P/course0.dnc $P1/course1.dnc $P2/course2.dnc $d/assets/
+  cc -std=c11 -O1 -fno-fast-math -ffp-contract=off -I$DN/include -I$HD/race-start-data -I$W/intro $DN/tests/test_props.c \
+     $DN/code/props.c $DN/code/drive.c $DN/code/contact.c -lm -o $d/test_props
+  $d/test_props $d/assets --course 2 $d/advanced.bin --course 1 $d/expert.bin | tee $d/compare.txt | tail -2
+  grep -q 'knock starts.*2230ac 2/' $d/compare.txt || { print -r -- "no slow knock of 2230ac in both runs"; return 1; }
+  rm -f $d/advanced.trace $d/expert.trace $d/advanced.bin $d/expert.bin
+}
+step props_slow props_slow
 if (( ! KEEP )); then rm -rf $X/attract-2d; fi
 if (( ! KEEP )); then rm -rf $X/hud-trace $X/hud-trace2 $X/hud-trace1 $X/race.trace $X/race.sound $X/reference-manual.trace $X/reference-manual.sound $X/race-advanced.trace $X/race-expert.trace $X/race-advanced-finish.trace $X/race-expert-finish.trace $X/clock-advanced.txt $X/clock-advanced-finish.txt $X/clock-expert.txt $X/clock-expert-finish.txt $X/attract.trace $X/clock-attract.txt; fi
 

@@ -1,7 +1,7 @@
-/* The props (code/props.c) against the original game's own runs: build/dc-native-world-anim.LwFeBn/cones
- * (cone_run.cpp: the recompiled i960 + TGP with a controller that drives the player into the cones;
- * spec-cones.md section 10) for course 0, and runs of props_run.cpp (cone_run for any course: E holds the
- * tasks from the manager to the sound manager, then 5036xx) for the others. Each run's records, in execution order, drive the native props: M (the
+/* The props (code/props.c) against the original game's own runs: m2segment --trace-race R --trace-props RUN.bin
+ * (tools/trace_race.hpp; the inputs of a run that hits props, e.g. recipes/inputs/inputs-prop-*.txt; E holds the
+ * tasks from the manager to the sound manager, then 5036xx). The first runs (course 0's, build/dc-native-world-anim.LwFeBn/cones,
+ * since deleted) came from a separate tool, cone_run.cpp, in this format. Each run's records, in execution order, drive the native props: M (the
  * manager's entry: the player entity's words, the view matrix), T (a cone's tick: the draw bitmap),
  * E (the sound manager's entry: the twelve prop tasks and 5036xx after the cones), X (a cone's draw:
  * the twelve matrix words the geometrizer got), S (19bdc), I (init entries). Compared after every

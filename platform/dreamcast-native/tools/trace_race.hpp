@@ -38,6 +38,13 @@ struct RaceTrace {
     std::FILE *clock_file = nullptr;
     bool expert_clock = false;   // --trace-clock-expert: also Expert's actors (X and V lines, the longer F line)
     uint64_t running = 0;   // the frame passed to the input script, set before each run_frame
+    // --trace-props: every tick of the course props in execution order, as a binary run of tests/test_props.c: records
+    // tag, frame (u64), body size (u32), body. C the course and I 222d30 at the manager's init (a scene's first tick),
+    // M the manager's tick (the player entity 5012f0 and the view 501560), T a prop's tick (its task and the draw
+    // bitmap 501520), X a prop's draw (its task, 1, the TGP's matrix), S a call of 19bdc (the command), E the sound
+    // manager's entry (the tasks from the manager 50ef80 to its own, then 503600..50367f), then I 22302c.
+    std::FILE *props_file = nullptr;
+    uint32_t props_body[2048];
     // --trace-attract: rows also in the attract loop (phases 2..11): the cinematic (3..5) and the V.R. demo (6, 7)
     // with the pool's cars, the title and the rest (2, 8..11) with the T row alone (the timeline, 5010b0, course).
     bool attract = false;
@@ -46,6 +53,41 @@ struct RaceTrace {
         if (std::filesystem::exists(path)) throw std::runtime_error("clock trace output already exists; choose a new file");
         clock_file = std::fopen(path.c_str(), "w");
         if (!clock_file) throw std::runtime_error("cannot create clock trace");
+    }
+    void open_props(const std::string &path) {
+        if (std::filesystem::exists(path)) throw std::runtime_error("props trace output already exists; choose a new file");
+        props_file = std::fopen(path.c_str(), "wb");
+        if (!props_file) throw std::runtime_error("cannot create props trace");
+    }
+    void props_record(char tag, const uint32_t *body, uint32_t words) {
+        const uint64_t frame = running; const uint32_t bytes = words*4;
+        std::fputc(tag, props_file);
+        std::fwrite(&frame, 8, 1, props_file); std::fwrite(&bytes, 4, 1, props_file);
+        std::fwrite(body, 4, words, props_file);
+    }
+    uint32_t props_words(uint32_t *out, uint32_t from, uint32_t bytes) {
+        for (uint32_t i = 0; i < bytes/4; ++i) out[i] = board->read_dword(from+4*i);
+        return bytes/4;
+    }
+    void props_call(const rt::Cpu &cpu, uint32_t target) {
+        const uint32_t task = cpu.m_r[29];
+        uint32_t *b = props_body;
+        if (target == 0x222d30) {
+            b[0] = board->read_byte(0x501460); props_record('C', b, 1);
+            b[0] = target; props_record('I', b, 1);
+        } else if (target == 0x222dd0) {
+            const uint32_t n = props_words(b, board->read_dword(0x5012f0), 0x340);
+            props_record('M', b, n + props_words(b+n, 0x501560, 48));
+        } else if (target == 0x2231c0) {
+            b[0] = task; props_record('T', b, 1 + props_words(b+1, 0x501520, 64));
+        } else if (target == 0x1786c && cpu.m_IP >= 0x2231c0 && cpu.m_IP < 0x223620) {
+            b[0] = task; b[1] = 1; tgp_matrix(b+2); props_record('X', b, 14);
+        } else if (target == 0x19bdc) { b[0] = cpu.m_r[16]; props_record('S', b, 1); }
+        else if (target == 0x22302c) {
+            const uint32_t n = props_words(b, 0x50ef80, task + 0x80 - 0x50ef80);
+            props_record('E', b, n + props_words(b+n, 0x503600, 0x80));
+            b[0] = target; props_record('I', b, 1);
+        }
     }
     static bool clock_code(uint32_t ip) {
         // The ticks of 220304, 2209e4, 220a7c, 221f10, 222030, 222090, 222c48, 222cf0 (prepare_world_objects.py).
@@ -88,7 +130,7 @@ struct RaceTrace {
         board = &b;
         std::fputs("# race-trace v1 side=reference\n", file);
     }
-    ~RaceTrace() { if (file) std::fclose(file); if (clock_file) std::fclose(clock_file); }
+    ~RaceTrace() { if (file) std::fclose(file); if (clock_file) std::fclose(clock_file); if (props_file) std::fclose(props_file); }
 
     void capture_entry() {
         auto &b = *board;
@@ -103,6 +145,7 @@ struct RaceTrace {
     static void observe_call(void *context, const rt::Cpu &cpu, uint32_t target, int type) {
         if (type) return;
         auto &self = *static_cast<RaceTrace *>(context);
+        if (self.props_file) self.props_call(cpu, target);
         if (target == 0xd3f4 && cpu.m_IP == 0xd354 && cpu.m_r[29] == self.board->read_dword(0x501220)) {
             ++self.rolling_entries; self.capture_entry();
         }
@@ -245,6 +288,11 @@ struct RaceTrace {
         ++frames_seen;
     }
     void close() {
+        if (props_file) {
+            const bool failed = std::ferror(props_file) != 0;
+            if (std::fclose(props_file) || failed) { props_file = nullptr; throw std::runtime_error("cannot write props trace"); }
+            props_file = nullptr;
+        }
         if (clock_file) {
             const bool failed = std::ferror(clock_file) != 0;
             if (std::fclose(clock_file) || failed) { clock_file = nullptr; throw std::runtime_error("cannot write clock trace"); }

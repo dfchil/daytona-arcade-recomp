@@ -5,7 +5,7 @@
  * search is a short-horizon rollout over a fixed set of wheel/pedal values; it knows
  * nothing about the original beyond the input decode below.
  *
- * usage: drive_race_native [--manual] [--course N] [--counter-base B] ASSET_DIR NEW_SCRIPT FIRST_FRAME MAX_TICKS
+ * usage: drive_race_native [--manual] [--course N] [--counter-base B] [--replay SCRIPT [--target X,Z,PROFILE,NEAR,SPEED]] ASSET_DIR NEW_SCRIPT FIRST_FRAME MAX_TICKS
  *                          SPEED_CAP [CARRY_TRACE [shadow]]
  *   --manual     select the manual transmission (steer right through the
  *                transmission select, frames 2010-2390) and search the shifter
@@ -33,6 +33,13 @@
  *                scripts/inputs/race_to_end.txt menu sequence, copied below).
  *   SPEED_CAP    0 = drive as fast as the search finds; otherwise lift above
  *                this boundary speed (a deliberately slow, lower-placed race).
+ *   --replay SCRIPT   the race's raw inputs come from an input script of this menu (later
+ *                lines win, as tools/common/input_script.h); no search.
+ *   --target X,Z,PROFILE,NEAR,SPEED  with --replay: once the car is within NEAR road profiles before
+ *                PROFILE the replay stops and a controller brings it to (X, Z) at speed index
+ *                5012f0 +18 <= SPEED: along the road's nearer edge, the last 30 units straight at the
+ *                point, then wheel centred and no pedals once it has been within 1 unit. For a prop's
+ *                knock at a chosen speed.
  * Raw values follow the original decode 4e34..4fd8: the cabinet bytes are a
  * 3:1 blend of the previous and current frame's ADC sample, then dead zone /
  * clamp / scale (include/vehicle.h nm_controls_decode).
@@ -226,6 +233,53 @@ static double policy_rollout(const policy_t *q,unsigned horizon,float speed_cap)
     return value+progress(&trial,before)*profile_spacing*2.0+trial.race.cars[0].car.boundary.speed*20.0;
 }
 
+/* --replay, --target. */
+static uint8_t (*replay)[3];
+static long replay_first,replay_ticks;
+static float target[2];
+static int target_profile,target_near,target_speed=-1,target_reached,target_engaged;
+static void read_replay(const char *path,long first_frame,long ticks) {
+    FILE *in=fopen(path,"r");assert(in);
+    replay=calloc((size_t)ticks,3);assert(replay);
+    replay_first=first_frame;replay_ticks=ticks;
+    for(long i=0;i<ticks;++i) { replay[i][0]=0x80;replay[i][1]=0x20;replay[i][2]=0x20; }
+    static char line[256];
+    while(fgets(line,sizeof(line),in)) {
+        long from,to;char name[32];unsigned value;
+        if(line[0]=='#' || sscanf(line,"%ld-%ld %31[^=]=%i",&from,&to,name,&value)!=4) {
+            if(line[0]=='#' || sscanf(line,"%ld %31[^=]=%i",&from,name,&value)!=3) continue;
+            to=from;
+        }
+        const int channel=!strcmp(name,"steer") ? 0 : !strcmp(name,"accel") ? 1 : !strcmp(name,"brake") ? 2 : -1;
+        if(channel<0) continue;
+        for(long f=from;f<=to;++f) if(f>=first_frame && f<first_frame+ticks) replay[f-first_frame][channel]=(uint8_t)value;
+    }
+    fclose(in);
+}
+static void target_input(const state_t *s,uint8_t raw[3]) {
+    const nm_player_t *p=&s->race.cars[0].car;
+    const float x=p->boundary.ground.position[0],z=p->boundary.ground.position[2];
+    const float distance=hypotf(target[0]-x,target[1]-z);
+    if(distance<1.0f) target_reached=1;
+    if(target_reached) { raw[0]=0x80;raw[1]=0x20;raw[2]=0x20;return; }
+    float tx=target[0],tz=target[1];
+    if(distance>30.0f) { /* the road's edge on the point's side, 24 units on */
+        const unsigned span=road.profile_count-1,k=(uint16_t)p->phase[0];
+        float ax,az,bx,bz;lane_point(k,0.0f,&ax,&az);lane_point(k,1.0f,&bx,&bz);
+        const float lane=hypotf(target[0]-ax,target[1]-az)<hypotf(target[0]-bx,target[1]-bz) ? 0.15f : 0.85f;
+        for(unsigned step=1;step<96;++step) {
+            lane_point((k+step)%span,lane,&tx,&tz);
+            if(hypotf(tx-x,tz-z)>=24.0f) break;
+        }
+    }
+    const int desired=(int)lround(atan2(-(double)(tx-x),(double)(tz-z))*32768.0/M_PI);
+    const int err=(int16_t)(uint16_t)(desired-(int)(uint16_t)p->boundary.ground.yaw);
+    int w=-err*80/1400;if(w>80) w=80;if(w<-80) w=-80;
+    raw[0]=(uint8_t)(0x80+w);
+    const int over=(int)p->speed_index-target_speed;
+    raw[1]=over<-10 ? 0xe0 : over<0 ? 0x60 : 0x20;raw[2]=over>0 ? 0xe0 : 0x20;
+}
+
 /* The menu of each course slot up to the race (frames before FIRST_FRAME): scripts/inputs/race_to_end.txt,
  * course_expert.txt (wheel to Long through the confirm edge), course_advanced.txt (Medium). */
 static void write_menu(FILE *out,long first_frame) {
@@ -238,6 +292,7 @@ static void write_menu(FILE *out,long first_frame) {
 
 int main(int argc,char **argv) {
     uint32_t counter_base=NM_SLOT_MACHINE_COUNTER_BASE;
+    const char *replay_path=NULL;
     setvbuf(stdout,NULL,_IOLBF,0);
     for(;;) {
         if(argc>1 && !strcmp(argv[1],"--manual")) { manual=1;argv[1]=argv[0];++argv;--argc; }
@@ -246,18 +301,24 @@ int main(int argc,char **argv) {
             char *end;launch_raw=(int)strtol(argv[2],&end,0);launch_from=*end==':' ? strtol(end+1,NULL,10) : 0;
             argv[2]=argv[0];argv+=2;argc-=2;
         }
+        else if(argc>2 && !strcmp(argv[1],"--replay")) { replay_path=argv[2];argv[2]=argv[0];argv+=2;argc-=2; }
+        else if(argc>2 && !strcmp(argv[1],"--target")) {
+            if(sscanf(argv[2],"%f,%f,%d,%d,%d",target,target+1,&target_profile,&target_near,&target_speed)!=5) return 2;
+            argv[2]=argv[0];argv+=2;argc-=2;
+        }
         else if(argc>2 && !strcmp(argv[1],"--course")) { course=(unsigned)strtoul(argv[2],NULL,10);argv[2]=argv[0];argv+=2;argc-=2; }
         else if(argc>2 && !strcmp(argv[1],"--counter-base")) { counter_base=(uint32_t)strtoul(argv[2],NULL,10);argv[2]=argv[0];argv+=2;argc-=2; }
         else break;
     }
     const int shadowed=argc==8 && !strcmp(argv[7],"shadow");
     if((argc!=6 && argc!=7 && !shadowed) || course>2 || (manual && course)) {
-        fputs("usage: drive_race_native [--manual] [--course N] [--counter-base B] ASSET_DIR NEW_SCRIPT FIRST_FRAME MAX_TICKS SPEED_CAP [CARRY_TRACE [shadow]]\n",stderr);
+        fputs("usage: drive_race_native [--manual] [--course N] [--counter-base B] [--replay SCRIPT [--target X,Z,PROFILE,NEAR,SPEED]] ASSET_DIR NEW_SCRIPT FIRST_FRAME MAX_TICKS SPEED_CAP [CARRY_TRACE [shadow]]\n",stderr);
         return 2;
     }
     const long first_frame=strtol(argv[3],NULL,10),max_ticks=strtol(argv[4],NULL,10);
     const float speed_cap=strtof(argv[5],NULL);
     assert(first_frame>2000 && max_ticks>0);
+    if(replay_path) read_replay(replay_path,first_frame,max_ticks);
     char path[1024];
 #define ASSET(kind,route) (assert(nm_course_asset(path,sizeof(path),argv[1],course,kind,route)),path)
     math=nm_drive_load(ASSET(NM_COURSE_DRIVE,0));assert(math);
@@ -341,7 +402,15 @@ int main(int argc,char **argv) {
         const int driving=live.race.active_phase==22 && live.race.phase==22 && !(live.race.start_flags&1u) &&
             !live.race.rolling[0];
         held_shift=0;
-        if(!driving) { held[0]=0x80;held[1]=launch_accel(&live,tick);held[2]=0x20; }
+        if(replay) {
+            const int ahead=target_profile-(int)(uint16_t)p->phase[0];
+            if(target_speed>=0 && !target_engaged && driving && ahead>=0 && ahead<=target_near) {
+                target_engaged=1;printf("driver: tick %ld target engaged at profile %u speed index %d\n",tick+1,(uint16_t)p->phase[0],(int)p->speed_index);
+            }
+            if(target_engaged) target_input(&live,held);
+            else memcpy(held,replay[tick],3);
+        }
+        else if(!driving) { held[0]=0x80;held[1]=launch_accel(&live,tick);held[2]=0x20; }
         else if(pursuit) {
             static policy_t chosen={0};
             if(tick%4==0) {
@@ -376,6 +445,11 @@ int main(int argc,char **argv) {
         }
         uint8_t now[3]={held[0],held[1],held[2]};
         if(driving && speed_cap>0 && p->boundary.speed>speed_cap) now[1]=0x20;
+        if(target_engaged && (tick%10)==0)
+            printf("driver: tick %ld at (%.1f %.1f) distance %.1f speed index %d yaw %d lateral %d raw %02x %02x %02x\n",tick+1,
+                (double)p->boundary.ground.position[0],(double)p->boundary.ground.position[2],
+                (double)hypotf(target[0]-p->boundary.ground.position[0],target[1]-p->boundary.ground.position[2]),
+                (int)p->speed_index,(uint16_t)p->boundary.ground.yaw,p->lateral.current,now[0],now[1],now[2]);
         for(unsigned c=0;c<3;++c) if(now[c]!=run[c]) {
             const long end=first_frame+tick-1;
             if(run[c]!=rest[c] && end>=run_start[c]) fprintf(out,"%ld-%ld %s=0x%02x\n",run_start[c],end,channel[c],run[c]);

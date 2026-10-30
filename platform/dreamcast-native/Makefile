@@ -148,8 +148,8 @@ ifndef NATIVE_TRANSFER_BENCH
 	$(ENJ_BUILDDIR)/podium-scene-check "$(ENJ_ROMDIR)"
 endif
 # The props (cones) against the original game's runs (tests/test_props.c): NATIVE_PROPS_RUNS=<dir with A..G.bin of
-# build/dc-native-world-anim.LwFeBn/cones> (course 0) and/or NATIVE_PROPS_COURSE_RUNS=<dir with props_run.cpp's *.bin
-# of any course: each scene's course comes with the run>, and a race-start header with the prop data.
+# course 0's cones> and/or NATIVE_PROPS_COURSE_RUNS=<dir with *.bin of m2segment --trace-race R --trace-props RUN.bin
+# on any course: each scene's course comes with the run>, and a race-start header with the prop data.
 ifneq ($(NATIVE_PROPS_RUNS)$(NATIVE_PROPS_COURSE_RUNS),)
 	cc -std=c11 -O1 -Wall -Wextra -Werror -fno-fast-math -ffp-contract=off -fsanitize=address,undefined -Iinclude \
 	  -I$(abspath $(NATIVE_RACE_START_DATA_DIR)) -I$(abspath $(RACE_ASSET_DIR)) tests/test_props.c code/props.c code/drive.c code/contact.c -lm \

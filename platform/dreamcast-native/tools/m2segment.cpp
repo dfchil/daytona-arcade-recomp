@@ -103,6 +103,7 @@ void usage() {
     std::fprintf(stderr, "--trace-race NEW_FILE writes a host-only per-frame race trace (phase, timer, decoded controls, every car) of the original for the free-running native comparison; not combinable with live/reflection observers.\n");
     std::fprintf(stderr, "--trace-clock NEW_FILE with --trace-race: the calls of 1786c the frame-counter animations of Advanced make (platform/dreamcast-native/include/clock_actors.h), for tests/test_clock_lockstep.py.\n");
     std::fprintf(stderr, "--trace-clock-expert with --trace-clock: also the draws of Expert's world actors with the TGP's matrix and the view each frame (platform/dreamcast-native/include/expert_actors.h), for tests/test_expert_lockstep.py.\n");
+    std::fprintf(stderr, "--trace-props NEW_FILE with --trace-race: every tick of the course props as a run of platform/dreamcast-native/tests/test_props.c (spec in platform/dreamcast-native/tools/trace_race.hpp).\n");
     std::fprintf(stderr, "--dump-frames DIR FIRST LAST EVERY writes the screen of the frames FIRST..LAST (every EVERY-th) as raw 0xAARRGGBB dumps DIR/frame_N.rgb (scripts/rgb2png.py), their tile RAM DIR/tiles_N.bin and final pen colours DIR/pens_N.bin (host only, game output: keep under build/).\n");
     std::fprintf(stderr, "--dump-2d DIR FIRST LAST EVERY as --dump-frames without the screens: the tile RAM of each frame, the pens of the first (tools/prepare_attract_2d.py, tests/test_attract_2d.c).\n");
     std::fprintf(stderr, "--trace-attract with --trace-race: rows in the attract loop too (phases 2..11; cars in the cinematic and the V.R. demo, 3..7), for tests/test_attract_lockstep.py.\n");
@@ -170,7 +171,7 @@ int main(int argc, char **argv) {
         bool check_native_race=false;
         std::string result_label_colors, name_label_colors;
         std::string name_exit_output;
-        std::string race_trace_output, hud_trace_output, sound_trace_output, frontend_trace_output, clock_trace_output;
+        std::string race_trace_output, hud_trace_output, sound_trace_output, frontend_trace_output, clock_trace_output, props_trace_output;
         bool clock_trace_expert = false;
         uint64_t hud_snapshot_every = 0;
         bool trace_attract = false;
@@ -184,6 +185,7 @@ int main(int argc, char **argv) {
             else if (!std::strcmp(argv[i], "--trace-race") && i+1<argc) race_trace_output=argv[++i];
             else if (!std::strcmp(argv[i], "--trace-clock") && i+1<argc) clock_trace_output=argv[++i];
             else if (!std::strcmp(argv[i], "--trace-clock-expert")) clock_trace_expert=true;
+            else if (!std::strcmp(argv[i], "--trace-props") && i+1<argc) props_trace_output=argv[++i];
             else if (!std::strcmp(argv[i], "--trace-attract")) trace_attract=true;
             else if ((!std::strcmp(argv[i], "--dump-frames") || !std::strcmp(argv[i], "--dump-2d")) && i+4<argc) {
                 dump_screens = !std::strcmp(argv[i], "--dump-frames");
@@ -266,6 +268,8 @@ int main(int argc, char **argv) {
             throw std::runtime_error("--trace-attract needs --trace-race");
         if (!clock_trace_output.empty() && race_trace_output.empty())
             throw std::runtime_error("--trace-clock needs --trace-race (its call observer)");
+        if (!props_trace_output.empty() && race_trace_output.empty())
+            throw std::runtime_error("--trace-props needs --trace-race");
         if (clock_trace_expert && clock_trace_output.empty())
             throw std::runtime_error("--trace-clock-expert needs --trace-clock");
         if (!race_trace_output.empty() && (check_live_drive || check_reflection))
@@ -319,6 +323,7 @@ int main(int argc, char **argv) {
             race_trace.open(game.board(),race_trace_output);
             race_trace.attract = trace_attract;
             if (!clock_trace_output.empty()) race_trace.open_clock(clock_trace_output);
+            if (!props_trace_output.empty()) race_trace.open_props(props_trace_output);
             race_trace.expert_clock = clock_trace_expert;
             game.set_call_observer(daytona::native::RaceTrace::observe_call,&race_trace);
             game.set_return_observer(daytona::native::RaceTrace::observe_return,&race_trace);
