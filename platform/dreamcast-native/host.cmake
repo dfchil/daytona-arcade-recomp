@@ -5,10 +5,13 @@
 set(DN ${CMAKE_SOURCE_DIR}/platform/dreamcast-native)
 
 # A C target of the port's: C11, its headers (implementation and headers have
-# separate roots on host and SH4).
+# separate roots on host and SH4), libm where that is a library of its own.
 function(native_c_target target)
     set_property(TARGET ${target} PROPERTY C_STANDARD 11)
     target_include_directories(${target} PRIVATE ${DN}/include)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(${target} PRIVATE m)
+    endif()
 endfunction()
 
 # The shared runtime again, with the hooks of M2_DC_NATIVE_HOST (call and return
