@@ -219,6 +219,12 @@ table left: the tables and their generator lived in build directories that are g
   frames). `--course 1` and `2` take Expert's and Advanced's worlds; Expert runs on its record cache.
 - Reference: z is q times one factor, class depth times layer factor, the renderer's form. `(q*layer)*scale` agreed
   only at 0.5. Frame-counter groups (`NM_OBJECT_CLOCK`) are outside its object selection.
+- Open, nothing changed for them. `SIM_SH4=bound` and `bound-all` fail on a long attract table: tick 120, Beginner face
+  9038, one polygon of a near-clipped wall: its vertex at x -2642, y 2795 lies 0.395 px off in y and 1.5e-4 in z
+  (tolerances 1/16 px, 2^-14), a triangle wholly off the screen; the other 1,440 frames hold. The default model passes.
+  `SIM_GENERAL_EMITTER=1` on Expert writes the same triangles as production but in 119 of 779 frames some in the opposite
+  vertex order (it joins strips production leaves apart next to live faces); the PVR culls nothing, the picture is the
+  same, the reference passes both. That emitter draws the inspection views only.
 - Not covered: the frame-counter animations, knocked cones and damaged bodies are not in the tables (the damaged
   bodies have `SIM_DAMAGE_CHECK`); the fence sweep and mutants 29 and 30 need a pack with stipple groups; `SIM_SIDE`
   (the PVR work model's sky and HUD) has no generator now.
