@@ -62,10 +62,12 @@ typedef struct {
     uint16_t object_near_ticks[256];
     /* The slot machine 2204fc of the cinematic scenes: its own actor, made
      * at scene start like the race's (nm_race_scene_t.slot_machine), with
-     * no START edge and gated sound: visual only (nothing reads 5010d0
-     * after phase22). object_clock + ticks is the original's 5010b0. */
+     * gated sound: visual only (nothing reads 5010d0 after phase22).
+     * object_clock + ticks is the original's 5010b0. start_edge: 53e584 bit 4
+     * of the next nm_intro_scene_detail, which consumes it (the podium). */
     nm_slot_machine_t slot_machine;
     uint32_t object_clock;
+    uint8_t start_edge;
     /* 5010b0 - ticks on a step, for the words 5818 derives from it: the variant bit 503690 (5010b0 & 1) and the
      * collision phase 503692 (& 3). The podium: the race's counter base + object_clock + 1 (its first step is
      * two frames after the race's last tick: the entry and the spawn); the attract: object_clock - 3 (0 after
@@ -334,8 +336,9 @@ static inline int nm_intro_scene_detail(nm_intro_scene_t *s,const nm_drive_param
     if(!nm_world_objects_tick(s->object_near_ticks,&s->cells_previous) ||
        !nm_scenery_bitmaps(&s->cells_previous,bitmaps)) return 0;
     if(!s->course) /* the slot machine is a course-0 actor */
-        (void)nm_slot_machine_tick(&s->slot_machine,nm_slot_machine_visible(bitmaps),s->object_clock+s->ticks,0,
+        (void)nm_slot_machine_tick(&s->slot_machine,nm_slot_machine_visible(bitmaps),s->object_clock+s->ticks,s->start_edge,
             s->flags,&remaining); /* 220534 of the scene's actor; flags 1<<3 / 1<<28 gate the sound off */
+    s->start_edge=0;
     return 1;
 }
 

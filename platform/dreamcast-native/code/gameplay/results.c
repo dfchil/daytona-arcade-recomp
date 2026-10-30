@@ -82,7 +82,7 @@ int nm_results_update(nm_practice_scene_t *scene,uint32_t elapsed_us) {
                 scene->race.phase=nm_race_timeout_timer(&scene->results.timer,&scene->results.penalty);
                 if(scene->results.mode==3) {
                     int32_t countdown=(int32_t)scene->results.timer;
-                    if(!nm_result_playback_step(&scene->results.playback,nm_result_keys[0],21,nm_result_targets,37,&countdown,0)) {
+                    if(!nm_result_playback_step(&scene->results.playback,nm_result_keys[0],21,nm_result_targets,37,&countdown,scene->results.start_held)) {
                         scene->failed=1;break;
                     }
                     scene->results.timer=(uint32_t)countdown;

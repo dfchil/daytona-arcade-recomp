@@ -39,13 +39,13 @@ typedef struct nm_practice_scene {
     uint64_t race_bodies; /* Submission coverage by car ID, not a visibility mask. */
     unsigned controller_samples;
     nm_controls_t controller_last;
-    uint8_t start_pending; /* START DOWN_THIS_FRAME not yet consumed by a race tick (53e584 bit4). */
+    uint8_t start_pending; /* START DOWN_THIS_FRAME not yet consumed by a tick (53e584 bit4). */
     uint8_t transmission;  /* 501464 of this race: 0 automatic, 1 manual (code/practice.c). */
     /* 501460 of the loaded course packs and of the scene's world (0 Beginner, 1 Expert, 2 Advanced; the attract's
      * is 0), and whether they are loaded (code/practice.c practice_course_load). */
     uint8_t course, course_loaded;
     int8_t shift_pending;  /* Manual: the pad's shift request (+1 up, -1 down) not yet consumed by a race tick. */
-    unsigned start_edges;  /* START edges fed to race ticks this session (diagnostic). */
+    unsigned start_edges;  /* START edges fed to the race's, podium's and results' ticks this session (props_scene.c). */
     nm_intro_scene_t intro;
     nm_podium_t podium; /* Nonzero phase while phase27/28 owns the updater. */
     nm_path_pack_t intro_paths[8];

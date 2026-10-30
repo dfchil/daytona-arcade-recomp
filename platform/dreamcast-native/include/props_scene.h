@@ -16,7 +16,7 @@ void nm_props_intro_step(const nm_intro_scene_t *intro, const nm_drive_params_t 
 void nm_props_report(void);
 /* Expert's world actors (include/expert_actors.h), stepped with the props of each scene: the course's DNA1 file with
  * actors (kept by the caller while the course is loaded; NULL: none), and practice.c's count of the START edges its
- * race ticks consumed (53e584 bit 4), read once a race tick. */
+ * race, podium and results ticks consumed (53e584 bit 4), read on each tick that steps the actors. */
 void nm_props_world_actors(const void *dna, unsigned course);
 /* The results of a race that ends there (code/practice.c nm_practice_results_tick; `after` its results ticks): the
  * race's Expert actors run on. */

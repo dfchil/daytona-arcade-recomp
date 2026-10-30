@@ -11,6 +11,7 @@ typedef struct {
     uint32_t announcement_cursor,commands,command_hash;
     unsigned show_labels;
     uint8_t after_podium; /* Results entered from the podium (27/28): the pool holds no race field. */
+    uint8_t start_held;   /* 53e120 bit 4 (the pad's START, code/practice.c): the result actor's skip, b680. */
     uint32_t podium_ticks; /* Iterations of phases 27/28, for 5010b0 at the game's end. */
 } nm_results_t;
 

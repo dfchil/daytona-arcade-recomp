@@ -265,9 +265,13 @@ int nm_practice_results_tick(nm_practice_scene_t *scene,unsigned results_phase,
         !nm_race_scene_events(&scene->race,nm_race_intent_rows,57,nm_race_intent_alternate[scene->course],nm_race_intent_special[NM_RACE_INTENT_UNIT],
             nm_race_announcement_rows+nm_race_announcement_offsets[scene->course],nm_race_announcement_counts[scene->course],
             nm_race_announcement_ranks,scene->results.penalty,out))) return 0;
-    /* The world actors of the race's pool (Expert's, include/expert_actors.h) run on through these results. */
-    if(!scene->results.after_podium)
+    /* The world actors of the race's pool (Expert's, include/expert_actors.h) run on through these results, START edges
+     * included; after a podium no task reads them. */
+    const uint8_t start=scene->start_pending;scene->start_pending=0;
+    if(!scene->results.after_podium) {
+        scene->start_edges+=start;
         nm_props_results_step(&scene->race,scene->results.ticks,results_phase,scene->math,&scene->contact);
+    }
 #ifdef NATIVE_RACE_CHECKPOINTS
     ++checkpoint_tick;practice_checkpoint((int32_t)scene->results.timer);
 #endif
@@ -883,9 +887,10 @@ static void practice_update(void *unused) {
             if(nm_select_attract_button(c->button.START==ENJ_BUTTON_DOWN_THIS_FRAME,c->ltrigger,c->rtrigger)) return;
             practice_credit_pending=1;
         }
-        /* Race only: in the attract/podium START keeps its restart meaning.
-         * Latched until a race tick consumes it (frames carry 0..4 ticks). */
-        if(!practice.attract_active && c->button.START==ENJ_BUTTON_DOWN_THIS_FRAME) practice.start_pending=1;
+        /* The race, the podium and the results (the attract's START is the credit above).
+         * Latched until a tick consumes it (frames carry 0..4 ticks). */
+        if((!practice.attract_active || practice.podium.phase) && c->button.START==ENJ_BUTTON_DOWN_THIS_FRAME) practice.start_pending=1;
+        practice.results.start_held=(uint8_t)(c->button.START&1u);
         /* Manual: one gear up or down per press, latched like START. */
         if(!practice.attract_active && practice.transmission) {
             if(PRACTICE_SHIFT_UP(c)) practice.shift_pending=1;
@@ -962,6 +967,8 @@ static void practice_update(void *unused) {
         practice.state.remainder_us+=dt;
         int advanced=1;
         while(advanced && practice.podium.phase!=25 && practice.state.remainder_us>=NM_PRACTICE_TICK_US) {
+            /* 53e584 bit 4: the frame's press, the frame's first tick. The podium's actors read it. */
+            const uint8_t start=practice.start_pending;practice.start_pending=0;
             advanced=nm_podium_step(&practice.podium);
             STAGE_TRACE(practice.podium.spawn ? "TRACE podium tick: spawn, starting the scene" : practice.podium.entered ? "TRACE podium tick: entry" : "TRACE podium tick");
             /* The entry tick only arms the graph (spawn updaters cf74/cfc0): the
@@ -980,6 +987,7 @@ static void practice_update(void *unused) {
             } else if(advanced && practice.podium.cinematic && !practice.podium.entered)
                 advanced=nm_intro_scene_step(&practice.intro,practice.math,&practice.contact,&practice.road,practice.intro_paths);
             if(advanced && practice.podium.cinematic && !practice.podium.entered) {
+                practice.intro.start_edge=start;practice.start_edges+=start;
                 advanced=nm_intro_scene_detail(&practice.intro,practice.math,&practice.scenery);
                 if(advanced) nm_props_intro_step(&practice.intro,practice.math,&practice.contact); /* the course's props */
             }

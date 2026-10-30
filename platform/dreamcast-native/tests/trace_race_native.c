@@ -57,6 +57,7 @@
 #include "course_assets.h"
 #include "clock_scene.h"
 #include "props_scene.h"
+#include "result_actor.h"
 #ifdef NM_TRACE_PARTS /* --parts: link code/meshpack.c and code/render/scene/damage_bodies.c (CMake target trace_race_native) */
 #include "meshpack.h"
 #include "render/scene/damage_bodies.h"
@@ -433,6 +434,15 @@ static void write_rows(FILE *out,long n,long frame,const nm_controls_t *controls
             bits(c->collision_motion.travel[0]),bits(c->collision_motion.travel[1]),c->collision_side,c->relative,
             p->boundary.damage.damage,p->boundary.damage.body_model,p->boundary.damage.crash_count,p->tilt[0],p->filtered_pitch);
     }
+}
+
+static long next_logic_row(const reference_row_t *rows,long row,long available) {
+    for(++row;row<available && rows[row].scene!=UINT32_MAX && rows[row].scene==rows[row-1].scene;++row) {
+        long last=row;
+        while(last+1<available && rows[last+1].scene==rows[row].scene) ++last;
+        if(last+1<available && rows[last+1].scene-rows[row].scene>=2) break;
+    }
+    return row;
 }
 
 int main(int argc,char **argv) {
@@ -947,12 +957,16 @@ int main(int argc,char **argv) {
         static nm_race_record_t records[24];
         memset(records,255,sizeof(records));nm_race_records_reset(records,nm_race_record_seeds[race.course]); /* 23b544[course] */
         nm_podium_t podium={0};
-        uint32_t result_timer=0,result_penalty=0;unsigned selected=UINT32_MAX;int recorded=0;long results_ticks=0;
+        uint32_t result_timer=0,result_penalty=0,result_clock=0;unsigned selected=UINT32_MAX,result_mode=1;int recorded=0;long results_ticks=0;
+        int16_t result_scroll=0;
         /* Without a podium the pool still holds the race field: 4110 parks the
          * opponents and 1210c keeps running (race_scene.h nm_race_scene_results_field). */
         const int field_live=race.phase==25;
-        for(;tick<available && !status;++tick) {
-            const reference_row_t *r=rows+tick;
+        /* The reference rows of these ticks: not those of frames without a logic pass (the loads of the podium's 2D screen
+         * and of the name entry: 5010b0 stands and no double pass catches it up, compare_race_trace.py stalled()). */
+        long row=tick;
+        for(;row<available && !status;++tick,row=next_logic_row(rows,row,available)) {
+            const reference_row_t *r=rows+row;
             if(race.phase==27 && !podium.phase) podium.phase=27;
             const unsigned results_phase=race.phase;
             if(podium.phase) {
@@ -973,6 +987,7 @@ int main(int argc,char **argv) {
                 } else if(advanced && podium.cinematic && !podium.entered)
                     advanced=nm_intro_scene_step(&presentation,math,&contact,&road,paths);
                 if(advanced && podium.cinematic && !podium.entered) {
+                    presentation.start_edge=(uint8_t)r->recover;clock_start_edges+=r->recover; /* code/practice.c */
                     advanced=nm_intro_scene_detail(&presentation,math,&scenery);
                     if(advanced && clock_out) nm_props_intro_step(&presentation,math,&contact); /* code/practice.c */
                 }
@@ -1004,7 +1019,14 @@ int main(int argc,char **argv) {
                 race.active_phase=25;race.phase=26;phase_timer=(int32_t)result_timer;
             } else if(race.phase==26) {
                 race.active_phase=26;
-                race.phase=nm_race_timeout_timer(&result_timer,&result_penalty);phase_timer=(int32_t)result_timer;
+                race.phase=nm_race_timeout_timer(&result_timer,&result_penalty);
+                /* As code/gameplay/results.c: the result actor waits to 576 (b414), then START held skips to 192 (b680). */
+                if(result_mode==3) {
+                    int32_t countdown=(int32_t)result_timer;
+                    nm_result_clock_step(&result_clock,&countdown,(r->held&NM_VIEW_HELD_START)!=0);
+                    result_timer=(uint32_t)countdown;
+                } else (void)nm_result_wait_step(&result_mode,(int32_t)result_timer,&result_scroll);
+                phase_timer=(int32_t)result_timer;
             } else { printf("native stops at phase %u before tick %ld (name entry / attract owners)\n",race.phase,tick+1);break; }
             if(field_live && !podium.phase) {
                 /* 501a80 through the results is result_penalty (4110 reads it, 430c clears it). */
@@ -1020,6 +1042,7 @@ int main(int argc,char **argv) {
                 result_commands+=events.count;
                 for(unsigned i=0;i<events.count;++i) result_hash=(result_hash^events.command[i])*UINT32_C(16777619);
                 /* code/practice.c nm_practice_results_tick: the actors run on (results.ticks counts this tick). */
+                clock_start_edges+=r->recover;
                 if(clock_out) nm_props_results_step(&race,(uint32_t)results_ticks+1u,results_phase,math,&contact);
             }
             /* After the tick's field pass, as code/practice.c nm_practice_results_tick. */

@@ -366,6 +366,9 @@ result_body = result_body.replace('''puts(scene->results.after_podium ?
                     "Native result phase26: field/GOAL updates disabled; authored glyph actor and silent rank schedule active; entry audio resets pending" :
                     "Native result phase26: opponents parked (4110), field interactions running (1210c), GOAL updates disabled; authored glyph actor and silent rank schedule active; entry audio resets pending");''',
     'puts("Native result phase26: field/GOAL updates disabled; authored glyph actor and silent rank schedule active; entry audio resets pending");', 1)
+# Intentional rule port: START held skips the result actor's countdown (b680): the one argument that was 0.
+assert '&countdown,scene->results.start_held)' in result_body
+result_body = result_body.replace('&countdown,scene->results.start_held)', '&countdown,0)', 1)
 result_body = result_body.replace('if(scene->failed) {', 'if(scene->failed || scene->race.phase==29) {', 1)
 result_body = result_body.replace('scene->results.', 'result_')
 result_body = result_body.replace('result_silent_command(&scene->results,', 'result_silent_command(')

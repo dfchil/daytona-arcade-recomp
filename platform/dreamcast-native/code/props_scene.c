@@ -61,6 +61,15 @@ static uint32_t step(nm_props_t *s, uint8_t *failed, uint32_t clock, unsigned co
     return sound;
 }
 
+/* 53e584 bit 4 on this tick of the race, the podium or the results: a START edge counted since the last tick that
+ * stepped the actors (the original's tasks read the same word in every scene: 22231c, 22475c). */
+static uint8_t xa_start_edge(void) {
+    const unsigned edges = xa_start_edges ? *xa_start_edges : 0u;
+    const uint8_t edge = edges != xa_start_seen;
+    xa_start_seen = edges;
+    return edge;
+}
+
 /* The player entity's words Expert's actors read. */
 static void xa_player(const nm_player_t *car, nm_xa_input_t *in) {
     in->player_flags = car->boundary.damage.flags;
@@ -90,9 +99,7 @@ static void xa_step(nm_xa_state_t *s, uint8_t *failed, uint32_t clock, unsigned 
 }
 
 uint32_t nm_props_race_step(const nm_race_scene_t *race, const nm_drive_params_t *math, const nm_contact_pack_t *contact) {
-    const unsigned edges = xa_start_edges ? *xa_start_edges : 0u;
-    const uint8_t edge = edges != xa_start_seen;
-    xa_start_seen = edges;
+    const uint8_t edge = xa_start_edge();
     /* Rows 75..86 are world-actor rows: suspended while the pit crew works (dd9c), as the slot machine. */
     if (race->shared.pit.suspended || !race->count) { xa_clear(&xa_race); return 0; }
     const nm_player_t *car = &race->cars[0].car;
@@ -120,7 +127,7 @@ void nm_props_results_step(const nm_race_scene_t *race, uint32_t after, unsigned
      * results phase's bit; the player stands). */
     const nm_player_t *car = &race->cars[0].car;
     nm_xa_input_t in = {.bitmaps = race->shared.visible_cells, .counter = race->counter_base + race->ticks - 1u + after,
-        .flags = UINT32_C(1) << (results_phase & 31u), .phase_timer = 0, .reverse = car->checkpoints.reverse, .start_edge = 0};
+        .flags = UINT32_C(1) << (results_phase & 31u), .phase_timer = 0, .reverse = car->checkpoints.reverse, .start_edge = xa_start_edge()};
     xa_player(car, &in);
     in.camera[0] = xa_race.origin[0]; in.camera[1] = xa_race.origin[1];
     xa_step(&xa_race, &xa_race_failed, race->ticks + after, race->course, &in, math, contact, 0);
@@ -135,7 +142,7 @@ void nm_props_intro_step(const nm_intro_scene_t *intro, const nm_drive_params_t 
      * 5010a8 is 1598 - ticks (podium.h: the spawn tick is the scene's tick 0). The camera entity stays at 0, 0. */
     const int podium = (intro->flags & UINT32_C(0x10000000)) != 0;
     nm_xa_input_t in = {.bitmaps = bitmaps, .counter = (podium ? xa_counter_base : 0u) + intro->object_clock + intro->ticks,
-        .flags = intro->flags, .phase_timer = podium ? 1598 - (int32_t)intro->ticks : 0, .reverse = 0, .start_edge = 0};
+        .flags = intro->flags, .phase_timer = podium ? 1598 - (int32_t)intro->ticks : 0, .reverse = 0, .start_edge = xa_start_edge()};
     xa_player(&intro->cars[0], &in);
     in.camera[0] = in.camera[1] = 0.0f;
     /* The podium's tasks are made on its entry tick (03b84: their init entries run there, the original's first draws
