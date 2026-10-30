@@ -85,6 +85,11 @@ MUTANTS={
  '38':('    if(level==SQ_SS_PLAIN && beyond>depth) level=SQ_SS_ON;','    if(0) level=SQ_SS_ON;'),  # never super-sampled
  '39':('    const float beyond=scaled*(1.0f/NM_LOD_HYSTERESIS),within=scaled*NM_LOD_HYSTERESIS;','    const float beyond=scaled,within=scaled;'),  # no hysteresis
  '40':('    if(!batch->supersample || (batch->supersample==SQ_SS_ON)==sq_ss_on) return;','    if(1) return;'),  # decided, but the headers never get the bit
+ # the road class at another scale (model_submission.h, sq_road_depth_set; check_stream.py's road depth runs)
+ '41':('            out[r].depth=layer ? depth*draw_layer_scale[layer] : depth;','            out[r].depth=depth;'),  # a rewritten stream record loses its layer's depth factor
+ '42':('            out[r].depth=layer ? depth*draw_layer_scale[layer] : depth;','            (void)layer; (void)depth;'),  # the stream records keep the old scale
+ '43':('    if(sq_stream_pool_bytes && sq_stream_job.mesh!=UINT_MAX)\n        sq_stream_job_start(&sq_stream_job,sq_stream_job.mesh,sq_stream_job.block);\n',''),  # a half-built mesh of the record cache goes on with the old scale in its first records
+ '44':('        if(sq_surface_bindings[b]) classes[records[b].group-classes].depth=scale;','        (void)classes;'),  # the emission classes keep the old scale
 }
 if os.environ.get('SIM_MUTATE'):
     old,new=MUTANTS[os.environ['SIM_MUTATE']]
