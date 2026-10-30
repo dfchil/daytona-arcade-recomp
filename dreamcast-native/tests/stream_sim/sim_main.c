@@ -7,6 +7,16 @@
  *                       opaque textures only, road-surface class and split-cutout pieces point sampled); default:
  *                       the default build's NATIVE_FILTER_ALL=1 (every texture but the catch-fence stipple).
  *                       Only the model's counts depend on it; the stream, its digests and the reference do not.
+ *   SIM_WORLD=NAME      the world pack ASSETS/NAME.dnm, NAME.dnt instead of world (course1-world: Expert, course2-world:
+ *                       Advanced; gen_frames.py --course N writes their frame tables)
+ *   SIM_ROAD_DEPTH=S    the road class at depth scale S from the start: the world's tables built at S (as a world attached
+ *                       while the scene's scale was S), no rewrite, every frame at S; replaces the frame table's scales
+ *   SIM_ROAD_DEPTH_STEPS=F:S,F:S,...  from frame F (counted from 0, in increasing order) the scale S, set as the scene
+ *                       sets it (sq_road_depth_set before the frame's lists); replaces the frame table's scales
+ *   SIM_ROAD_DEPTH_CYCLE=N  every Nth frame the next of 0.636, 0.647, 0.755, 0.862, 0.5; replaces the above
+ *   SIM_ROAD_DEPTH_CHECK=1  every frame, after the scale is set: the emission classes hold the frame's scale, and every
+ *                       mesh on the stream path holds what a build at that scale gives (see road_records_check).
+ *                       Without a frame table's scale, a step or SIM_ROAD_DEPTH every frame is at NM_ROAD_DEPTH_SCALE
  *   SIM_GENERAL_EMITTER=1  submit through sq_emit_range (the inspection views' emitter) instead of the
  *                       production emitter sq_emit_batches: the stream must be the same
  *   SIM_NO_STREAM=1     no prebuilt world streams (model_submission.h, NM_SQ_STREAM): every world batch on
@@ -47,7 +57,7 @@
  *                       are not in the model). (NATIVE_DIAG_CAR_OPAQUE and
  *                       NATIVE_DIAG_ROAD_DEPTH are build options of the
  *                       simulator: -DNM_DIAG_CAR_OPAQUE=1,
- *                       -DNM_ROAD_DEPTH_SCALE=1.0f.)
+ *                       -DNM_ROAD_DEPTH_SCALE=1.0f -DNM_ROAD_DEPTH_FIXED=1.)
  *   SIM_CAR_LEVELS=FILE lines "MESH LEVEL" (car mesh, detail level 0..3 of the body table): the summary's
  *                       per-class TA statistics split the cars by level (other car meshes: class "other")
  *   SIM_CLASS_FRAMES=FILE  per frame the per-class TA vertices, triangles and strips (see "TA by class")
@@ -555,7 +565,7 @@ static int live_check(const nm_pack_t *pack,unsigned trials) {
 
 static int setup(const char *assets) {
     char file[512];
-    const char *names[2]={"car","world"};
+    const char *names[2]={"car",getenv("SIM_WORLD") ? getenv("SIM_WORLD") : "world"};
     for(unsigned s=0;s<2;++s) {
         snprintf(file,sizeof file,"%s/%s.dnm",assets,names[s]); if(!nm_pack_load(packs+s,file)) return 0;
         snprintf(file,sizeof file,"%s/%s.dnt",assets,names[s]); if(!nm_material_pack_open_cpu(mats+s,file)) return 0;
@@ -1188,6 +1198,9 @@ static int sim_no_hud,sim_no_sky,sim_no_volumes,sim_no_receivers,sim_no_cars,sim
 static pvr_alpha_t probe_alpha; /* 8x8, solid where x and y are even: a quarter of the texels */
 static float shadow_outline[2][NM_SHADOW_OUTLINE_MAX][3]; static unsigned shadow_outline_count[2];
 static struct { unsigned count; const uint8_t *kind; const float (*matrix)[12]; const float *view; float focus; } frame_shadows;
+/* The road class's depth scale of this frame (render/scene/practice.c practice_road_depth_pick): the reference and the
+ * models take this value, the renderer its tables as sq_road_depth_set left them. */
+static float sim_road_depth=NM_ROAD_DEPTH_SCALE;
 static uint64_t frame_extra_ta;
 static int hud_sheets_load(const char *folder) {
     char name[512]; uint32_t palette[2+16*8]; unsigned colours=0;
@@ -1242,7 +1255,7 @@ static unsigned shadow_triangles(dtri_t *out,unsigned capacity,unsigned *volumes
                 const float x=tx+up[0]*reach,y=ty+up[1]*reach,z=tz+up[2]*reach;
                 if(!(z>0.1f)) { valid=0;break; }
                 const float q=1.0f/z; float *o=ring[side][i];
-                o[0]=cx+x*focus*q;o[1]=cy-y*focus*q;o[2]=q*NM_ROAD_DEPTH_SCALE;
+                o[0]=cx+x*focus*q;o[1]=cy-y*focus*q;o[2]=q*sim_road_depth;
                 left&=o[0]<0;right&=o[0]>496;above&=o[1]<0;below&=o[1]>384;
                 o[0]*=640.0f/496.0f;o[1]*=480.0f/384.0f;
             }
@@ -1693,6 +1706,130 @@ static void pvr_summary(void) {
         putchar('\n'); }
 }
 
+/* SIM_ROAD_DEPTH, SIM_ROAD_DEPTH_STEPS and SIM_ROAD_DEPTH_CYCLE (see the top), and what the run did with them. */
+static float road_fixed,road_step_scale[64],road_low=FLT_MAX,road_high;
+static long road_step_frame[64],road_cycle;
+static unsigned road_steps,road_changes,road_restarts,road_rejoined;
+static unsigned long long road_restart_records,road_checked_frames,road_checked_meshes,road_checked_faces;
+static int road_check;
+static uint8_t *road_restarted; /* per mesh: a change came in the middle of its build (record cache) */
+static uint8_t *road_scratch;   /* a build of one mesh: its block, then the builder's seen and in_lod */
+static size_t road_scratch_block;
+static unsigned road_scratch_largest;
+static void road_depth_setup(void) {
+    const char *fixed=getenv("SIM_ROAD_DEPTH"),*steps=getenv("SIM_ROAD_DEPTH_STEPS"),*cycle=getenv("SIM_ROAD_DEPTH_CYCLE");
+    road_check=getenv("SIM_ROAD_DEPTH_CHECK")!=NULL;
+#ifdef NM_ROAD_DEPTH_FIXED
+    assert(!fixed && !steps && !cycle); /* make NATIVE_DIAG_ROAD_DEPTH: one scale for every camera */
+#endif
+    if(fixed) { road_fixed=strtof(fixed,NULL); assert(road_fixed>0.0f && road_fixed<1.0f); sq_road_depth=sim_road_depth=road_fixed; }
+    if(cycle) { road_cycle=atol(cycle); assert(road_cycle>0); }
+    for(const char *at=steps;at && *at;) {
+        char *end; assert(road_steps<64);
+        road_step_frame[road_steps]=strtol(at,&end,10); assert(*end==':');
+        road_step_scale[road_steps++]=strtof(end+1,&end); assert(!*end || *end==',');
+        at=*end ? end+1 : end;
+    }
+}
+/* The frame's scale: set as the scene sets it. A change in the middle of a mesh's build (record cache) is noted, with
+ * the records of road faces the build has written: sq_road_depth_set must start that mesh again. */
+static void road_depth_frame(float table,long frame) {
+#ifndef NM_ROAD_DEPTH_FIXED
+    static const float presets[5]={1.05f/1.65f,1.10f/1.70f,1.85f/2.45f,3.74f/4.34f,NM_ROAD_DEPTH_SCALE}; /* VR1..VR4, others */
+    float scale=table>0.0f ? table : NM_ROAD_DEPTH_SCALE;
+    for(unsigned i=0;i<road_steps && frame>=road_step_frame[i];++i) scale=road_step_scale[i];
+    if(road_cycle) scale=presets[(unsigned long)(frame/road_cycle)%5u];
+    if(road_fixed>0.0f) scale=road_fixed;
+    assert(scale>0.0f && scale<1.0f);
+    if(scale<road_low) road_low=scale;
+    if(scale>road_high) road_high=scale;
+    if(scale!=sim_road_depth) {
+        ++road_changes;
+#if defined(SIM_HAS_STREAM) && SQ_STREAMS
+        if(sq_stream_pool_bytes && sq_stream_job.mesh!=UINT_MAX && sq_stream_job.phase) {
+            const nm_mesh_t *const mesh=packs[1].meshes+sq_stream_job.mesh;
+            const unsigned written=sq_stream_job.phase>1 ? mesh->face_count : sq_stream_job.cursor;
+            unsigned road=0;
+            for(unsigned f=0;f<written;++f) road+=world_draw.surface[sq_baked_faces[mesh->face_first+f].front];
+            if(road) { ++road_restarts; road_restart_records+=road; road_restarted[sq_stream_job.mesh]=1; }
+        }
+#endif
+    }
+    sim_road_depth=scale;
+    sq_road_depth_set(scale);
+#endif
+}
+/* SIM_ROAD_DEPTH_CHECK: the emission classes against the frame's scale, then each mesh on the stream path against a
+ * build of its block at this moment (sq_stream_job_step into scratch: what a world attached at this scale holds, by
+ * the classes just checked). Every field of every face record, the strip vertices, positions and ranks. A build
+ * leaves the mesh's table entry at its block, so the entry is put back; what else it writes is the same each time. */
+#if defined(SIM_HAS_STREAM) && SQ_STREAMS
+static int road_record_same(const nm_sq_stream_face_t *a,const nm_sq_stream_face_t *b) {
+    return a->group==b->group && a->count==b->count && a->flags==b->flags && a->argb==b->argb && a->header==b->header &&
+        !memcmp(&a->depth,&b->depth,sizeof a->depth) && !memcmp(a->corner,b->corner,sizeof a->corner) && a->run==b->run &&
+        a->front==b->front && a->strip==b->strip && !memcmp(a->uv,b->uv,sizeof a->uv) && !memcmp(&a->side,&b->side,sizeof a->side) &&
+        !memcmp(a->normal,b->normal,sizeof a->normal) && a->back==b->back && a->index==b->index;
+}
+#endif
+static int road_records_check(unsigned tick) {
+    if(sq_emit_records[1]) for(unsigned b=0;b<mats[1].count;++b) {
+        const float want=world_draw.surface[b] ? sim_road_depth : 1.0f;
+        if(sq_emit_records[1][b].group->depth!=want) {
+            printf("road depth check: tick %u binding %u: class depth %.9g, the frame's %.9g\n",tick,b,(double)sq_emit_records[1][b].group->depth,(double)want);
+            return 0;
+        }
+    }
+#if defined(SIM_HAS_STREAM) && SQ_STREAMS
+    const nm_pack_t *const pack=packs+1;
+    const unsigned meshes=((const nm_header_t *)pack->data)->meshes;
+    if(sq_stream_faces && !road_scratch) {
+        for(unsigned m=0;m<meshes;++m) {
+            if(sq_stream_plans[m].bytes>road_scratch_block) road_scratch_block=sq_stream_plans[m].bytes;
+            if(pack->meshes[m].vertex_count>road_scratch_largest) road_scratch_largest=pack->meshes[m].vertex_count;
+            if(pack->meshes[m].face_count>road_scratch_largest) road_scratch_largest=pack->meshes[m].face_count;
+        }
+        road_scratch=aligned_alloc(32,((road_scratch_block+6u*road_scratch_largest+4u)+31u)&~(size_t)31u); /* sq_stream_prepare's scratch */
+        assert(road_scratch);
+    }
+    if(sq_stream_faces) for(unsigned m=0;m<meshes;++m) {
+        if(!sq_stream_meshes[m]) continue;
+        const nm_mesh_t *const mesh=pack->meshes+m;
+        const nm_sq_stream_plan_t plan=sq_stream_plans[m];
+        const nm_sq_stream_mesh_t kept=sq_stream_table[m];
+        uint8_t *const seen=road_scratch+road_scratch_block,*const in_lod=seen+road_scratch_largest;
+        memset(seen,0,road_scratch_largest);
+        nm_sq_stream_job_t job;
+        sq_stream_job_start(&job,m,road_scratch);
+        while(!sq_stream_job_step(pack,&job,seen,in_lod,UINT_MAX)) {}
+        const nm_sq_stream_mesh_t built=sq_stream_table[m];
+        sq_stream_table[m]=kept;
+        for(unsigned r=0;r<mesh->face_count;++r) if(!road_record_same(kept.faces+r,built.faces+r)) {
+            printf("road depth check: tick %u mesh %u record %u (face %u, binding %u): depth %.9g, a build at scale %.9g holds %.9g\n",tick,m,r,
+                (unsigned)kept.faces[r].index,(unsigned)kept.faces[r].front,(double)kept.faces[r].depth,(double)sim_road_depth,(double)built.faces[r].depth);
+            return 0;
+        }
+        int same=!memcmp(kept.points,built.points,plan.points*sizeof(*kept.points)) && !memcmp(kept.rank,built.rank,mesh->face_count*sizeof(*kept.rank));
+        for(unsigned i=0;plan.strips && i<mesh->padding[3];++i) { /* a stage's selection leaves gaps between the strips of the span */
+            const nm_strip_t *const strip=pack->strips+mesh->padding[2]+i;
+            unsigned vertices=2;
+            for(unsigned k=0;k<strip->face_count;++k) vertices+=pack->faces[strip->face_first+k].count-2u;
+            same=same && !memcmp(kept.strips+(strip->vertex_first-plan.strip_first),built.strips+(strip->vertex_first-plan.strip_first),vertices*sizeof(*kept.strips));
+        }
+        if(!same) { printf("road depth check: tick %u mesh %u: its strip vertices, positions or ranks differ from a build\n",tick,m); return 0; }
+        ++road_checked_meshes; road_checked_faces+=mesh->face_count;
+        if(road_restarted[m]) { road_restarted[m]=0; ++road_rejoined; }
+    }
+#endif
+    ++road_checked_frames;
+    return 1;
+}
+static void road_depth_summary(long frames) {
+    printf("road depth: %ld frames, scales %.9g .. %.9g, %u changes",frames,(double)road_low,(double)road_high,road_changes);
+    printf("; %u came in a mesh's build (%llu road records already written), %u of those meshes since on the path",road_restarts,road_restart_records,road_rejoined);
+    if(road_check) printf("; checked %llu frames: classes hold the frame's scale, %llu meshes, %llu face records equal to a build at it",
+        road_checked_frames,road_checked_meshes,road_checked_faces);
+    putchar('\n');
+}
 enum { S_HEADERS,S_VERTICES,S_STRIPS,S_JOINED,S_TRIANGLES,S_FLOOR,S_OBJECTS,S_WALKED,S_QUEUED,S_TRANSFORMED,S_REAR,S_TEXTURES,S_PALETTES,S_TA,S_TR_TRIANGLES,S_COUNT };
 static const char *stat_names[S_COUNT]={"headers","vertices","strips","offline-strip-joins","triangles","header-floor","objects",
     "faces-walked","faces-queued","vertices-transformed","faces-rear","textures","palette-banks","TA-bytes","translucent-triangles"};
@@ -1708,6 +1845,7 @@ int main(int argc,char **argv) {
     if(!getenv("SIM_NO_STARTUP_CHECKS") && !sq_sweep_check()) return 1;
     assert(SQ_SWEEP_MARGIN==(float)NM_REFERENCE_SWEEP_MARGIN);
 #endif
+    road_depth_setup();
     stage_build=getenv("SIM_STAGE") ? (unsigned)atoi(getenv("SIM_STAGE")) : 6;
     sim_no_cars=getenv("SIM_NO_CARS")!=NULL; sim_no_world=getenv("SIM_NO_WORLD")!=NULL;
     sim_general_emitter=getenv("SIM_GENERAL_EMITTER")!=NULL;
@@ -1715,6 +1853,7 @@ int main(int argc,char **argv) {
     sim_car_guarded=getenv("SIM_CAR_GUARDED")!=NULL;
     if(!setup(argv[1])) { fputs("setup failed\n",stderr); return 1; }
     if(getenv("SIM_PATHS")) { sim_paths_out=fopen(getenv("SIM_PATHS"),"w"); assert(sim_paths_out); }
+    road_restarted=calloc(((const nm_header_t *)packs[1].data)->meshes+1u,1); assert(road_restarted);
     memset(sim_car_level,4,sizeof sim_car_level);
     if(getenv("SIM_CAR_LEVELS")) {
         FILE *levels=fopen(getenv("SIM_CAR_LEVELS"),"r"); assert(levels);
@@ -1800,9 +1939,9 @@ int main(int argc,char **argv) {
     while(fread(head,4,8,in)==8) {
         /* FRM1, or FRM2: the same record followed by the frame's cell bitmaps and race state (world objects), or
          * FRM3: FRM2 followed by the animated actors' state (reference_stream.h, nm_reference_world_objects), or
-         * FRM4: FRM3 followed by the slot machine's three reels. */
-        assert((head[0]==0x314d5246u || head[0]==0x324d5246u || head[0]==0x334d5246u || head[0]==0x344d5246u) &&
-            head[3]<=1024 && head[4]<=4096);
+         * FRM4: FRM3 followed by the slot machine's three reels, or
+         * FRM5: FRM4 followed by the road class's depth scale of the frame (a float; before FRM5: NM_ROAD_DEPTH_SCALE). */
+        assert(head[0]>=0x314d5246u && head[0]<=0x354d5246u && head[3]<=1024 && head[4]<=4096);
         float view[12]; uint8_t kinds[48]; static float shadow_matrix[45][12];
         assert(fread(boundaries,4,45,in)==45);
         assert(fread(car_instances,sizeof(nm_instance_t),head[3],in)==head[3]);
@@ -1821,7 +1960,9 @@ int main(int argc,char **argv) {
         }
         uint32_t trailer[24]={0},animated[137]={0};
         if(head[0]!=0x314d5246u) assert(fread(trailer,4,24,in)==24);
-        if(head[0]>=0x334d5246u) assert(fread(animated,4,head[0]==0x344d5246u ? 137 : 134,in)==(head[0]==0x344d5246u ? 137u : 134u));
+        if(head[0]>=0x334d5246u) assert(fread(animated,4,head[0]>=0x344d5246u ? 137 : 134,in)==(head[0]>=0x344d5246u ? 137u : 134u));
+        float road_table=0;
+        if(head[0]>=0x354d5246u) assert(fread(&road_table,4,1,in)==1);
         /* nm_practice_render_scenery: a cell whose mesh has no selected face is not an instance. */
         unsigned kept=0;
         for(unsigned i=0;i<head[4];++i) if(packs[1].meshes[world_instances[i].mesh].face_count) world_instances[kept++]=world_instances[i];
@@ -1839,7 +1980,7 @@ int main(int argc,char **argv) {
             static double origin[2];
             const int n=nm_reference_world_objects(world_original,world_original_count,packs[1].meshes,
                 packs[1].header->meshes,view,trailer,trailer+16,
-                head[0]>=0x334d5246u ? animated : NULL,head[0]==0x344d5246u ? animated+134 : NULL,origin,
+                head[0]>=0x334d5246u ? animated : NULL,head[0]>=0x344d5246u ? animated+134 : NULL,origin,
                 world_instances+first,kept-first,&object_boundary,&object_unjudged);
             if(n<0) { printf("world object reference failed at tick %u (attract %u)\n",head[1],head[2]); return 1; }
             object_checked+=(unsigned)n; object_frames+=n>0; ++object_reference_frames;
@@ -1849,6 +1990,9 @@ int main(int argc,char **argv) {
         memset(sim_ss_drawn,NM_REFERENCE_LOD_UNWALKED,sizeof sim_ss_drawn);
         draw_count=0; draw_opaque=draw_cutout=draw_rear=draw_checker=draw_transformed=draw_instances_rejected=0;
         draw_header_count=0; sq_joined_strips=sq_strip_vertices_saved=0;
+        /* As practice_prepare: the camera's scale before the frame's lists. */
+        road_depth_frame(road_table,frames);
+        if(road_check && !road_records_check(head[1])) return 1;
         assert(sq_prepare_source(0,packs) && sq_prepare_source(1,packs+1));
         assert(sq_queue_objects(boundaries,head[5],head[6]));
         /* The idle wait before the registration: the record cache's step (sq_stream_idle). */
@@ -1987,7 +2131,7 @@ int main(int argc,char **argv) {
                 dtri_t *d=dtris+count; d->source=(uint8_t)s; d->list=(uint8_t)list; d->layer=face->layer; d->face=face_index;
                 d->surface=s && world_draw.surface[binding];
                 d->stage=s ? (uint8_t)(packs[1].materials[face->material].padding[0]&NM_SCENERY_STAGE_MASK) : 0;
-                d->scale=(d->surface ? NM_ROAD_DEPTH_SCALE : 1.0f)*draw_layer_scale[face->layer];
+                d->scale=(d->surface ? sim_road_depth : 1.0f)*draw_layer_scale[face->layer];
                 d->strip=strip_serial; d->binding=(uint16_t)binding; d->kind=s ? (uint8_t)(d->surface ? KIND_ROAD : 1u+d->stage) : 0; d->argb=tri->argb;
                 d->extra=d->sheet=0; d->textured=mats[s].bindings[binding].resource!=NM_MATERIAL_SOLID;
                 /* compile_draw_header. NATIVE_FILTER_ALL=1 (the default build since 14 October 2026; SIM_FILTER_ALL=0
@@ -2052,7 +2196,7 @@ int main(int argc,char **argv) {
             for(unsigned i=0;i<count;++i) sorted[i]=oracle_fast[oracle_order[i]];
             unsigned at=0;
             for(unsigned s=0;s<2;++s) {
-                const nm_reference_source_t source={packs+s,mats+s,(int)s,s ? world_draw.surface : NULL,
+                const nm_reference_source_t source={packs+s,mats+s,(int)s,s ? world_draw.surface : NULL,sim_road_depth,
                     SQ_GUARD_BAND,PVR_LIST_OP_POLY,PVR_LIST_PT_POLY,
                     s && lod_count ? packs[1].lod_groups : NULL,s && lod_count ? sim_lod_drawn : NULL,s && lod_count ? oracle_lod_state : NULL,
                     s && lod_count && SQ_SWEEPS ? oracle_sweep_group : NULL,oracle_sweep_plane,s && lod_count && SQ_SWEEPS ? oracle_sweep_planes : 0u,
@@ -2513,6 +2657,8 @@ int main(int argc,char **argv) {
                 canon[use_header[s][i]].cmd,canon[use_header[s][i]].mode1,canon[use_header[s][i]].mode2);
         fclose(dump);
     }
+    if(road_check && !road_records_check(UINT_MAX)) return 1; /* the meshes that joined in the last frame */
+    road_depth_summary(frames);
     sq_stream_report();
     fclose(out); if(faces_out) fclose(faces_out);
     return 0;

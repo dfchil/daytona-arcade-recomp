@@ -84,7 +84,7 @@
  * Translucent class (material_pack.h, nm_material_translucent; the cars' smoke): drawn on src->list_translucent
  *   when the includer names one, else skipped like every screen-checker face of a car.
  * The includer provides geometry.h, meshpack.h, material_pack.h, lighting.h,
- * ENJ_XSCALE and NM_ROAD_DEPTH_SCALE. */
+ * and ENJ_XSCALE. Road-surface class: its depth scale is the frame's (nm_reference_source_t.road_depth). */
 #ifndef DAYTONA_NATIVE_REFERENCE_STREAM_H
 #define DAYTONA_NATIVE_REFERENCE_STREAM_H
 #include <float.h>
@@ -148,6 +148,7 @@ typedef struct {
     const nm_material_pack_t *materials;
     int scenery;            /* baked light per side, screen-checker panels drawn */
     const uint8_t *surface; /* per binding: road-surface depth class, or NULL */
+    float road_depth;       /* that class's depth scale this frame (the camera's, render/models/model_renderer.h) */
     float guard;            /* logical pixels added around a whole-screen view; 0: clip at the view */
     unsigned list_opaque, list_cutout;
     /* Level of detail; all NULL for a pack without groups. lod: the pack's
@@ -539,7 +540,9 @@ static int nm_reference_face(const nm_reference_source_t *src, unsigned source, 
             ((material->header[0] >> 13) & 3) == 3 ? src->list_cutout : src->list_opaque;
         const nm_material_uv_t uv = nm_material_uv(src->materials, binding);
         const float depth = 1.0f + (float)face->layer * NM_LAYER_DEPTH_STEP;
-        const float road = src->surface && src->surface[index] ? NM_ROAD_DEPTH_SCALE : 1.0f;
+        /* z is q times one factor, the class's depth times the layer's (the record's depth, model_submission.h): at a
+         * scale that is not a power of two (q*layer)*scale rounds otherwise. */
+        const float road = src->surface && src->surface[index] ? src->road_depth : 1.0f;
         float door_q = 0;
         if (translucent && src->screen_door) {
             float nearest = corner[0][2];
@@ -599,7 +602,7 @@ static int nm_reference_face(const nm_reference_source_t *src, unsigned source, 
                         else {
                             const nm_screen_vertex_t p = projected[fan[v]];
                             tri->v[v][0] = p.x * (640.0f / 496.0f) * ENJ_XSCALE; tri->v[v][1] = p.y * (480.0f / 384.0f);
-                            tri->v[v][2] = p.q * depth * road;
+                            tri->v[v][2] = p.q * (depth * road);
                             nm_reference_uv(src, binding, NULL, &p, 1, tri->v[v] + 3);
                         }
                     }
@@ -705,7 +708,7 @@ static int nm_reference_face(const nm_reference_source_t *src, unsigned source, 
                     const nm_screen_vertex_t p = projected[fan[v]];
                     tri->v[v][0] = p.x * (640.0f / 496.0f) * ENJ_XSCALE;
                     tri->v[v][1] = p.y * (480.0f / 384.0f);
-                    tri->v[v][2] = p.q * depth * road;
+                    tri->v[v][2] = p.q * (depth * road);
                     /* (A clipped triangle's vertex fan[v] is an output of the clipper, not a corner.) */
                     const nm_vertex_t *vertex = outside ? NULL : pack->vertices + mesh->vertex_first + face->indices[corners[fan[v]]];
                     nm_reference_uv(src, binding, vertex, &p, outside != 0, tri->v[v] + 3);
@@ -1084,6 +1087,9 @@ static int nm_reference_world_objects(const nm_instance_t *pack_instances, unsig
         if (!(word & NM_OBJECT_INSTANCE)) continue;
         const unsigned cell = NM_OBJECT_CELL(word), kind = NM_OBJECT_KIND(word);
         unsigned variant = NM_OBJECT_VARIANT(word), mesh = pack_instances[i].mesh;
+        /* A frame-counter animation's instance: no selector of this list places it (render/scene/practice.c,
+         * practice_clocks; tests/test_clock_lockstep.py has its frames). gen_frames.py's tables leave them out. */
+        if (kind == NM_OBJECT_CLOCK) continue;
         int wanted = !(state[7] >> 31) &&
             (int)(bitmaps[(word & NM_OBJECT_NEAR ? 8u : 0u) + (cell >> 5)] >> (cell & 31) & 1u), either = 0;
         if (wanted && kind == NM_OBJECT_BOARD) wanted = variant == board;
