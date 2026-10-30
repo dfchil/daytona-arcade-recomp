@@ -5,7 +5,7 @@ For a few real car and road textures and three polygon lumas each, emit:
 (b) a colour-independent gain-bucket palette plus a vertex colour,
 (c) the current pack's anchor texture and modulation colour for that binding,
 all over the same 32x32 texel region, plus two VQ+PAL4 encodings of one index
-texture. Colours follow src/runtime/material.h using a reference video-table
+texture. Colours follow tools/material.h using a reference video-table
 dump. Output (ROM-derived) goes to a NEW directory under ignored build/:
 palette_probe_data.h for the console program and probe.json for
 tools/check_palette_probe.py.

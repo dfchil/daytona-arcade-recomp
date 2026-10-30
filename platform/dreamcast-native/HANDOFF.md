@@ -28,6 +28,46 @@ history on branch `dreamcast-native` is the record. The root `HANDOFF.md`
 is the arcade side's historical archive: search it, do not read it end to
 end. `rules.md` at the root holds the project rules.
 
+## Place in the repository (30 October)
+
+The port is `platform/dreamcast-native/`, next to `platform/dreamcast`, and the
+default build of the repository is upstream's: `M2_DREAMCAST_NATIVE` (default
+OFF) includes `host.cmake`. With it off the CMake targets and tests are those of
+upstream main, and the preprocessed `src/runtime` files too.
+
+- `src/runtime` keeps only hooks behind `M2_DC_NATIVE_HOST`, compiled into
+  `native_runtime` and `native_refcore`. The ROM paging, word-sized ROM images,
+  lazy page tables and GPU-only video of the old bring-up are gone with the
+  options that used them: `m2segment --rom-cache-kib`, `--verify-streaming`,
+  `--profile-*`, `--stage`, `--export-textures`, `--export-system24`,
+  `--check-materials`. HISTORY.md still names them.
+- `tools/m2segment.cpp` runs `rt::GameLoop` from images it loads itself, without
+  the sound ROMs. `tools/no_sound.cpp` stands in for the 68000 code, which the
+  recipe does not generate. `m2import_silent` replaces `m2import --no-sound`.
+- `tools/material.h`, `tools/dreamcast_assets.h`, `tools/system24.hpp`,
+  `tools/prepare_dreamcast_textures.py`, `tests/pvr_geometry.hpp` and the
+  `scripts/fetch_*.sh` moved here. `recipes/inputs/course_{advanced,expert}.txt`
+  are the recipe's held-steering menus; upstream's `scripts/inputs` keep theirs.
+- `docs/design-notes.md` holds what the port added to the design document,
+  `THIRD_PARTY.md` the pins.
+
+The two host tests that had been failing since 18 October were out of date, not
+the code: `native_models` (`race_scenery_lumas` takes variable specular since
+2380af2) and `native_checker_prune` (`--world-cells` splits checker vertices since
+b4fe80b).
+
+Findings that lived in the root handoff:
+
+- The 14-entry window at 0x13f5c (5 back via +0x8c, 14 forward via +0x88, list at
+  +0x5c) contains cars, not road sections; pool membership is verified at frames
+  240 and 300. The ordered-pair checks and TGP maths remain untouched, and their
+  exact collision meaning is not established by that check.
+- Do not divide eye-crossing triangles before side clipping: the native stress
+  test measures visible precision loss. Keep the independent geometry oracle and
+  the magnitude and viewport checks when optimizing. Strict C library NaN and
+  min/max calls in a per-triangle SH-4 loop also cost heavily: IEEE finite checks
+  plus per-vertex caching cut one diagnostic from 91.57 to 20.66 ms.
+
 ## Goal and order of work
 
 A Dreamcast-native Daytona USA in `platform/dreamcast-native/`, the whole game. The PC

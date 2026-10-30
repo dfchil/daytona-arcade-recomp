@@ -13,7 +13,8 @@ in [FULL_COURSE_BENCHMARKS.md](FULL_COURSE_BENCHMARKS.md).
 ## How to rebuild from your own ROM
 
 Needs: this repository with `extern/` fetched (`python3 scripts/setup.py` or
-`./setup.sh`), CMake and a C++20 compiler, `python3` with numpy and Pillow,
+`./setup.sh`; the recipe configures its own host build with
+`-DM2_DREAMCAST_NATIVE=ON`), CMake and a C++20 compiler, `python3` with numpy and Pillow,
 and the KOS/enDjinn Dreamcast toolchain (`pvrtex`; `sh-elf` for the ELFs).
 `ENDJINN_ROOT` defaults to `extern/endjinn` (`platform/dreamcast-native/scripts/fetch_endjinn.sh`); SH4ZAM
 comes from `platform/dreamcast-native/scripts/fetch_sh4zam.sh` (`extern/sh4zam`).
@@ -231,7 +232,7 @@ fast race in order.
 `T` = `platform/dreamcast-native/tools`. Every step runs a committed tool.
 
 ```
-ROM .zip --m2import --no-sound--> rom/daytona93/*.bin (R)
+ROM .zip --m2import_silent--> rom/daytona93/*.bin (R)
 R/program.bin, tgp_program.bin --m2recomp, m2tgprecomp--> host/gen --CMake--> m2segment, check_native_*
 
 Exports (m2segment):

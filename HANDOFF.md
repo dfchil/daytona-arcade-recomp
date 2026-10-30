@@ -1,48 +1,5 @@
 # Handoff
 
-## The native Dreamcast port added (28 October 2026)
-
-`platform/dreamcast-native/` is added on top of upstream main as a second Dreamcast
-port, next to `platform/dreamcast`. The gameplay is reimplemented in C and
-checked against this repository's recompiled game (`tools/m2segment`), the
-renderer is PVR-native, and the assets are converted from the user's
-`daytona93` set at build time (`platform/dreamcast-native/recipes/build_assets.sh`).
-Its entry point is `platform/dreamcast-native/README.md`, and its engineering state is
-`platform/dreamcast-native/HANDOFF.md`. The history of that work is
-`platform/dreamcast-native/HISTORY.md`.
-
-- The four host-side headers the converters share with the tests
-  (`material_pack.hpp`, `pvr_geometry.hpp`, `system24.hpp`,
-  `texture_pack_format.h`) moved from our former `platform/dreamcast/code/`
-  to `tools/common/dreamcast/`, so upstream's `platform/dreamcast` is left as
-  it is.
-- Our old Dreamcast bring-up under `platform/dreamcast` is removed. Upstream's
-  port in that directory is the one kept.
-- enDjinn is now pinned like SH4ZAM and AICAflow: `platform/dreamcast-native/scripts/fetch_endjinn.sh`
-  fetches `725f8b1` into `extern/endjinn`. The Makefile and the recipe default
-  `ENDJINN_ROOT` to it.
-- The host tools that call `sh-elf-*` take `KOS_<TOOL>` overrides.
-- Comments that cited Sega's Dreamcast documentation now cite KOS headers or
-  our own measurements (rule 8).
-- THIRD_PARTY.md records the pins and licences.
-
-Verified:
-- `make` in `dreamcast-native` compiles and links against the pinned enDjinn,
-  SH4ZAM and AICAflow, with the outputs of a recipe run.
-- `make check`: every step passes but `tools/hot_layout.py`. That step reports
-  three hot entries off their slots, the same as on the port's own branch.
-- Host build and ctest: the failures are the same as on upstream main's tree
-  (native_models, fp, app_controls, native_checker_prune). app_config was not
-  built in this run.
-
-Not verified:
-- Upstream's Dreamcast port was not rebuilt here, because it needs Revision A
-  generated code, which this checkout does not have.
-- `platform/dreamcast/tools/romuse` needed a small fix: it now loads
-  `polygons.bin` and `textures.bin` as 32- and 16-bit words, for the board's
-  changed image types. The tool was not run.
-- Nothing was run on a console for this change.
-
 ## Scenery selection and polygon budget PR branch (2026-10-08)
 
 Branch `scenery-budget` starts from upstream/main `82201ed`, separate from
@@ -1300,11 +1257,10 @@ frame match model addresses). The i960 picks what to draw:
   0x5010f4 is the limit (5000, set once at 0x1210), checked at 0x17a78 and
   0x1786c. Extra cells appended to the list drew nothing until the budget
   was raised: it, not distance, is what stopped them.
-- Historical interpretation corrected by the native road milestone: the
-  14-entry window (0x13f5c: 5 back via +0x8c, 14 forward via +0x88, list at
-  +0x5c) contains cars, not road sections. Pool membership is verified at
-  frames240/300. The ordered-pair checks and TGP maths remain untouched;
-  their exact collision meaning is not established by that membership check.
+- The road: a 14-section window (0x13f5c: 5 back via +0x8c, 14 forward via
+  +0x88, list at +0x5c of its struct; ordered pair checks via table 0x13ec4
+  and TGP maths at 0x14180). Also game logic (car/section interaction);
+  not changed.
 Mechanism: `m2recomp --hooks FILE` ("ADDRESS name": the generated code calls
 rt::hook_<name>(c) before that instruction), `seeds/daytona93_hooks.txt`,
 `src/runtime/enhance.{h,cpp}`. hook_draw_list at 0x17078: -1 keeps the
@@ -2015,13 +1971,6 @@ Also found:
   unconfirmed on the PCB.
 
 ## What not to re-propose
-
-- Do not divide eye-crossing triangles before side clipping: the native
-  stress test measures visible precision loss. Keep the independent geometry
-  oracle and magnitude/viewport checks when optimizing. Strict C library
-  NaN/min/max calls in a per-triangle SH4 loop also cost heavily; IEEE finite
-  checks plus per-vertex caching cut this diagnostic from 91.57 to 20.66 ms,
-  but that still does not meet the full-frame budget or render the models.
 
 - SCSP for Daytona. It is the Model 1 sound board (MAME `model2o` config and
   the MiSTer core's working sound on hardware).

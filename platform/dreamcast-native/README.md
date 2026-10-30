@@ -13,7 +13,7 @@ Flycast. This directory takes a different route:
 - **Gameplay is reimplemented in C and bit-exact to the arcade.** It covers car
   physics, the 39 opponents, collisions, damage, the race rules, the front end,
   records and the attract mode. Every routine cites the original code it
-  reproduces. The recompiled game in this repository (`tools/m2segment`) is
+  reproduces. The recompiled game in this repository (`tools/m2segment.cpp`) is
   the reference. The native game is checked against it tick for tick, through
   lockstep traces on the host and checkpoint rows on the console. All three
   circuits match the reference on hardware with 0 differing rows: Beginner 259
@@ -79,13 +79,14 @@ Known limits:
 ## Prerequisites
 
 - **This repository's host build** (CMake, a C++20 compiler; `./setup.sh`).
-  The recipe builds its own `m2import`, `m2recomp` and `m2segment` from it.
+  The recipe builds its own `m2import_silent`, `m2recomp` and `m2segment`
+  from it, with `-DM2_DREAMCAST_NATIVE=ON` (see "Host side").
 - **KallistiOS** with its SH-4 toolchain at `/opt/toolchains/dc` (`sh-elf`,
   `kos-cc`, `pvrtex`). The port is built and measured with KOS
   `368a2eb9`.
 - **enDjinn**, the frontend framework: `platform/dreamcast-native/scripts/fetch_endjinn.sh` (pinned,
   into `extern/endjinn`). `ENDJINN_ROOT` overrides it.
-- **SH4ZAM**: `platform/dreamcast-native/scripts/fetch_sh4zam.sh` (pinned v0.9.0, built into
+- **SH4ZAM**: `platform/dreamcast-native/scripts/fetch_sh4zam.sh` (pinned v0.10.0, built into
   `extern/sh4zam/lib`).
 - **AICAflow and AICAforge**: `platform/dreamcast-native/scripts/fetch_aicaflow.sh` (pinned, into
   `extern/aicaflow`).
@@ -96,7 +97,7 @@ Known limits:
   archive with the sha256 recorded in `recipes/build_music.sh` is accepted.
 - `python3` with numpy and Pillow; zlib headers; `unzip`; `zsh`.
 
-Versions, licences and pins: [../THIRD_PARTY.md](../THIRD_PARTY.md).
+Versions, licences and pins: [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Build from scratch
 
@@ -130,6 +131,36 @@ make -C platform/dreamcast-native $(grep -v '^#' build/my-assets/make-vars.txt) 
 
 The build options are documented in `local.cfg.mk`. The defaults are the
 recommended build. The ELF's name carries every option that is on.
+
+## Host side
+
+The repository's default build reads nothing here. `-DM2_DREAMCAST_NATIVE=ON`
+includes `host.cmake`, which adds the port's reference tools and host tests:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM2_DREAMCAST_NATIVE=ON
+cmake --build build --parallel
+ctest --test-dir build -R '^native_'
+```
+
+`m2segment` is the recompiled game under the port's exports and checks. It runs
+silent and needs the generated i960 and TGP code, which the recipe makes in
+`OUTDIR/host`; without that code the target is left out and the tests still
+build. `check_native_material_pack` and `test_native_practice` need zlib; without
+it they are left out, with `native_material_pack` and
+`native_material_residency`, and the recipe cannot run.
+
+The tools observe the shared runtime through hooks behind `M2_DC_NATIVE_HOST`,
+off by default: call and return observers on the CPU, an object observer and an
+inspection instance on the geometrizer, read-only TGP and System 24 accessors,
+the MultiPCM register values of the native sequencer, and a ROM import that
+skips the sound ROMs. `host.cmake` compiles the runtime a second time with the
+define (`native_runtime`, `native_refcore`), so `runtime` and the tests that use
+it are the same with the option on or off.
+
+Developed on macOS with Clang; the recipes need `zsh`, and the tests call `cc`
+with GCC-style flags. MSVC is not a host for this: `include/geometry.h` and the
+tests use GCC and Clang attributes.
 
 ## Running
 
@@ -185,8 +216,11 @@ and whether Flycast delivers it has not been checked.
 | `tools/` | Host-side asset converters (`prepare_*.py`, `export_*.hpp` for `m2segment`), checkers, profiling and layout tools |
 | `tests/` | Host tests, lockstep harnesses, the PVR stream simulator (`stream_sim/`), the SH-4 simulator harness (`sh4sim/`) |
 | `recipes/` | `build_assets.sh` and its parameters, inputs and expected hashes; the benchmark runs |
+| `scripts/` | Pinned fetches of enDjinn, SH4ZAM and AICAflow |
+| `host.cmake` | The host tools and tests (`-DM2_DREAMCAST_NATIVE=ON`) |
 | `config/` | Fixed placement of hot code (`hot_layout.tsv`) |
 | `Makefile`, `local.cfg.mk` | enDjinn build and every build option |
 | `HANDOFF.md` | Engineering state, findings (including the ones that turned out wrong) and source facts |
+| `docs/` | Design notes, the render profile and the task list of the early work |
+| `THIRD_PARTY.md` | Pins and licences of what the port builds with |
 
-Shared host-side formats live in `../tools/common/dreamcast/`.

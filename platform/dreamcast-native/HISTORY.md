@@ -117,7 +117,7 @@ set as attract setup0197c with graph2865a70[course] (course0: 4 stages,
 40/40/40/10 cars); 01758 runs phase handler before task loop01838; table22f1f0
 runs camera5b68 before graph. D49 preconditions (flag bit28 vs literal8, spawn
 profile195 -> phase196, camera times0/128/320/10, carried race state) are in
-docs/dreamcast-task-contracts.md. No hardware upload, reset, commit or CDI.
+platform/dreamcast-native/docs/dreamcast-task-contracts.md. No hardware upload, reset, commit or CDI.
 Evidence build/dc-native-podium-control.pNLIOS/.
 
 ## Natural timeout diagnostic exposed race entry gap 2026-10-11
@@ -343,7 +343,7 @@ Evidence/scripts/logs/manifests: build/dc-native-align-tables.cRiCBG/. Analyzer8
 checks terminal state, sample counts, event ownership, ELF and all asset hashes.
 Sources unchanged across hardware checks. All process handles terminal; final
 fresh STAT succeeds without reset. The saved report
-docs/dreamcast-render-profile-2026-10-11.md now has a separate alignment
+platform/dreamcast-native/docs/dreamcast-render-profile-2026-10-11.md now has a separate alignment
 comparison; original baseline tables preserved.
 
 Subsequent point-cache change and freshness/hardware checks accepted above.
@@ -631,7 +631,7 @@ D03/D04 profile accounting, D11 cache review, then matched no-oracle timing.
 
 ## Delegation pilot and normal cone contract counterexample 2026-10-09
 
-Use docs/dreamcast-task-contracts.md for the revised goal/workflow. D01's
+Use platform/dreamcast-native/docs/dreamcast-task-contracts.md for the revised goal/workflow. D01's
 single DNM4 help-line edit was independently reviewed and --help rerun; D09's
 LOD inventory was checked against source and the generated catalog selected
 by the race-check depfiles. Opponents have different body bindings at levels
