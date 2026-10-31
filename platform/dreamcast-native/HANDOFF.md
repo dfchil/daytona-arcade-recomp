@@ -291,7 +291,7 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   / 7.00 ms. Now, checkpoints 0 differing in every run, hot layout at its slots on `stats*`, `play` and `controller`, image
   ends unchanged, `make check` as before (81 PASS, the 5 known FAIL lines): Beginner late 2, 2 (ticks 4592 and 4612, 3.71
   / 8.11 ms), Expert late 0 (3.26 / 6.92 ms, flips equal vblanks); one commit earlier Expert 0, 0, Beginner 2, 2, Advanced
-  0 (2.58 / 6.87), attract 0. `check_stream.py` on all three courses at step 7: 27 PASS (before the last two small changes).
+  0 (2.58 / 6.87), attract 0. `check_stream.py` at step 15 on the last commit: 27 PASS, 761, 1,039 and 956 frames.
   Beginner's two: U + R still about 17.7 ms in 4583..4619; the model asks for about 0.25 ms a frame more.
 - **Title stalls now** (`console-gaps2-attract.log`, quiet host): none over 25 ms. Longest title frames 22.3, 20.4, 20.9 ms,
   longest loader slices 22.2, 20.3, 20.7 ms (17, 19, 9 of 435, 473, 354 past their end), longest file call a 32 KB read

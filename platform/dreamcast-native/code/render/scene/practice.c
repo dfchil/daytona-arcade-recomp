@@ -1028,7 +1028,9 @@ static __attribute__((noinline)) int practice_clocks(nm_practice_scene_t *scene,
     if(!nm_clock_scene_input(&in,&scene->race,&scene->intro,scene->attract_active,
             scene->podium.phase ? 0u : scene->results.ticks,bitmaps)) return 1;
     const nm_xa_draw_t *const draws=nm_props_world_actor_draws(scene->attract_active);
+#ifdef NM_DIAG_FRAME_TRACE
     NM_FT_BEGIN(ft_clocks);
+#endif
     for(unsigned i=0;i<scene->clock_count;++i) {
         const nm_clock_group_t *const g=groups+i;
         const nm_xa_draw_t *const draw=g->cond==NM_CLOCK_ACTOR && draws ? draws+i : NULL;
@@ -1039,7 +1041,9 @@ static __attribute__((noinline)) int practice_clocks(nm_practice_scene_t *scene,
         if(g->flags&NM_CLOCK_GROUP_PLACED ? !practice_clock_place(scene,source,i,draw) :
            !practice_object_place(scene,source,source->mesh,NM_OBJECT_CELL(source->padding[0]))) return 0;
     }
+#ifdef NM_DIAG_FRAME_TRACE
     NM_FT_END(NM_FT_S_CLOCKS,ft_clocks);
+#endif
     return 1;
 }
 /* The reels (kinds NM_OBJECT_SLOT..+2) among this frame's world object instances, to the glass. */
