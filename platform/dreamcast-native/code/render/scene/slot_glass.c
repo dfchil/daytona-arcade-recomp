@@ -49,9 +49,11 @@ static inline int reel_project(float points[NM_SLOT_GLASS_LEVELS][2][3]) {
     for (unsigned l = 0; l < NM_SLOT_GLASS_LEVELS; ++l) for (unsigned s = 0; s < 2; ++s) {
         const float *p = nm_slot_glass_levels[l].side[s];
         const shz_vec3_t t = shz_xmtrx_transform_point3(shz_vec3_init(p[0], p[1], p[2]));
-        if (!(t.z > near && t.z < 1e6f)) return 0;
+        /* Sign tests (finite.h): an inverted compare is a libgcc call, six a point here. */
+        if (!nm_float_positive(t.z - near) || !nm_float_positive(1e6f - t.z)) return 0;
         const float q = shz_invf_fsrra(t.z), x = cx + t.x * fx * q, y = cy - t.y * fy * q;
-        if (!(x > x0 && x < x1 && y > y0 && y < y1)) return 0;
+        if (!nm_float_positive(x - x0) || !nm_float_positive(x1 - x) ||
+            !nm_float_positive(y - y0) || !nm_float_positive(y1 - y)) return 0;
         float *out = points[l][s];
         out[0] = x; out[1] = y; out[2] = q;
     }

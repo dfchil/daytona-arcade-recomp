@@ -232,7 +232,6 @@ static inline void nm_clock_point(const nm_clock_group_t *g,const int16_t *pa,co
 #endif
     }
 }
-/* A stored normal component between two stored frames. */
 /* The same on a stored frame (rate 1: every frame is stored, weight 0): the lerp's result without its second read. */
 static inline void nm_clock_point_stored(const nm_clock_group_t *g,const int16_t *pa,unsigned p,float out[3]) {
     for(unsigned axis=0;axis<3;++axis) {
@@ -243,6 +242,7 @@ static inline void nm_clock_point_stored(const nm_clock_group_t *g,const int16_t
 #endif
     }
 }
+/* A stored normal component between two stored frames. */
 static inline float nm_clock_normal(int16_t a,int16_t b,float t) {
 #ifdef __DREAMCAST__
     return shz_lerpf((float)a,(float)b,t)*(1.0f/NM_CLOCK_NORMAL_SCALE);
@@ -250,9 +250,10 @@ static inline float nm_clock_normal(int16_t a,int16_t b,float t) {
     return ((float)a+((float)b-(float)a)*t)*(1.0f/NM_CLOCK_NORMAL_SCALE);
 #endif
 }
+/* The same on a stored frame. */
+static inline float nm_clock_normal_stored(int16_t a) { return (float)a*(1.0f/NM_CLOCK_NORMAL_SCALE); }
 
 /* Where frame `frame` lies between the stored frames: a, b and the weight t of b. */
-static inline float nm_clock_normal_stored(int16_t a) { return (float)a*(1.0f/NM_CLOCK_NORMAL_SCALE); }
 static inline void nm_clock_between(const nm_clock_group_t *g,unsigned frame,unsigned *a,unsigned *b,float *t) {
     const unsigned stored=nm_clock_stored(g);
     *a=frame/g->rate; *b=(*a+1u)%stored;
