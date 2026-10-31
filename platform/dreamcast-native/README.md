@@ -39,40 +39,43 @@ Works on hardware:
 - all three circuits (Beginner, Advanced, Expert), automatic and manual
   transmission, the views VR1 to VR4 and the HUD;
 - the attract mode over all three circuits (cinematic, V.R. demo, title);
-- the finish, podium, results and name entry.
+- the finish, podium, results and name entry;
+- one game after another from the same power-on, with credits taken in the
+  attract, the title and after a game (8 games by a scripted pad).
 
 Implemented, but HANDOFF.md records no hardware run yet: operator settings
 (difficulty, advertise sound) and the VMU save of records and settings.
 `make check` tests the save against a fake VMU.
 
 Results on hardware, from [recipes/FULL_COURSE_BENCHMARKS.md](recipes/FULL_COURSE_BENCHMARKS.md)
-(23 October 2026, scripted runs, one tick per frame):
+(31 October 2026, scripted runs, one tick per frame):
 
 | Run | Frames | Late frames | Checkpoints differing | Registration mean/max |
 | --- | --- | --- | --- | --- |
-| Beginner, 8 laps, podium, results | 12,473 | 3 | 0 of 259 | 7.44 / 15.9 ms |
-| Advanced, 3rd place, podium, results | 15,403 | 0 | 0 of 320 | 6.29 / 12.5 ms |
-| Expert, 3rd place, podium, results | 16,655 | 1 | 0 of 345 | 6.41 / 14.4 ms |
-| Attract, three loops | 8,265 | 0 | – | 6.97 / 14.2 ms |
+| Beginner, 8 laps, podium, results | 12,472 | 2 | 0 of 259 | 7.30 / 14.1 ms |
+| Advanced, 3rd place, podium, results | 15,402 | 0 | 0 of 320 | 6.31 / 12.7 ms |
+| Expert, 3rd place, podium, results | 16,657 | 0 | 0 of 345 | 6.44 / 14.2 ms |
+| Attract, three loops | 8,265 | 0 | – | 6.91 / 13.5 ms |
 
 Known limits:
 
 - The title stalls while the attract loads the next circuit. The longest
-  stalls in the run above were 79 and 228 ms. They are not counted as late
-  frames.
-- Beginner's three late frames come at ticks 4589–4615, where registration
+  stalls measured, on 23 October, were 79 and 228 ms. They are not counted as
+  late frames.
+- Beginner's two late frames come at ticks 4593 and 4618, where registration
   takes 13–14 ms.
 - Not native yet:
   - the transmission screen's two turning cars and the ranking overlay;
-  - the radar zoom chord;
   - time attack;
   - the COUNTRY and CABINET settings.
 
   [HANDOFF.md](HANDOFF.md) lists each item in its "Not done" notes.
-- A second game in one session does not yet carry over the player state the
-  original keeps (HANDOFF.md, "17 October: front-end flow").
-- There is no disc image on this branch. The game loads its assets from a host
-  through dcload's `/pc/`.
+- A second game's sound commands are not compared with the original (HANDOFF.md,
+  "30 October: games one after another").
+- `make cdi` builds a disc image (recipes/README.md, "Disc image"), and the game
+  has run from an ISO through dcload, every asset from `/cd/`. It has not been
+  tried on a burned disc or a drive emulator, so a real drive's seeks and booting
+  from IP.BIN are not proven.
 - The soundtrack is about 8 cents flat of MAME's MultiPCM clock, because of
   the clock the vgmrips logs give (recipes/README.md, "Music").
 
@@ -178,8 +181,8 @@ kos-tool -t /dev/<serial-device> -m build/my-assets/assets-ssfar4f -x platform/d
 port A. START+A+B+X+Y returns to the loader.
 
 Flycast has not been tested with this port. The default ELF needs dcload's
-`/pc/` for its assets. `NATIVE_DISC=1` reads from `/cd/` instead, but this
-branch packages no disc image. AICAflow also needs the AICA's SH-4 interrupt,
+`/pc/` for its assets. `NATIVE_DISC=1` reads from `/cd/` instead, and `make cdi`
+packages that build as a disc image. AICAflow also needs the AICA's SH-4 interrupt,
 and whether Flycast delivers it has not been checked.
 
 ## How it is verified
