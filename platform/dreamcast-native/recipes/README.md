@@ -94,7 +94,7 @@ From the repository root, after a recipe run (here `build/dc-native-final.recipe
 
 ```
 source ../enDJinn/environ.sh
-PATH=$PWD/../mkdcdisc/builddir:$PATH make -C dreamcast-native ENDJINN_ROOT=$PWD/../enDJinn \
+PATH=$PWD/../mkdcdisc/builddir:$PATH make -C platform/dreamcast-native ENDJINN_ROOT=$PWD/../enDJinn \
   $(grep -v '^#' build/dc-native-final.recipe/make-vars.txt) \
   NATIVE_RESIDENT_CAR=1 NATIVE_FRAME_PROFILE=1 NATIVE_HANDOPT=1 RACE_TICK_LIMIT=0 AUTO_START=attract \
   NATIVE_DISC=1 ENJ_BUILDDIR=$PWD/build/dc-native-disc/obj ENJ_BINDIR=$PWD/build/dc-native-disc/bin -j8 cdi

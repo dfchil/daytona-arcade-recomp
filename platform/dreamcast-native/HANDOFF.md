@@ -51,11 +51,6 @@ upstream main, and the preprocessed `src/runtime` files too.
 - `docs/design-notes.md` holds what the port added to the design document,
   `THIRD_PARTY.md` the pins.
 
-Open: GCC stops at `include/pit.h:327` compiling `m2segment` (C++ takes designators
-in declaration order only; Clang warns). Moving `.frames` first builds it, and a
-4,080-frame trace then matches Clang's, but it is a gameplay header and the ELF's
-hash has to be checked. Until then the recipe needs Clang.
-
 The two host tests that had been failing since 18 October were out of date, not
 the code: `native_models` (`race_scenery_lumas` takes variable specular since
 2380af2) and `native_checker_prune` (`--world-cells` splits checker vertices since
