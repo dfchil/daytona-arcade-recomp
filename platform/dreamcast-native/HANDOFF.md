@@ -287,8 +287,8 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   the same before the eye turn (+28 is 0 there); not looked into. In the results the native runs no camera pass, so a
   view left by VR1 or VR2 stands where the original's glides back: nothing is drawn. Whole-recipe runs of the changed
   steps (`props_slow`, `attract_lockstep` with Expert) have not happened; their commands ran by hand.
-- **Console (not run).** `elf/stats-advanced-finish` and `elf/stats-expert-finish` over slopes: the camera must not jump
-  where the eye turn starts. `elf/play` on Expert: hold in the results to skip them, press START in the podium (the
+- **Console.** The benchmarks ran on 30 and 31 October: checkpoints 0 differing, the eye turn's slopes without a late
+  frame beyond the usual two. Still by hand, `elf/play` on Expert: hold in the results to skip them, press START in the podium (the
   bird grows, where drawn); on Beginner the slot's reels stop in the podium. Knock a slow prop by hand on Advanced at
   (-298, 165). Expected checkpoint rows do not change: none of this is in them.
 
@@ -2733,9 +2733,9 @@ running.
 
 ## 30 October: the presentation list (branch gaps-2)
 
-Four of six done, host-verified, not run on a console. The pack changed: `hud_data.h` and `hud/` go together, an older
-asset set stops at "FAIL HUD startup". The recipe was not rerun as a whole: the `hud` step's command by hand (a disk cache
-around `tight_pieces`, which gives what the search gives), `expected.sha256` rows from that.
+Four of six done, on the console on 31 October (below). The pack changed: `hud_data.h` and `hud/` go together, an older
+asset set stops at "FAIL HUD startup". The `expected.sha256` rows came from the `hud` step's command by hand (a disk cache
+around `tight_pieces`, which gives what the search gives); a whole recipe then gave 2737 identical, 0 different.
 
 - **Rolling start overlay** (`include/hud.h` nm_hud_overlay, a pure state of 501850, 5010b0, 501054, 501854). `ROLL_*`:
   the banner and its car run left 4 pixels a tick through the 1024-pixel ring of the tile layer pair, ACCEL ON! or AUTO
@@ -2785,7 +2785,13 @@ gameplay field moved: nm_race_scene_t has `accel` at its end, for the hint only.
   of the fast race, the whole HUD a few pixels sideways): not native. A manual car's map marker is 288b62c (13210[1]),
   the export has only the automatic's 288b618. `hud_render.c`'s comment says the CONDITION panel is off by default;
   local.cfg.mk has it on.
-- **Console (not run):** `elf/play` of the recipe. Beginner: the banner's edges at the screen sides (sprites at negative
-  x), the panel's rounded corners, AUTO DRIVE, ACCEL ON! with the pedal up, 3 2 1, GO!, a late-frame count of the rolling
-  start against the 3 of 23 October; each lap's message. All courses: START + D-pad, the map sizes held over a lap,
-  the markers' headings on Advanced and Expert, the "2" when leading.
+- **Console, 31 October (9762da6):** checkpoints 0 differing of 259, 320 and 345; late 3, 0, 2, attract 0 of 8,265; the
+  late frames are the old ticks (Beginner 4589..4612, Expert 3535, 3545), none in the rolling start. VRAM 1.28 MB free at
+  worst. Pad monkey, schedule 2: 8 games, 3 sites of credit, all courses, 0 DROP. On HDMI: AUTO DRIVE, the banner and its
+  panel through the screen's edges, 3 2 1, GO!, BEST LAP with TIME EXTENSION!!, Expert's markers along the course, the
+  "2" under the player's. Not looked at on hardware: ACCEL ON! with the pedal up, START + D-pad (needs a pad), the map
+  sizes held over a lap.
+- **Disc (branch disc-image, merged).** `kos-tool -i` of an ISO with `/pc` mapped to an empty directory: the same 8 games,
+  every asset from `/cd/`, the loader's reads outside its slices and the music's worker under slower reads (about 3.3
+  times dcload). Without NATIVE_DISC the ELF is byte for byte the recipe's. Not proven: a GD-ROM's seeks, the build
+  without the console (dbgio null), IP.BIN and 1ST_READ: a burned CD-R or an ODE.

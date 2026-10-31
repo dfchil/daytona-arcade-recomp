@@ -32,6 +32,15 @@ the late frames, each with its cause (update, registration, PVR, load) and tick.
 
 ## Results on hardware
 
+31 October 2026, 9762da6: the rolling start overlay, the lap message and the chord in the HUD (139,424 bytes of VRAM).
+
+| Benchmark | Frames | Late frames | Checkpoints differing | Registration mean/max |
+| --- | --- | --- | --- | --- |
+| Beginner | 12,472 | 3 (ticks 4589–4612, registration 13.5–14.1 ms) | 0 of 259 | 7.47 / 15.5 ms |
+| Advanced | 15,403 | 0 | 0 of 320 | 6.37 / 12.9 ms |
+| Expert | 16,654 | 2 (ticks 3535, 3545, update 6.4 ms) | 0 of 345 | 6.52 / 14.5 ms |
+| Attract | 8,265 | 0 | – | 7.04 / 15.3 ms |
+
 23 October 2026, branch native-all (728baf8): one tick per displayed frame (59.94 Hz), the attract's 2D layer from
 retained sprite records, and Expert's world streams through a record cache.
 
