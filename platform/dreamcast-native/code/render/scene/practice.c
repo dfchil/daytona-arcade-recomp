@@ -757,7 +757,7 @@ static void practice_shadow_face(practice_shadow_build_t *b,const float *const *
     float out[PRACTICE_SHADOW_POLY][3];
     unsigned kept=0;
     for(unsigned i=0;i<count;++i) {
-        const float *a=in[i],*c=in[(i+1)%count];
+        const float *a=in[i],*c=in[i+1<count ? i+1 : 0]; /* no division an edge */
         const int ain=a[2]>PRACTICE_SHADOW_NEAR,cin=c[2]>PRACTICE_SHADOW_NEAR;
         if(ain && kept<PRACTICE_SHADOW_POLY) { out[kept][0]=a[0];out[kept][1]=a[1];out[kept][2]=a[2];++kept; }
         if(ain!=cin && kept<PRACTICE_SHADOW_POLY) {
@@ -815,7 +815,7 @@ static void practice_shadow_volumes(void *data) {
         b.tris=b.cuts=b.overflow=0;b.left=b.right=b.above=b.below=1;
         /* The walls, then both caps; with a near cut, the cross-section closes it. */
         for(unsigned i=0;i<n;++i) {
-            const unsigned j=(i+1)%n;
+            const unsigned j=i+1<n ? i+1 : 0;
             const float *quad[4]={ring[0][i],ring[0][j],ring[1][j],ring[1][i]};
             practice_shadow_face(&b,quad,4);
         }

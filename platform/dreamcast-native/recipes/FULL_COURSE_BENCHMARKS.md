@@ -32,6 +32,17 @@ the late frames, each with its cause (update, registration, PVR, load) and tick.
 
 ## Results on hardware
 
+31 October 2026, branch late-frames: the placed actors' points once a frame, no libcalls in the frame's loops, the slot
+machine's glass without a classification per point (Beginner and Expert on the last commit, Advanced and the attract one
+commit earlier).
+
+| Benchmark | Frames | Late frames | Checkpoints differing | Registration mean/max |
+| --- | --- | --- | --- | --- |
+| Beginner | 12,474 | 2 (ticks 4592, 4612, registration 13.4-13.7 ms) | 0 of 259 | 7.32 / 15.1 ms |
+| Advanced | 15,403 | 0 | 0 of 320 | 6.32 / 14.9 ms |
+| Expert | 16,657 | 0 | 0 of 345 | 6.44 / 14.3 ms |
+| Attract | 8,264 | 0 | - | 6.93 / 14.3 ms |
+
 31 October 2026, 9762da6: the rolling start overlay, the lap message and the chord in the HUD (139,424 bytes of VRAM).
 
 | Benchmark | Frames | Late frames | Checkpoints differing | Registration mean/max |
@@ -54,4 +65,4 @@ retained sprite records, and Expert's world streams through a record cache.
 Before these changes (attract-merge, 22 October): Beginner 2 late, Advanced 0, Expert 7, attract 19.
 
 Not counted as late frames: the title stalls while the next circuit loads in the attract (longest 79 and 228 ms in
-the run above).
+the run above; 22.3 ms on 31 October).

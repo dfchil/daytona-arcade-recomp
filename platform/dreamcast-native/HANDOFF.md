@@ -279,10 +279,23 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
 - **KOS's clock jumps 2.5 ms a second.** TMU2 reloads with 12,468,720 counts and `timer_ns_gettime64` reads each as 80 ns:
   0.9975 s, then a jump at the underflow. The 1 Hz spikes of 2.54 ms in `upd`, `reg` and the 19,163 us of "Native displayed
   frames" are that jump, no work (the trace's TMU reads do not show it).
+- **Where the statics sit.** The KOS link script aligns what follows .text to 8 KiB, so .rodata, .data and .bss move by
+  8 KiB steps with the size of .text, half the O-cache, and a step past it adds 16 KiB of image end (heap residue): the
+  heap budget of `stats` then fails (251,304 never taken, budget 262,144). .text may reach 843,776 bytes at that step; this
+  branch ends at 842,052. `stats*` sit at residue 0x2080, `play` and `controller*` at 0x0080. One run of the final code
+  padded past the step (residue 0x0080): updater mean -0.14 ms, 1 late frame instead of 2. An earlier candidate at that
+  residue, with the shadow rings projected once and `instance_view`'s limits inline (which `test_practice_render_split.py`
+  refuses), ran 3.41 / 7.96 ms and 0 late, once; 0.19 ms of its updater is not explained. So the game's ELFs may be on
+  the better residue; no run of one over this race exists.
 - **Console.** Before (logs gaps2-*): Beginner late 3, race update/registration means 3.91 / 8.27 ms; Expert late 2, 3.46
-  / 7.00 ms. This commit, each twice, checkpoints 0 differing, hot layout at its slots, `make check` as before: Expert late
-  0, 0 (3.28 / 6.93 ms, 16,593 flips over 16,593 vblanks); Beginner late 2, 2 (3.74 / 8.13 ms; ticks 4591-92, 4609-11),
-  Advanced 0 (2.58 / 6.87), attract 0. `check_stream.py` on all three courses at step 7: 27 PASS.
+  / 7.00 ms. Now, checkpoints 0 differing in every run, hot layout at its slots on `stats*`, `play` and `controller`, image
+  ends unchanged, `make check` as before (81 PASS, the 5 known FAIL lines): Beginner late 2, 2 (ticks 4592 and 4612, 3.71
+  / 8.11 ms), Expert late 0 (3.26 / 6.92 ms, flips equal vblanks); one commit earlier Expert 0, 0, Beginner 2, 2, Advanced
+  0 (2.58 / 6.87), attract 0. `check_stream.py` on all three courses at step 7: 27 PASS (before the last two small changes).
+  Beginner's two: U + R still about 17.7 ms in 4583..4619; the model asks for about 0.25 ms a frame more.
+- **Title stalls now** (`console-gaps2-attract.log`, quiet host): none over 25 ms. Longest title frames 22.3, 20.4, 20.9 ms,
+  longest loader slices 22.2, 20.3, 20.7 ms (17, 19, 9 of 435, 473, 354 past their end), longest file call a 32 KB read
+  in 6.8 ms. Flips 8,317 over 8,321 vblanks; the V.R. demo's one late frame (28.5 ms) is one of the four.
 
 ### 30 October: four gaps closed (branch gaps-1)
 

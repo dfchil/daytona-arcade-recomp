@@ -2517,7 +2517,7 @@ static int sq_prepare_source(unsigned source, const nm_pack_t *pack) {
      * and their classifications once, not per instance. */
     nm_view_t window_view;
     int16_t window[6]={0,0,0,0,0,0};
-    int window_valid=0;
+    int window_valid=0,window_view_valid=0;
     for(unsigned i=0;i<pack->header->instances;++i) {
         DRAW_PHASE_START(bounds_started);
         const nm_instance_t *inst=pack->instances+i;
@@ -2529,10 +2529,12 @@ static int sq_prepare_source(unsigned source, const nm_pack_t *pack) {
                 sq_instance_view(pack,inst,&window_view); window_valid=1;
                 for(unsigned k=0;k<4;++k) window[k]=v[k];
                 window[4]=c[0]; window[5]=c[1];
+                window_view_valid=nm_view_valid(&window_view);
             }
         }
         const nm_view_t view=shared_view ? sq_scenery_camera.view : window_view;
-        if(!nm_view_valid(&view)) { DRAW_PHASE_END(11,bounds_started); continue; }
+        /* (sq_scenery_camera.shared: nm_scenery_camera_prepare found its view valid) */
+        if(!shared_view && !window_view_valid) { DRAW_PHASE_END(11,bounds_started); continue; }
         /* nm_bounds_quick_classify first: when it decides (0 or 2) the planes would decide the same, at a tenth
          * of their cost (the pit crew's hundred parts a frame, each with its own matrix). */
         int bounds;
