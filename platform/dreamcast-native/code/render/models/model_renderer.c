@@ -794,8 +794,10 @@ int nm_render_init(const nm_pack_t *pack) {
     static int checked_once;
     if(!checked_once) {
 #if SQ_STREAMS && defined(__DREAMCAST__)
+#ifndef NATIVE_BOUNDS_VERIFY
     if(!sq_stream_transform_check()) return 0;
     nm_loader_yield(0);
+#endif
     if(!sq_stream_face_check()) return 0;
     nm_loader_yield(0);
     if(!sq_stream_run_check()) return 0;

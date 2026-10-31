@@ -2030,7 +2030,7 @@ static __attribute__((noinline)) void sq_cache_points_stream(const nm_sq_walk_t 
     }
     DRAW_PHASE_END(0,vertices_started);
 }
-#ifdef __DREAMCAST__
+#if defined(__DREAMCAST__) && !defined(NATIVE_BOUNDS_VERIFY) /* that build has no lean form, and these points no proof */
 /* Before the first frame: the lean form against cache_draw_vertex_wide on
  * points in front of the near plane, through three instance matrices, bit
  * for bit in x, y and q. */

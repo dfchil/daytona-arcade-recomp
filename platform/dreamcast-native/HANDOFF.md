@@ -265,11 +265,14 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   vertex record through a lerp of three axes: a horse's 155 points are 423 records, 240 us a horse.
 - **Fixes, nothing of the picture or the race moves:**
   - `nm_render_world_clock_frame`: each moving point once, then its records; rate 1 (every frame stored) without the lerp.
-  - `sq_cache_point_lean`: no near test on the console. A proven point cannot be behind it; host tools abort if one is.
+  - `sq_cache_point_lean`: no near test on the console. A proven point cannot be behind it; host tools abort if one is,
+    and `NATIVE_BOUNDS_VERIFY=1` checks every proven point against the five planes on the console: 78.7 million points
+    over the three courses' races (36,888 frames: that build runs late), no failure, checkpoints 0 differing.
   - `sq_lod_level`, the shadow rings: a sign test, not GCC's `__unordsf2` call for each far group and ring point.
   - `sq_prepare_source`: consecutive instances in one window share their view, instead of four libm calls an instance.
     `instance_view` itself is pinned by `test_practice_render_split.py`.
-  - Slot glass: a reel wholly on the screen is projected without a classification per point: 280 -> about 60 us.
+  - Slot glass: a reel wholly on the screen is projected without a classification per point, with sign tests (a plain
+    `!(a > b)` there is six libgcc calls a point, 576 a frame): 280 -> an estimated 60 us, not measured.
   - Tried and dropped: projecting each shadow ring point once (-0.15 ms): its slow path out of line grows .text past the
     8 KiB step below.
 - **Hot layout traps.** GCC's inlining of `practice_prepare` flips with small changes: `records_build` is noinline,
@@ -281,7 +284,9 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   frames" are that jump, no work (the trace's TMU reads do not show it).
 - **Where the statics sit.** The KOS link script aligns what follows .text to 8 KiB, so .rodata, .data and .bss move by
   8 KiB steps with the size of .text, half the O-cache, and a step past it adds 16 KiB of image end (heap residue): the
-  heap budget of `stats` then fails (251,304 never taken, budget 262,144). .text may reach 843,776 bytes at that step; this
+  heap budget of `stats` then fails (251,304 never taken, budget 262,144). `stats-advanced-finish` and
+  `stats-expert-finish` are past that step already, since before this branch, with that figure: their `make check` stops
+  there; the recipe does not run it on them, and `play` has 333,224. .text may reach 843,776 bytes at that step; this
   branch ends at 842,052. `stats*` sit at residue 0x2080, `play` and `controller*` at 0x0080. One run of the final code
   padded past the step (residue 0x0080): updater mean -0.14 ms, 1 late frame instead of 2. An earlier candidate at that
   residue, with the shadow rings projected once and `instance_view`'s limits inline (which `test_practice_render_split.py`
@@ -289,9 +294,11 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   the better residue; no run of one over this race exists.
 - **Console.** Before (logs gaps2-*): Beginner late 3, race update/registration means 3.91 / 8.27 ms; Expert late 2, 3.46
   / 7.00 ms. Now, checkpoints 0 differing in every run, hot layout at its slots on `stats*`, `play` and `controller`, image
-  ends unchanged, `make check` as before (81 PASS, the 5 known FAIL lines): Beginner late 2, 2 (ticks 4592 and 4612, 3.71
-  / 8.11 ms), Expert late 0 (3.26 / 6.92 ms, flips equal vblanks); one commit earlier Expert 0, 0, Beginner 2, 2, Advanced
-  0 (2.58 / 6.87), attract 0. `check_stream.py` at step 15 on the last commit: 27 PASS, 761, 1,039 and 956 frames.
+  ends unchanged, `make check` as before (81 PASS, the 5 known FAIL lines): Beginner late 2 (ticks 4593 and 4618, 3.75 /
+  8.09 ms), Advanced 0 (2.58 / 6.86), Expert 0 (3.28 / 6.92 ms, flips equal vblanks), attract 0; one commit earlier
+  Beginner 2, 2, Expert 0, 0. The V.R. demos ran 1, 0, 1 late against 1, 0, 0, the attract missing 4 vblanks both times.
+  Pad monkey schedule 2: 8 games, no reject. HDMI: slot glass, shadows, birds and horses look right (no older video kept to compare).
+  `check_stream.py` at step 20: 27 PASS.
   Beginner's two: U + R still about 17.7 ms in 4583..4619; the model asks for about 0.25 ms a frame more.
 - **Title stalls now** (`console-gaps2-attract.log`, quiet host): none over 25 ms. Longest title frames 22.3, 20.4, 20.9 ms,
   longest loader slices 22.2, 20.3, 20.7 ms (17, 19, 9 of 435, 473, 354 past their end), longest file call a 32 KB read
