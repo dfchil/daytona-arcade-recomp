@@ -575,6 +575,22 @@ ENJ_BASENAME := $(ENJ_BASENAME)-droplog
 ENJ_CFLAGS += -DNM_DIAG_DROP_LOG=1
 ENJ_LDFLAGS += -Wl,--wrap=pvr_sync_stats
 endif
+# NATIVE_DIAG_FRAME_TRACE=1 (needs NATIVE_DIAG_DROP_LOG=1): every displayed frame's times and, for the run ticks
+#   NATIVE_DIAG_FRAME_TRACE_LO..HI, what they were spent on (include/frame_trace.h). Changes nothing of the picture or
+#   the race; the marks cost a register read each. Printed after the run; tools/frame_trace_report.py reads them.
+ifeq ($(NATIVE_DIAG_FRAME_TRACE),1)
+ifneq ($(NATIVE_DIAG_DROP_LOG),1)
+$(error NATIVE_DIAG_FRAME_TRACE needs NATIVE_DIAG_DROP_LOG=1)
+endif
+ifdef NATIVE_DIAG_LISTS
+$(error NATIVE_DIAG_FRAME_TRACE and NATIVE_DIAG_LISTS both wrap pvr_list_begin)
+endif
+NATIVE_DIAG_FRAME_TRACE_LO ?= 0
+NATIVE_DIAG_FRAME_TRACE_HI ?= 0
+ENJ_BASENAME := $(ENJ_BASENAME)-frametrace
+ENJ_CFLAGS += -DNM_DIAG_FRAME_TRACE=1 -DNM_FT_LO=$(NATIVE_DIAG_FRAME_TRACE_LO) -DNM_FT_HI=$(NATIVE_DIAG_FRAME_TRACE_HI)
+ENJ_LDFLAGS += -Wl,--wrap=pvr_list_begin -Wl,--wrap=pvr_list_finish
+endif
 # NATIVE_DIAG_LATE_CAPTURE=N (1..64; needs NATIVE_DIAG_DROP_LOG=1): pictures of the late frames (include/late_capture.h,
 #   rules in code/practice.c): the first N late frames that are not a load or caused by a capture, the N worst as far as
 #   the slots allow, and the frame shown before each where lateness is known in time. Copied from the frame buffer

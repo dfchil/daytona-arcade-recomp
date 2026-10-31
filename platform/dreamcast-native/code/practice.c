@@ -1512,6 +1512,60 @@ static uint32_t drop_cap_no_before;
 static uint64_t drop_cap_us_total;
 static uint32_t drop_cap_us_max;
 #endif
+#ifdef NM_DIAG_FRAME_TRACE
+/* include/frame_trace.h: a scene's record lives in ft_ring like its slot in drop_ring; drop_frame keeps it. */
+#include "frame_trace.h"
+enum { FT_ROWS=6000,FT_ROW_FROM_US=15000,FT_WINDOW=NM_FT_HI>NM_FT_LO ? NM_FT_HI-NM_FT_LO+1 : 1,FT_LISTS=5 };
+typedef struct { uint16_t run,upd,wait,reg,rnd,other;int16_t late;uint8_t vbl,phase; } ft_row_t;
+typedef struct {
+    uint32_t sim,setup,prep,opponents,world,part_count,shadows,cpu_end;
+    uint32_t list[FT_LISTS],ta[FT_LISTS],counts[FT_LISTS][3],group[NM_FT_GROUPS],calls[NM_FT_GROUPS],emit[2][4];
+    uint32_t object_count,car_count;
+    nm_ft_object_t objects[NM_FT_OBJECTS];
+    nm_ft_car_t cars[NM_FT_CARS];
+} ft_scene_t;
+typedef struct { uint32_t run,tick,upd,wait,reg,rnd,other,vbl;int32_t late;ft_scene_t s; } ft_win_t;
+static ft_scene_t ft_ring[DROP_RING];
+static ft_row_t ft_rows[FT_ROWS];
+static ft_win_t ft_window[FT_WINDOW];
+static unsigned ft_row_count,ft_win_count,ft_list;
+static uint32_t ft_list_start,ft_reg_start;
+static uint64_t ft_sim0,ft_setup0,ft_prep0;
+int __real_pvr_list_begin(pvr_list_t list);
+int __real_pvr_list_finish(void);
+int __wrap_pvr_list_begin(pvr_list_t list) {
+    ft_list=(unsigned)list<FT_LISTS ? (unsigned)list : 0;
+    ft_list_start=nm_ft_clock();
+    if(ft_list==PVR_LIST_OP_POLY) ft_reg_start=ft_list_start;
+    return __real_pvr_list_begin(list);
+}
+int __wrap_pvr_list_finish(void) {
+    const int result=__real_pvr_list_finish();
+    ft_scene_t *f=ft_ring+drop_regs%DROP_RING;
+    const uint32_t now=nm_ft_clock();
+    f->list[ft_list]=nm_ft_delta(ft_list_start,now);
+    f->ta[ft_list]=(uint32_t)PVR_GET(PVR_TA_VERTBUF_POS);
+    nm_ft_render_counts(f->counts[ft_list]);
+    if(ft_list==PVR_LIST_PT_POLY) { /* the frame's last list */
+        f->cpu_end=nm_ft_delta(ft_reg_start,now);
+        nm_memcpy(f->group,nm_ft_group,sizeof(f->group));nm_memcpy(f->calls,nm_ft_calls,sizeof(f->calls));
+        nm_memcpy(f->emit,nm_ft_emit,sizeof(f->emit));
+        f->opponents=nm_ft_opponents;
+        nm_memset(nm_ft_group,0,sizeof(nm_ft_group));nm_memset(nm_ft_calls,0,sizeof(nm_ft_calls));
+        nm_memset(nm_ft_emit,0,sizeof(nm_ft_emit));nm_ft_opponents=0;
+        f->object_count=nm_ft_object_count;f->car_count=nm_ft_car_count;
+        for(unsigned c=0;c<nm_ft_car_count && c<NM_FT_CARS;++c) {
+            const nm_ft_part_t *x=nm_ft_parts+(nm_ft_cars[c].first<NM_FT_PARTS ? nm_ft_cars[c].first : 0);
+            nm_ft_cars[c].prep=x->prep;nm_ft_cars[c].op=x->op;nm_ft_cars[c].pt=x->pt;nm_ft_cars[c].tri=x->tri;
+        }
+        nm_memcpy(f->objects,nm_ft_objects,sizeof(f->objects));nm_memcpy(f->cars,nm_ft_cars,sizeof(f->cars));
+        nm_memset(nm_ft_objects,0,sizeof(nm_ft_objects));nm_memset(nm_ft_parts,0,sizeof(nm_ft_parts));
+        nm_ft_object_count=nm_ft_car_count=0;
+    }
+    return result;
+}
+static inline uint32_t ft_us(uint32_t counts) { return (counts*2u+12u)/25u; } /* 80 ns a count */
+#endif
 /* Interrupt context (and pvr_scene_begin): the oldest scene begun whose render has not started, by the state
  * of the events already seen: the scene before the latest one only while that one began early (pvr_wait_ready
  * timed out) and the older scene still lacks the event (registration end; for render start: has it). */
@@ -1656,6 +1710,20 @@ static void drop_frame(uint32_t k,const volatile drop_slot_t *d,int timed) {
 #ifdef NM_DIAG_LATE_CAPTURE
     drop_capture_frame(&r);
 #endif
+#ifdef NM_DIAG_FRAME_TRACE
+    if(ft_row_count<FT_ROWS && (upd+reg>=FT_ROW_FROM_US || vbl>=2)) {
+        ft_row_t *row=ft_rows+ft_row_count++;
+        row->run=(uint16_t)r.run;row->upd=(uint16_t)(upd<65535 ? upd : 65535);row->wait=(uint16_t)(wait<65535 ? wait : 65535);
+        row->reg=(uint16_t)(reg<65535 ? reg : 65535);row->rnd=(uint16_t)(rnd<65535 ? rnd : 65535);
+        row->other=(uint16_t)(other<65535 ? other : 65535);
+        row->late=(int16_t)(r.late>32767 ? 32767 : r.late<-32768 ? -32768 : r.late);row->vbl=r.vbl;row->phase=r.phase;
+    }
+    if(r.run>=NM_FT_LO && r.run<=NM_FT_HI && ft_win_count<FT_WINDOW) {
+        ft_win_t *w=ft_window+ft_win_count++;
+        w->run=r.run;w->tick=r.tick;w->upd=upd;w->wait=wait;w->reg=reg;w->rnd=rnd;w->other=other;w->vbl=r.vbl;w->late=r.late;
+        nm_memcpy(&w->s,ft_ring+k%DROP_RING,sizeof(w->s));
+    }
+#endif
 }
 /* Every scene up to the latest flip, in order. A scene the ring no longer holds (processing fell 16 scenes
  * behind) is "overrun"; one that was never flipped (rendered to a texture, or its events went astray) is
@@ -1686,6 +1754,9 @@ static void drop_updater_begin(void) {
     volatile drop_slot_t *d=drop_ring+k%DROP_RING;
     d->cpu_seq=0;d->upd_start=timer_ns_gettime64();
     drop_tick_before=drop_tick_clock();
+#ifdef NM_DIAG_FRAME_TRACE
+    ft_sim0=practice.simulation_us;ft_setup0=practice.scene_setup_us;ft_prep0=practice.render_prepare_us;
+#endif
 }
 static void drop_updater_end(void) {
     const uint32_t k=drop_regs+1;
@@ -1698,6 +1769,12 @@ static void drop_updater_end(void) {
     d->phase=(uint8_t)practice_diag_phase();d->scene=(uint8_t)drop_scene();
     d->camera_mode=practice.race.cars[0].car.camera_mode;d->camera_transition=practice.race.cars[0].car.camera_transition;
     d->cpu_seq=k;
+#ifdef NM_DIAG_FRAME_TRACE
+    ft_scene_t *f=ft_ring+k%DROP_RING;
+    f->sim=(uint32_t)(practice.simulation_us-ft_sim0);f->setup=(uint32_t)(practice.scene_setup_us-ft_setup0);
+    f->prep=(uint32_t)(practice.render_prepare_us-ft_prep0);
+    f->world=practice.world_header.instances;f->part_count=practice.intro_header.instances;f->shadows=practice.shadow_count;
+#endif
 }
 #ifdef NM_DIAG_LATE_CAPTURE
 /* The frame buffer holding scene j's picture: the one on display if j is the latest flip (read together with
@@ -1891,6 +1968,43 @@ static void drop_print(void) {
     putchar('\n');
 #ifdef NM_DIAG_LATE_CAPTURE
     drop_capture_print();
+#endif
+#ifdef NM_DIAG_FRAME_TRACE
+    printf("FT-RUN v1: rows=%u window=%u: run upd wait reg rnd late vbl other phase\n",ft_row_count,ft_win_count);
+    for(unsigned i=0;i<ft_row_count;++i) {
+        const ft_row_t *r=ft_rows+i;
+        printf("FT-R %u %u %u %u %u %d %u %u %u\n",(unsigned)r->run,(unsigned)r->upd,(unsigned)r->wait,(unsigned)r->reg,(unsigned)r->rnd,
+            (int)r->late,(unsigned)r->vbl,(unsigned)r->other,(unsigned)r->phase);
+    }
+    static const char *const ft_names[NM_FT_GROUPS]={NM_FT_NAMES};
+    for(unsigned i=0;i<ft_win_count;++i) {
+        const ft_win_t *w=ft_window+i;
+        const ft_scene_t *f=&w->s;
+        printf("FT-W run=%lu tick=%lu upd=%lu sim=%lu setup=%lu prep=%lu wait=%lu reg=%lu cpu=%lu rnd=%lu late=%ld vbl=%lu other=%lu "
+            "opp=%lu world=%lu parts=%lu shadows=%lu",(unsigned long)w->run,(unsigned long)w->tick,(unsigned long)w->upd,
+            (unsigned long)f->sim,(unsigned long)f->setup,(unsigned long)f->prep,(unsigned long)w->wait,(unsigned long)w->reg,
+            (unsigned long)ft_us(f->cpu_end),(unsigned long)w->rnd,(long)w->late,(unsigned long)w->vbl,(unsigned long)w->other,
+            (unsigned long)f->opponents,(unsigned long)f->world,(unsigned long)f->part_count,(unsigned long)f->shadows);
+        for(unsigned l=0;l<FT_LISTS;++l) printf(" l%u=%lu ta%u=%lu tri%u=%lu hdr%u=%lu vtx%u=%lu",l,(unsigned long)ft_us(f->list[l]),l,
+            (unsigned long)f->ta[l],l,(unsigned long)f->counts[l][0],l,(unsigned long)f->counts[l][1],l,(unsigned long)f->counts[l][2]);
+        for(unsigned g=0;g<NM_FT_GROUPS;++g) printf(" %s=%lu/%lu",ft_names[g],(unsigned long)ft_us(f->group[g]),(unsigned long)f->calls[g]);
+        printf(" ce=%lu,%lu,%lu,%lu/%lu,%lu,%lu,%lu\n",(unsigned long)f->emit[0][0],(unsigned long)f->emit[0][1],(unsigned long)f->emit[0][2],
+            (unsigned long)f->emit[0][3],(unsigned long)f->emit[1][0],(unsigned long)f->emit[1][1],(unsigned long)f->emit[1][2],
+            (unsigned long)f->emit[1][3]);
+        printf("FT-O run=%lu",(unsigned long)w->run);
+        for(unsigned o=0;o<f->object_count && o<NM_FT_OBJECTS;++o) {
+            const nm_ft_object_t *x=f->objects+o;
+            printf(" %u:%u:%u:%lu:%lu:%lu:%u:%u",(unsigned)x->mesh,(unsigned)x->faces,(unsigned)x->vertices,(unsigned long)ft_us(x->prep),
+                (unsigned long)ft_us(x->op),(unsigned long)ft_us(x->pt),(unsigned)x->tri_op,(unsigned)x->tri_pt);
+        }
+        printf("\nFT-C run=%lu",(unsigned long)w->run);
+        for(unsigned o=0;o<f->car_count && o<NM_FT_CARS;++o) {
+            const nm_ft_car_t *c=f->cars+o;
+            printf(" %u:%u:%u:%u:%lu:%lu:%lu:%u",(unsigned)c->first,(unsigned)c->level,(unsigned)c->drawn,(unsigned)c->rows,
+                (unsigned long)ft_us(c->prep),(unsigned long)ft_us(c->op),(unsigned long)ft_us(c->pt),(unsigned)c->tri);
+        }
+        putchar('\n');
+    }
 #endif
 }
 #endif

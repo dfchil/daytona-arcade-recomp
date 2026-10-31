@@ -516,7 +516,16 @@ static unsigned reject_draw_face(const nm_face_t *face, unsigned header, int lig
     return header & 0x8000 ? 3 : 0;
 }
 
+#include "frame_trace.h"
 #include "render/models/model_submission.h"
+#ifdef NM_DIAG_FRAME_TRACE
+uint32_t nm_ft_group[NM_FT_GROUPS],nm_ft_calls[NM_FT_GROUPS],nm_ft_emit[2][4],nm_ft_opponents;
+nm_ft_object_t nm_ft_objects[NM_FT_OBJECTS];
+nm_ft_car_t nm_ft_cars[NM_FT_CARS];
+nm_ft_part_t nm_ft_parts[NM_FT_PARTS];
+uint32_t nm_ft_object_count,nm_ft_car_count;
+void nm_ft_render_counts(uint32_t out[3]) { out[0]=draw_count;out[1]=draw_header_count;out[2]=sq_ta_vertices; }
+#endif
 
 
 /* The value of one material binding for the emission table
@@ -1071,6 +1080,7 @@ void nm_render_world_clock_frame(unsigned group,unsigned frame) {
     const nm_pack_t *pack=world_draw.pack;
     if(!pack || !world_clock.data || group>=world_clock.groups || !world_clock.live[group] ||
        world_clock.applied[group]==(int)frame || !sq_baked_faces) return;
+    NM_FT_BEGIN(ft_frame);
     const nm_clock_group_t *g=nm_clock_groups(world_clock.data)+group;
     if(frame>=g->frames) return;
     world_clock.applied[group]=(int16_t)frame;
@@ -1116,6 +1126,7 @@ void nm_render_world_clock_frame(unsigned group,unsigned frame) {
                 sq_emit_faces[1][at>>2].uv[at&3u][0]=set[2u*slot]; sq_emit_faces[1][at>>2].uv[at&3u][1]=set[2u*slot+1u];
             }
     }
+    NM_FT_END(NM_FT_S_FRAME,ft_frame);
 }
 
 void nm_render_world_clock_light(unsigned group,const float model[12],const float placed[12],const float view[12]) {
@@ -1133,9 +1144,11 @@ void nm_render_world_clock_light(unsigned group,const float model[12],const floa
     }
     const nm_mesh_t *mesh=pack->meshes+g->mesh;
     _Static_assert(sizeof(nm_baked_face_t)==2*sizeof(uint16_t),"front, back");
+    NM_FT_BEGIN(ft_light);
     nm_clock_light_faces(pack->faces+mesh->face_first,mesh->face_count,pack->materials,mesh->mode&1u,&key,
         world_clock.light_rows,world_clock.light_face_row+world_clock.light_first[group],
         (uint16_t (*)[2])(sq_baked_faces+mesh->face_first));
+    NM_FT_END(NM_FT_S_LIGHT,ft_light);
     world_clock.light_key[group]=key; world_clock.light_valid[group]=1;
     ++world_clock.light_updates;
 }

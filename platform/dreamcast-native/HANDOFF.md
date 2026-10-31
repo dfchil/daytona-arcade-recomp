@@ -242,6 +242,15 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
 (`build/dc-native-int2.recipe`, "16 October").
 `run_hw.sh` records video only with `VIDEO=1` (the disk filled up).
 
+### 31 October: the last late frames (branch late-frames)
+
+- **Frame trace** (`NATIVE_DIAG_FRAME_TRACE=1`, needs `NATIVE_DIAG_DROP_LOG=1`; `include/frame_trace.h`,
+  `tools/frame_trace_report.py`): every frame with updater + registration over 15 ms, and for the run ticks
+  `NATIVE_DIAG_FRAME_TRACE_LO..HI` the updater's scopes, each list's time and TA bytes, triangles, headers, the model
+  renderer's groups, per world batch and per opponent. The marks read TMU2's counter (one uncached register read), not
+  `timer_ns_gettime64`. A build with it moves a few hot entries (a loud warning at the link); keep the window under 100
+  frames on Expert, whose heap has little to spare.
+
 ### 30 October: four gaps closed (branch gaps-1)
 
 - **Eye turn 69b4** (`race_view.h` `nm_race_view_eye_turn`, `race_camera.h`): off course 0, except in VR4, a camera entity

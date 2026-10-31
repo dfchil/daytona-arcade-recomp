@@ -17,6 +17,7 @@
 #include "props.h"
 #include "render/scene/slot_glass.h"
 #include "nm_mem.h"
+#include "frame_trace.h"
 
 const nm_view_t nm_practice_render_view = {{320,220},{0,640,0,480},0.1f};
 void nm_practice_render_matrix(const float m[12]) {
@@ -129,6 +130,14 @@ int nm_practice_render_parts(nm_practice_scene_t *scene) {
                nm_intro_body_pose(scene->math,car,body)) ||
            !nm_pose_compose(scene->view,body,out->matrix)) return 0;
         const unsigned drawn=practice_drawn_level(scene,i,level,out);
+#ifdef NM_DIAG_FRAME_TRACE
+        if(nm_ft_car_count<NM_FT_CARS) {
+            nm_ft_car_t *c=nm_ft_cars+nm_ft_car_count++;
+            const float rows=(480.0f/384.0f)*1.28f*out->focus[1]/out->matrix[11];
+            c->first=(uint16_t)scene->car_part_boundaries[ordinal];c->level=(uint8_t)level;c->drawn=(uint8_t)drawn;
+            c->rows=(uint8_t)(rows<0.0f ? 255.0f : rows>254.0f ? 254.0f : rows);
+        }
+#endif
         const unsigned binding=kind==2 ? nm_intro_special_model : nm_intro_body_models[i][6-drawn];
         const nm_instance_t *source=scene->car_sources+binding;
         out->mesh=source->mesh;out->source_address=source->source_address;
@@ -1111,7 +1120,13 @@ int nm_practice_render_scenery(nm_practice_scene_t *scene) {
             }
             j=end;
         }
+#ifdef NM_DIAG_FRAME_TRACE
+        const uint32_t ft_clocks=nm_ft_clock();
+#endif
         if(scene->clock_data && !practice_clocks(scene,bitmaps)) return 0;
+#ifdef NM_DIAG_FRAME_TRACE
+        NM_FT_MARK(NM_FT_S_CLOCKS,ft_clocks);
+#endif
     }
     return 1;
 }
@@ -1278,10 +1293,17 @@ static int practice_prepare(nm_practice_scene_t *scene) {
     practice_road_depth_pick(scene);
     /* Scenery by stage (render/scene/track_surface.h). The sky is four
      * opaque quads at NM_SKY_DEPTH behind everything the renderer accepts. */
+#ifdef NM_DIAG_FRAME_TRACE
+    uint32_t ft_at=nm_ft_clock();
+#define PRACTICE_FT_STEP(call,group) ({ const int ft_ok=(call);NM_FT_MARK(group,ft_at);ft_at=nm_ft_clock();ft_ok; })
+#else
+#define PRACTICE_FT_STEP(call,group) (call)
+#endif
     const int setup_failed=!nm_practice_render_projection(scene,1) ||
-        !nm_practice_render_lighting(scene) || !nm_practice_render_parts(scene)
-        || !nm_practice_render_player_car(scene) || !nm_practice_render_shadows(scene)
-        || !nm_practice_render_scenery(scene)
+        !nm_practice_render_lighting(scene) || !PRACTICE_FT_STEP(nm_practice_render_parts(scene),NM_FT_S_PARTS)
+        || !PRACTICE_FT_STEP(nm_practice_render_player_car(scene),NM_FT_S_PLAYER)
+        || !PRACTICE_FT_STEP(nm_practice_render_shadows(scene),NM_FT_S_SHADOWS)
+        || !PRACTICE_FT_STEP(nm_practice_render_scenery(scene),NM_FT_S_SCENERY)
         ;
     nm_practice_render_projection(scene,0); /* Instances own their copies; 2D actors keep theirs. */
 #ifdef NM_DIAG_NO_CARS

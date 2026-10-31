@@ -877,6 +877,9 @@ static const nm_bounds_planes_t *sq_guard_planes(const nm_view_t *guard,const nm
 #ifndef SQ_PATH_POINTS
 #define SQ_PATH_POINTS(kind,batch) ((void)0)
 #endif
+#if !defined(SQ_PATH_EMIT) && defined(NM_DIAG_FRAME_TRACE)
+#define SQ_PATH_EMIT(kind,source,batch,list,faces) (nm_ft_emit[(source)!=0][kind]+=(faces))
+#endif
 #ifndef SQ_PATH_EMIT
 #define SQ_PATH_EMIT(kind,source,batch,list,faces) ((void)0)
 #endif
@@ -2324,7 +2327,9 @@ static int sq_prepare_batch(nm_sq_batch_t *batch) {
     if(mesh->vertex_count>SQ_MARK_VERTICES || !sq_marks_reserve(mesh->vertex_count)) return 0;
     /* sq_marks is 32-byte aligned and holds (vertex_count+4+31)&~31 bytes (sq_marks_reserve): a multiple of 8. */
     nm_zero8(sq_marks,(mesh->vertex_count+7u)&~7u);
+    NM_FT_BEGIN(ft_classify);
     sq_classify_groups(&walk);
+    NM_FT_END(NM_FT_P_CLASSIFY,ft_classify);
     shz_xmtrx_load_3x4(&inst->transform);
 #if defined(__DREAMCAST__) || defined(NM_HOST_BAKED_WORLD)
     /* Face sides from plane constants (sq_face_side): the lit cars and the
@@ -2339,9 +2344,13 @@ static int sq_prepare_batch(nm_sq_batch_t *batch) {
         nm_sq_stream_state_t *const state=sq_stream_states+(batch-sq_sources[1].batches);
         state->facing=walk.facing!=NULL;
         if(walk.facing) state->terms=walk.facing_terms;
+        NM_FT_BEGIN(ft_marks);
         sq_stream_batch_prepare(&walk);
+        NM_FT_END(NM_FT_P_MARKS,ft_marks);
         batch->stream=SQ_BATCH_STREAM;
+        NM_FT_BEGIN(ft_points);
         SQ_PATH_POINTS(0,batch); sq_cache_points_stream(&walk);
+        NM_FT_END(NM_FT_P_POINTS,ft_points);
         batch->view=walk.guard;
         batch->prepared=1;
         return 1;
@@ -2357,13 +2366,17 @@ static int sq_prepare_batch(nm_sq_batch_t *batch) {
 #endif
     /* The world's material/luma table is gone once it is attached (nm_render_world_attach): baked faces only. */
     if(source && !sq_baked_faces && !walk.lookup) return 0;
+    NM_FT_BEGIN(ft_walk);
     if(!(source && sq_baked_faces ? sq_walk_baked(&walk) : car_records ? sq_walk_car(&walk) : sq_walk_lit(&walk))) return 0;
+    NM_FT_END(NM_FT_P_WALK,ft_walk);
 #else
     if(!sq_walk_lit(&walk)) return 0;
 #endif
 #if defined(__DREAMCAST__) || defined(NM_HOST_BAKED_WORLD)
+    NM_FT_BEGIN(ft_wide);
     if(walk.wide && sq_emit_faces[source]) { SQ_PATH_POINTS(0,batch); sq_cache_points_wide(&walk); }
     else { SQ_PATH_POINTS(1,batch); sq_cache_points_checked(&walk); }
+    NM_FT_END(NM_FT_P_WIDE,ft_wide);
     /* The emitter's clipper must use the view the points were classified
      * against: from here on the batch carries the guard view. */
     if(walk.wide) batch->view=walk.guard;
@@ -4939,8 +4952,10 @@ static __attribute__((noinline)) unsigned sq_stream_face(nm_sq_stream_walk_t *w,
             sq_stream_commit(w);
             nm_sq_emit_t clipped;
             sq_emit_expand(&clipped,sq_emit_records[1]+binding);
+            NM_FT_BEGIN(ft_general);
             if(!sq_emit_face_general(w->cutout ? PVR_LIST_PT_POLY : PVR_LIST_OP_POLY,1,batch,face->index,binding,&clipped,
                                      face->depth,clipped.header,w->previous_header,0)) return 0;
+            NM_FT_END(NM_FT_GENERAL,ft_general);
             w->previous=*w->previous_header; w->headers=draw_header_count; w->target=SQ_DR_BEGIN();
             /* It may have written more than four vertices and a header: the
              * rest of the list is proven again. */
@@ -6599,8 +6614,15 @@ static int sq_emit_batches(unsigned list,unsigned s,unsigned batch_first,unsigne
 }
 /* One borrowed batch range per object, shared by its OP and PT callbacks.
  * Each callback starts with an explicit header; other objects may change TA state. */
+#ifdef NM_DIAG_FRAME_TRACE
+static unsigned sq_ft_opponent;
+#endif
 static void sq_submit_object(nm_sq_batch_t *object,unsigned list) {
     DRAW_PROFILE_SOURCE(object->source);
+#ifdef NM_DIAG_FRAME_TRACE
+    const unsigned ft_kind=object->source ? 0 : sq_ft_opponent ? 2 : 1;
+    const uint32_t ft_start=nm_ft_clock();
+#endif
 #ifdef NATIVE_CACHE_PROFILE
     DRAW_PHASE_START(cache_submit_started);
 #endif
@@ -6617,6 +6639,12 @@ static void sq_submit_object(nm_sq_batch_t *object,unsigned list) {
     for(unsigned b=0;!sq_failed && b<object->object_batches;++b)
         if(!object[b].prepared && !sq_prepare_batch(object+b)) sq_failed=1;
 #endif
+#ifdef NM_DIAG_FRAME_TRACE
+    const uint32_t ft_prepared=nm_ft_clock();
+    const uint32_t ft_prep=nm_ft_delta(ft_start,ft_prepared);
+    const unsigned ft_tris=draw_count;
+    nm_ft_group[NM_FT_WORLD_PREP+ft_kind]+=ft_prep;++nm_ft_calls[NM_FT_WORLD_PREP+ft_kind];
+#endif
     /* The inspection views and builds without emission tables keep the
      * general emitter; a frame of the game takes the production one. */
     const int general=sq_general_emitter(object->source);
@@ -6630,6 +6658,29 @@ static void sq_submit_object(nm_sq_batch_t *object,unsigned list) {
 #endif
 #ifdef NATIVE_CACHE_PROFILE
     DRAW_PHASE_END(10,cache_submit_started);
+#endif
+#ifdef NM_DIAG_FRAME_TRACE
+    {
+        const unsigned group=NM_FT_WORLD_OP+2*ft_kind+(list==PVR_LIST_PT_POLY);
+        const uint32_t emit=nm_ft_delta(ft_prepared,nm_ft_clock());
+        nm_ft_group[group]+=emit;++nm_ft_calls[group];
+        const unsigned pt=list==PVR_LIST_PT_POLY,tris=draw_count-ft_tris;
+        if(!ft_kind) {
+            const unsigned b=(unsigned)(object-sq_sources[1].batches);
+            if(b<NM_FT_OBJECTS) {
+                nm_ft_object_t *o=nm_ft_objects+b;
+                o->mesh=(uint16_t)(object->mesh-world_draw.pack->meshes);o->faces=(uint16_t)object->mesh->face_count;
+                o->vertices=(uint16_t)object->mesh->vertex_count;
+                o->prep=(uint16_t)(o->prep+ft_prep);
+                if(pt) { o->pt=(uint16_t)(o->pt+emit);o->tri_pt=(uint16_t)tris; } else { o->op=(uint16_t)(o->op+emit);o->tri_op=(uint16_t)tris; }
+                if(b>=nm_ft_object_count) nm_ft_object_count=b+1;
+            }
+        } else if(ft_kind==2 && object->instance_index<NM_FT_PARTS) {
+            nm_ft_part_t *o=nm_ft_parts+object->instance_index;
+            o->prep=(uint16_t)(o->prep+ft_prep);o->tri=(uint16_t)(o->tri+tris);
+            if(pt) o->pt=(uint16_t)(o->pt+emit); else o->op=(uint16_t)(o->op+emit);
+        }
+    }
 #endif
 }
 static void sq_submit_object_op(void *data) { sq_submit_object(data,PVR_LIST_OP_POLY); }
@@ -7079,7 +7130,13 @@ static int sq_translucent_emit(void) {
 }
 static void sq_submit_translucent(void *data) {
     (void)data;
+#ifdef NM_DIAG_FRAME_TRACE
+    const uint32_t ft_start=nm_ft_clock();
+#endif
     if(!sq_failed && !sq_translucent_emit()) { puts("FAIL: translucent effects SQ emit; stopping on next update"); sq_failed=1; }
+#ifdef NM_DIAG_FRAME_TRACE
+    nm_ft_group[NM_FT_TRANSLUCENT]+=nm_ft_delta(ft_start,nm_ft_clock());++nm_ft_calls[NM_FT_TRANSLUCENT];
+#endif
 }
 
 /* Borrowed visible opponents, in detail order; reset only before queueing.
@@ -7090,8 +7147,14 @@ static struct {
 } sq_opponents[2];
 static void sq_submit_opponents(void *data) {
     const unsigned pass=(unsigned *)data-draw_lists;
+#ifdef NM_DIAG_FRAME_TRACE
+    sq_ft_opponent=1;nm_ft_opponents=sq_opponents[0].count;
+#endif
     for(unsigned i=0;!sq_failed && i<sq_opponents[pass].count;++i)
         sq_submit_object(sq_opponents[pass].objects[i],draw_lists[pass]);
+#ifdef NM_DIAG_FRAME_TRACE
+    sq_ft_opponent=0;
+#endif
 }
 
 static int sq_queue_objects(const unsigned *car_parts,unsigned cars,unsigned player) {
