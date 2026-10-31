@@ -88,6 +88,9 @@ int nm_bounds_quick_classify(const nm_view_t *view, const float bounds[6], const
 /* Keep the per-vertex path visible to the SH4 compiler: transformed coordinates
  * can stay in registers instead of being spilled across a call for each point.
  * These are the same strict operations used by uncached triangle projection. */
+/* A view's limits from finite values: a compare, not libm's fmaxf/fminf and their two classifications an instance. */
+static inline float nm_view_limit_low(float value, float limit) { return value > limit ? value : limit; }
+static inline float nm_view_limit_high(float value, float limit) { return value < limit ? value : limit; }
 static inline int nm_geometry_finite_vertex(nm_view_vertex_t p) {
     return nm_finite_float(p.x) && nm_finite_float(p.y) && nm_finite_float(p.z) && nm_finite_float(p.u) && nm_finite_float(p.v);
 }

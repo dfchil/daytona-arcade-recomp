@@ -70,7 +70,14 @@ int main(int argc,char **argv) {
             for(unsigned v=0;v<g->vertices;++v) {
                 float p[3];
                 if(vertex_point[v]==NM_CLOCK_STILL) memcpy(p,vertices[v].position,sizeof(p));
-                else nm_clock_point(g,positions+3u*g->points*a,positions+3u*g->points*b,t,vertex_point[v],p);
+                else {
+                    nm_clock_point(g,positions+3u*g->points*a,positions+3u*g->points*b,t,vertex_point[v],p);
+                    if(g->rate==1) { /* what model_renderer.c writes for rate 1 */
+                        float stored[3];
+                        nm_clock_point_stored(g,positions+3u*g->points*a,vertex_point[v],stored);
+                        if(memcmp(stored,p,sizeof(p))) ++position_errors;
+                    }
+                }
                 for(unsigned c=0;c<3;++c) {
                     const float e=fabsf(p[c]-want_position[3u*v+c]);
                     /* A still point keeps the base position, which may lie float32 steps apart in x (clock_base). */
@@ -96,6 +103,10 @@ int main(int argc,char **argv) {
                     stored=1;
                     for(unsigned c=0;c<3;++c) {
                         const float n=nm_clock_normal(normals[4u*(g->normal_faces*a+j)+c],normals[4u*(g->normal_faces*b+j)+c],t);
+                        if(g->rate==1) {
+                            const float stored=nm_clock_normal_stored(normals[4u*(g->normal_faces*a+j)+c]);
+                            if(memcmp(&stored,&n,sizeof(n))) ++normal_errors;
+                        }
                         const float e=fabsf(n-want_normal[3u*f+c]);
                         if(e>worst_normal) worst_normal=e;
                         if(!(e<=(g->rate>1 ? 0.05f : 2e-4f))) ++normal_errors;

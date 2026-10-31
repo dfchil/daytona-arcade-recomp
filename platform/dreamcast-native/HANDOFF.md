@@ -250,6 +250,39 @@ check, disk); on integrate2 the same, 2,174 of 2,174 rows
   renderer's groups, per world batch and per opponent. The marks read TMU2's counter (one uncached register read), not
   `timer_ns_gettime64`. A build with it moves a few hot entries (a loud warning at the link); keep the window under 100
   frames on Expert, whose heap has little to spare.
+- **Why a frame is late.** The CPU is saturated, not one frame heavy: with wait 0 the end of registration moves later
+  after the flip by updater + registration - 16.68 ms a frame, and the frame misses when that plus the render passes the
+  next flip (`L[k] = max(R[k]-V, L[k-1]+U[k]+R[k]-V)`, late when `L+P > V`; this reproduces 4589, 4598, 4612 from the
+  logged U, R, P). A miss gives back one vblank, and the next miss is V / excess frames later: the 10 ticks of Expert's
+  3535 and 3545 are 16.7 ms / 1.6 ms a frame, not a period of the game. The frame after a miss runs two ticks (+2.9 ms).
+- **Beginner 4582..4619:** three cells (meshes 5, 11, 17) enter the arcade's cell list at ticks 4582-83 with five of mesh
+  111: world batches 10 -> 16, TA vertices 6,000 -> 9,200, registration 10.5 -> 13.7 ms. In the worst frame: world prepare
+  4.0 ms (points 2.5, marks and LOD 0.8, classify 0.4), world opaque 3.1, punch-through 2.2 (clipped faces 0.8 of those:
+  49 faces at 17 us), opponents 2.7 (15 cars, 12 at level 1 at 54 us each), player 1.0, shadow volumes 0.4, slot machine
+  glass 0.28. U + R 18.0 ms for 38 frames; one vblank's budget is about 9 ms, so 0.8 ms a frame less was needed.
+- **Expert 3524..3550:** the horses and birds. 20 birds join five horses (world batches 14 -> 37), the placed actors take
+  setup 3.0 ms (Beginner 0.4) and 2.7 ms of world prepare: 6.2 ms of the 18.3 ms frame. The frame update wrote every
+  vertex record through a lerp of three axes: a horse's 155 points are 423 records, 240 us a horse.
+- **Fixes, nothing of the picture or the race moves:**
+  - `nm_render_world_clock_frame`: each moving point once, then its records; rate 1 (every frame stored) without the lerp.
+  - `sq_cache_point_lean`: no near test on the console. A proven point cannot be behind it; host tools abort if one is.
+  - `sq_lod_level`, the shadow rings: a sign test, not GCC's `__unordsf2` call for each far group and ring point.
+  - `sq_prepare_source`: consecutive instances in one window share their view, instead of four libm calls an instance.
+    `instance_view` itself is pinned by `test_practice_render_split.py`.
+  - Slot glass: a reel wholly on the screen is projected without a classification per point: 280 -> about 60 us.
+  - Tried and dropped: projecting each shadow ring point once (-0.15 ms): its slow path out of line grows .text past the
+    8 KiB step below.
+- **Hot layout traps.** GCC's inlining of `practice_prepare` flips with small changes: `records_build` is noinline,
+  `sq_prepare`, `sq_prepare_source` and `nm_render_enqueue_objects` always_inline, or the function leaves its slot.
+  `tests/test_sq_quads.py` slices `static int sq_prepare(void)` and `test_practice_render_split.py` hashes
+  `nm_practice_render_parts`, `nm_practice_render_scenery` and `model_math.h`.
+- **KOS's clock jumps 2.5 ms a second.** TMU2 reloads with 12,468,720 counts and `timer_ns_gettime64` reads each as 80 ns:
+  0.9975 s, then a jump at the underflow. The 1 Hz spikes of 2.54 ms in `upd`, `reg` and the 19,163 us of "Native displayed
+  frames" are that jump, no work (the trace's TMU reads do not show it).
+- **Console.** Before (logs gaps2-*): Beginner late 3, race update/registration means 3.91 / 8.27 ms; Expert late 2, 3.46
+  / 7.00 ms. This commit, each twice, checkpoints 0 differing, hot layout at its slots, `make check` as before: Expert late
+  0, 0 (3.28 / 6.93 ms, 16,593 flips over 16,593 vblanks); Beginner late 2, 2 (3.74 / 8.13 ms; ticks 4591-92, 4609-11),
+  Advanced 0 (2.58 / 6.87), attract 0. `check_stream.py` on all three courses at step 7: 27 PASS.
 
 ### 30 October: four gaps closed (branch gaps-1)
 

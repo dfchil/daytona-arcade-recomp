@@ -1095,13 +1095,28 @@ void nm_render_world_clock_frame(unsigned group,unsigned frame) {
             const uint16_t *vertex_point=nm_clock_table(world_clock.data,g,NM_CLOCK_VERTEX_POINT);
             const int16_t *positions=nm_clock_table(world_clock.data,g,NM_CLOCK_POSITIONS);
             const int16_t *pa=positions+3u*g->points*a,*pb=positions+3u*g->points*b;
-            for(unsigned v=0;v<g->vertices;++v)
+            if(g->points<=NM_CLOCK_MOVED_POINTS) {
+                /* Each point once, then its vertex records (a corner of a face each: a horse's 155 points are 423
+                 * records; per record, the horses took 1.4 ms of a frame on hardware). */
+                alignas(32) float moved[NM_CLOCK_MOVED_POINTS][3];
+                if(g->rate==1) for(unsigned p=0;p<g->points;++p) nm_clock_point_stored(g,pa,p,moved[p]);
+                else for(unsigned p=0;p<g->points;++p) nm_clock_point(g,pa,pb,t,p,moved[p]);
+                for(unsigned v=0;v<g->vertices;++v) {
+                    const unsigned p=vertex_point[v];
+                    if(p==NM_CLOCK_STILL) continue;
+                    float *const out=vertices[v].position;
+                    out[0]=moved[p][0]; out[1]=moved[p][1]; out[2]=moved[p][2];
+                }
+            } else for(unsigned v=0;v<g->vertices;++v)
                 if(vertex_point[v]!=NM_CLOCK_STILL) nm_clock_point(g,pa,pb,t,vertex_point[v],vertices[v].position);
         }
         const uint16_t *normal_faces=nm_clock_table(world_clock.data,g,NM_CLOCK_NORMAL_FACES);
         const int16_t *normals=nm_clock_table(world_clock.data,g,NM_CLOCK_NORMALS);
         const int16_t *na=normals+4u*g->normal_faces*a,*nb=normals+4u*g->normal_faces*b;
-        for(unsigned j=0;j<g->normal_faces;++j)
+        if(g->rate==1) for(unsigned j=0;j<g->normal_faces;++j)
+            for(unsigned axis=0;axis<3;++axis)
+                faces[normal_faces[j]].normal[axis]=nm_clock_normal_stored(na[4u*j+axis]);
+        else for(unsigned j=0;j<g->normal_faces;++j)
             for(unsigned axis=0;axis<3;++axis)
                 faces[normal_faces[j]].normal[axis]=nm_clock_normal(na[4u*j+axis],nb[4u*j+axis],t);
     }
@@ -1335,7 +1350,7 @@ static __attribute__((noinline)) void sq_live_frame(void) {
         sq_live_update(world_draw.pack,world_draw.pack->instances[0].matrix,sq_emit_records[1]);
 }
 
-int nm_render_enqueue_objects(const unsigned *car_parts,unsigned cars,unsigned player) {
+__attribute__((always_inline)) inline int nm_render_enqueue_objects(const unsigned *car_parts,unsigned cars,unsigned player) {
     if(sq_failed) return 0;
 #ifdef NATIVE_CACHE_PROFILE
     if (!draw_samples) {

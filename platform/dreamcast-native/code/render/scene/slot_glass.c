@@ -21,24 +21,61 @@ static float focus[2];
 static unsigned reel_count, compiled;
 static uint32_t frames, drawn;
 
-static void vertex(float x, float y, float q, float grey, int last) {
-    grey = grey < 0.0f ? 0.0f : grey > 255.0f ? 255.0f : grey;
-    const uint32_t c = (uint32_t)(grey + 0.5f);
+static uint32_t level_argb[NM_SLOT_GLASS_LEVELS];
+
+static inline uint32_t grey_argb(unsigned c) { return SLOT_GLASS_ALPHA << 24 | c << 16 | c << 8 | c; }
+
+static inline void vertex(float x, float y, float q, uint32_t argb, int last) {
     pvr_vertex_t *v = pvr_dr_target();
     v->flags = last ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
     v->x = x * (640.0f / 496.0f) * ENJ_XSCALE; v->y = y * (480.0f / 384.0f);
     v->z = q * SLOT_GLASS_DEPTH;
     v->u = v->v = 0.0f;
-    v->argb = SLOT_GLASS_ALPHA << 24 | c << 16 | c << 8 | c; v->oargb = 0;
+    v->argb = argb; v->oargb = 0;
     pvr_dr_commit(v);
+}
+static void vertex_grey(float x, float y, float q, float grey, int last) {
+    grey = grey < 0.0f ? 0.0f : grey > 255.0f ? 255.0f : grey;
+    vertex(x, y, q, grey_argb((uint32_t)(grey + 0.5f)), last);
+}
+
+/* The whole reel on the screen: its points as the view's arithmetic would have them (nm_cache_vertex, the projection
+ * of a point inside), without a classification per point. Three reels' 96 points took 280 us a frame that way, in
+ * the slot machine's frames of the longest straight. 0: a point is near an edge, the band loop below decides. */
+static inline int reel_project(float points[NM_SLOT_GLASS_LEVELS][2][3]) {
+    const float cx = view.center[0], cy = view.center[1], fx = focus[0], fy = focus[1];
+    const float x0 = view.bounds[0] + 1.0f, x1 = view.bounds[1] - 1.0f, y0 = view.bounds[2] + 1.0f, y1 = view.bounds[3] - 1.0f;
+    const float near = 2.0f * view.near_z;
+    for (unsigned l = 0; l < NM_SLOT_GLASS_LEVELS; ++l) for (unsigned s = 0; s < 2; ++s) {
+        const float *p = nm_slot_glass_levels[l].side[s];
+        const shz_vec3_t t = shz_xmtrx_transform_point3(shz_vec3_init(p[0], p[1], p[2]));
+        if (!(t.z > near && t.z < 1e6f)) return 0;
+        const float q = shz_invf_fsrra(t.z), x = cx + t.x * fx * q, y = cy - t.y * fy * q;
+        if (!(x > x0 && x < x1 && y > y0 && y < y1)) return 0;
+        float *out = points[l][s];
+        out[0] = x; out[1] = y; out[2] = q;
+    }
+    return 1;
 }
 
 static void render(void *unused) {
     (void)unused;
     pvr_poly_hdr_t *h = pvr_dr_target(); *h = header; pvr_dr_commit(h);
+    alignas(32) float screen[NM_SLOT_GLASS_LEVELS][2][3];
     nm_cached_vertex_t points[NM_SLOT_GLASS_LEVELS][2];
     for (unsigned r = 0; r < reel_count; ++r) {
         shz_xmtrx_load_3x4(reels + r);
+        if (reel_project(screen)) {
+            /* One strip a band, left and right side by level. */
+            for (unsigned b = 0; b < NM_SLOT_GLASS_BANDS; ++b) {
+                const unsigned first = nm_slot_glass_first[b], end = nm_slot_glass_first[b + 1];
+                for (unsigned l = first; l < end; ++l) for (unsigned s = 0; s < 2; ++s) {
+                    const float *p = screen[l][s];
+                    vertex(p[0], p[1], p[2], level_argb[l], l + 1 == end && s);
+                }
+            }
+            continue;
+        }
         for (unsigned l = 0; l < NM_SLOT_GLASS_LEVELS; ++l) for (unsigned s = 0; s < 2; ++s) {
             const float *p = nm_slot_glass_levels[l].side[s];
             const shz_vec3_t t = shz_xmtrx_transform_point3(shz_vec3_init(p[0], p[1], p[2]));
@@ -52,10 +89,10 @@ static void render(void *unused) {
             unsigned outside = 0;
             for (unsigned l = first; l < end; ++l) outside |= nm_cached_outside(&points[l][0]) | nm_cached_outside(&points[l][1]);
             if (!outside) {
-                /* The usual case, the band inside the view: one strip, left and right side by level. */
+                /* The band inside the view: one strip, left and right side by level. */
                 for (unsigned l = first; l < end; ++l) for (unsigned s = 0; s < 2; ++s) {
                     const nm_cached_vertex_t *p = &points[l][s];
-                    vertex(p->x, p->y, p->q, p->view.u, l + 1 == end && s);
+                    vertex_grey(p->x, p->y, p->q, p->view.u, l + 1 == end && s);
                 }
                 continue;
             }
@@ -69,7 +106,7 @@ static void render(void *unused) {
                     const unsigned corner[3] = {0, i, i + 1};
                     for (unsigned j = 0; j < 3; ++j) {
                         const nm_screen_vertex_t *p = polygon + corner[j];
-                        vertex(p->x, p->y, p->q, shz_divf_fsrra(p->uq, p->q), j == 2);
+                        vertex_grey(p->x, p->y, p->q, shz_divf_fsrra(p->uq, p->q), j == 2);
                     }
                 }
             }
@@ -88,13 +125,14 @@ int nm_slot_glass_enqueue(const nm_header_t *world, const nm_instance_t *const p
         context.depth.comparison = PVR_DEPTHCMP_GEQUAL;
         context.depth.write = PVR_DEPTHWRITE_DISABLE;
         pvr_poly_compile(&header, &context);
+        for (unsigned l = 0; l < NM_SLOT_GLASS_LEVELS; ++l) level_argb[l] = grey_argb(nm_slot_glass_levels[l].grey);
         compiled = 1;   /* no print here: a console write inside a frame masks interrupts */
     }
     /* The world's view (model_math.h instance_view), from the reels' own instances. */
     const nm_instance_t *first = placed[0];
     view = (nm_view_t){{(float)(world->crtc[0] + first->center[0]), (float)(384 - first->center[1] + world->crtc[1])},
-        {fmaxf(first->viewport[0] + world->render[0], 0), fminf(first->viewport[2] + world->render[0] + 1, 496),
-         fmaxf(384 - first->viewport[3] + world->render[1], 0), fminf(384 - first->viewport[1] + world->render[1] + 1, 384)},
+        {nm_view_limit_low(first->viewport[0] + world->render[0], 0), nm_view_limit_high(first->viewport[2] + world->render[0] + 1, 496),
+         nm_view_limit_low(384 - first->viewport[3] + world->render[1], 0), nm_view_limit_high(384 - first->viewport[1] + world->render[1] + 1, 384)},
         0.01f};
     if (!nm_view_valid(&view)) return 1;
     focus[0] = first->focus[0]; focus[1] = first->focus[1];

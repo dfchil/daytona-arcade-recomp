@@ -373,7 +373,7 @@ static void roll_panel_build(float sx,float sy) {
     }
     if(r>roll_panel+1) roll_panel_records=(unsigned)(r-roll_panel);
 }
-static void records_build(int flat) {
+static __attribute__((noinline)) void records_build(int flat) {
     const float sx=(640.0f/496.0f)*ENJ_XSCALE,sy=480.0f/384.0f;
     count=nm_hud_place(hud,quads,hud_sincos,0);
 #if NM_HUD_RADAR_PANEL

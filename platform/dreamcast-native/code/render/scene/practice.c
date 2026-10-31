@@ -130,14 +130,6 @@ int nm_practice_render_parts(nm_practice_scene_t *scene) {
                nm_intro_body_pose(scene->math,car,body)) ||
            !nm_pose_compose(scene->view,body,out->matrix)) return 0;
         const unsigned drawn=practice_drawn_level(scene,i,level,out);
-#ifdef NM_DIAG_FRAME_TRACE
-        if(nm_ft_car_count<NM_FT_CARS) {
-            nm_ft_car_t *c=nm_ft_cars+nm_ft_car_count++;
-            const float rows=(480.0f/384.0f)*1.28f*out->focus[1]/out->matrix[11];
-            c->first=(uint16_t)scene->car_part_boundaries[ordinal];c->level=(uint8_t)level;c->drawn=(uint8_t)drawn;
-            c->rows=(uint8_t)(rows<0.0f ? 255.0f : rows>254.0f ? 254.0f : rows);
-        }
-#endif
         const unsigned binding=kind==2 ? nm_intro_special_model : nm_intro_body_models[i][6-drawn];
         const nm_instance_t *source=scene->car_sources+binding;
         out->mesh=source->mesh;out->source_address=source->source_address;
@@ -367,8 +359,8 @@ static nm_view_t practice_instance_view(const nm_practice_scene_t *scene) {
     const nm_header_t *header=scene->model.header;const nm_instance_t *inst=&scene->instance;
     return (nm_view_t){
         {(float)(header->crtc[0]+inst->center[0]),(float)(384-inst->center[1]+header->crtc[1])},
-        {fmaxf(inst->viewport[0]+header->render[0],0),fminf(inst->viewport[2]+header->render[0]+1,496),
-         fmaxf(384-inst->viewport[3]+header->render[1],0),fminf(384-inst->viewport[1]+header->render[1]+1,384)},0.01f};
+        {nm_view_limit_low(inst->viewport[0]+header->render[0],0),nm_view_limit_high(inst->viewport[2]+header->render[0]+1,496),
+         nm_view_limit_low(384-inst->viewport[3]+header->render[1],0),nm_view_limit_high(384-inst->viewport[1]+header->render[1]+1,384)},0.01f};
 }
 /* Sum over the axes of the larger of |min| and |max| of a mesh's bounds: at least the distance of any of its
  * points from its origin. */
@@ -815,7 +807,7 @@ static void practice_shadow_volumes(void *data) {
                 const float reach=side ? -PRACTICE_SHADOW_REACH : PRACTICE_SHADOW_REACH;
                 float *v=ring[side][i];
                 v[0]=t.x+up[0]*reach;v[1]=t.y+up[1]*reach;v[2]=t.z+up[2]*reach;
-                behind+=!(v[2]>PRACTICE_SHADOW_NEAR);
+                behind+=!nm_float_positive(v[2]-PRACTICE_SHADOW_NEAR); /* a sign test: no libgcc unordered call a point */
             }
         }
         if(behind==2*n) continue;
@@ -995,8 +987,8 @@ static int practice_world_instance_rejected(const nm_practice_scene_t *scene,con
     const nm_header_t *header=scene->world.header;
     const nm_view_t view={
         {(float)(header->crtc[0]+inst->center[0]),(float)(384-inst->center[1]+header->crtc[1])},
-        {fmaxf(inst->viewport[0]+header->render[0],0),fminf(inst->viewport[2]+header->render[0]+1,496),
-         fmaxf(384-inst->viewport[3]+header->render[1],0),fminf(384-inst->viewport[1]+header->render[1]+1,384)},0.01f};
+        {nm_view_limit_low(inst->viewport[0]+header->render[0],0),nm_view_limit_high(inst->viewport[2]+header->render[0]+1,496),
+         nm_view_limit_low(384-inst->viewport[3]+header->render[1],0),nm_view_limit_high(384-inst->viewport[1]+header->render[1]+1,384)},0.01f};
     if(!nm_view_valid(&view)) return 1;
     const float *bounds=scene->world.meshes[inst->mesh].bounds;
     int kind=nm_bounds_quick_classify(&view,bounds,inst->matrix,inst->focus);
@@ -1036,6 +1028,7 @@ static __attribute__((noinline)) int practice_clocks(nm_practice_scene_t *scene,
     if(!nm_clock_scene_input(&in,&scene->race,&scene->intro,scene->attract_active,
             scene->podium.phase ? 0u : scene->results.ticks,bitmaps)) return 1;
     const nm_xa_draw_t *const draws=nm_props_world_actor_draws(scene->attract_active);
+    NM_FT_BEGIN(ft_clocks);
     for(unsigned i=0;i<scene->clock_count;++i) {
         const nm_clock_group_t *const g=groups+i;
         const nm_xa_draw_t *const draw=g->cond==NM_CLOCK_ACTOR && draws ? draws+i : NULL;
@@ -1046,6 +1039,7 @@ static __attribute__((noinline)) int practice_clocks(nm_practice_scene_t *scene,
         if(g->flags&NM_CLOCK_GROUP_PLACED ? !practice_clock_place(scene,source,i,draw) :
            !practice_object_place(scene,source,source->mesh,NM_OBJECT_CELL(source->padding[0]))) return 0;
     }
+    NM_FT_END(NM_FT_S_CLOCKS,ft_clocks);
     return 1;
 }
 /* The reels (kinds NM_OBJECT_SLOT..+2) among this frame's world object instances, to the glass. */
@@ -1061,6 +1055,22 @@ static int practice_slot_glass(const nm_practice_scene_t *scene) {
     }
     return nm_slot_glass_enqueue(scene->world.header,reels,count);
 }
+#ifdef NM_DIAG_FRAME_TRACE
+/* The opponents' levels of this frame (include/frame_trace.h): after nm_practice_render_parts. */
+static void practice_ft_cars(const nm_practice_scene_t *scene) {
+    nm_ft_car_count=0;
+    for(unsigned ordinal=0;ordinal<scene->intro.count && nm_ft_car_count<NM_FT_CARS;++ordinal) {
+        const unsigned i=scene->intro.detail_order[ordinal],level=scene->intro.detail_level[i];
+        if(!level) continue;
+        const nm_instance_t *body=scene->car_instances+scene->car_part_boundaries[ordinal];
+        const float rows=(480.0f/384.0f)*1.28f*body->focus[1]/body->matrix[11];
+        nm_ft_car_t *c=nm_ft_cars+nm_ft_car_count++;
+        c->first=(uint16_t)scene->car_part_boundaries[ordinal];c->level=(uint8_t)level;
+        c->drawn=(uint8_t)practice_drawn_level(scene,i,level,body);
+        c->rows=(uint8_t)(rows<0.0f ? 255.0f : rows>254.0f ? 254.0f : rows);
+    }
+}
+#endif
 int nm_practice_render_scenery(nm_practice_scene_t *scene) {
     nm_scenery_cells_t cells;
     cells=scene->intro.cells;
@@ -1120,13 +1130,7 @@ int nm_practice_render_scenery(nm_practice_scene_t *scene) {
             }
             j=end;
         }
-#ifdef NM_DIAG_FRAME_TRACE
-        const uint32_t ft_clocks=nm_ft_clock();
-#endif
         if(scene->clock_data && !practice_clocks(scene,bitmaps)) return 0;
-#ifdef NM_DIAG_FRAME_TRACE
-        NM_FT_MARK(NM_FT_S_CLOCKS,ft_clocks);
-#endif
     }
     return 1;
 }
@@ -1299,8 +1303,13 @@ static int practice_prepare(nm_practice_scene_t *scene) {
 #else
 #define PRACTICE_FT_STEP(call,group) (call)
 #endif
+#ifdef NM_DIAG_FRAME_TRACE
+#define PRACTICE_FT_CARS() ({ practice_ft_cars(scene);1; })
+#else
+#define PRACTICE_FT_CARS() 1
+#endif
     const int setup_failed=!nm_practice_render_projection(scene,1) ||
-        !nm_practice_render_lighting(scene) || !PRACTICE_FT_STEP(nm_practice_render_parts(scene),NM_FT_S_PARTS)
+        !nm_practice_render_lighting(scene) || !PRACTICE_FT_STEP(nm_practice_render_parts(scene),NM_FT_S_PARTS) || !PRACTICE_FT_CARS()
         || !PRACTICE_FT_STEP(nm_practice_render_player_car(scene),NM_FT_S_PLAYER)
         || !PRACTICE_FT_STEP(nm_practice_render_shadows(scene),NM_FT_S_SHADOWS)
         || !PRACTICE_FT_STEP(nm_practice_render_scenery(scene),NM_FT_S_SCENERY)

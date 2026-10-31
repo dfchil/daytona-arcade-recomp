@@ -53,6 +53,7 @@
 #define NM_CLOCK_ACTORS_MAX 32u
 #define NM_CLOCK_NORMAL_SCALE 8192.0f
 #define NM_CLOCK_STILL 0xffffu     /* vertex_point of a vertex record whose point does not move */
+#define NM_CLOCK_MOVED_POINTS 320u /* a frame's points on the stack (model_renderer.c); the packs' largest group: 264 */
 enum { NM_CLOCK_RUN, NM_CLOCK_ALWAYS, NM_CLOCK_PROFILE, NM_CLOCK_LAPS_LOW, NM_CLOCK_LAPS_HIGH,
        NM_CLOCK_FAR_PROFILE, NM_CLOCK_LAPS_NONE, NM_CLOCK_LAPS_SOME, NM_CLOCK_WINDOW, NM_CLOCK_ACTOR };
 #define NM_CLOCK_GROUP_PLACED 1u   /* group flags (nm_clock_group_t.flags) */
@@ -232,6 +233,16 @@ static inline void nm_clock_point(const nm_clock_group_t *g,const int16_t *pa,co
     }
 }
 /* A stored normal component between two stored frames. */
+/* The same on a stored frame (rate 1: every frame is stored, weight 0): the lerp's result without its second read. */
+static inline void nm_clock_point_stored(const nm_clock_group_t *g,const int16_t *pa,unsigned p,float out[3]) {
+    for(unsigned axis=0;axis<3;++axis) {
+#ifdef __DREAMCAST__
+        out[axis]=shz_fmaf((float)pa[3u*p+axis],g->step[axis],g->origin[axis]);
+#else
+        out[axis]=(float)pa[3u*p+axis]*g->step[axis]+g->origin[axis];
+#endif
+    }
+}
 static inline float nm_clock_normal(int16_t a,int16_t b,float t) {
 #ifdef __DREAMCAST__
     return shz_lerpf((float)a,(float)b,t)*(1.0f/NM_CLOCK_NORMAL_SCALE);
@@ -241,6 +252,7 @@ static inline float nm_clock_normal(int16_t a,int16_t b,float t) {
 }
 
 /* Where frame `frame` lies between the stored frames: a, b and the weight t of b. */
+static inline float nm_clock_normal_stored(int16_t a) { return (float)a*(1.0f/NM_CLOCK_NORMAL_SCALE); }
 static inline void nm_clock_between(const nm_clock_group_t *g,unsigned frame,unsigned *a,unsigned *b,float *t) {
     const unsigned stored=nm_clock_stored(g);
     *a=frame/g->rate; *b=(*a+1u)%stored;

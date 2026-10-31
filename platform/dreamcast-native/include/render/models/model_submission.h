@@ -877,6 +877,10 @@ static const nm_bounds_planes_t *sq_guard_planes(const nm_view_t *guard,const nm
 #ifndef SQ_PATH_POINTS
 #define SQ_PATH_POINTS(kind,batch) ((void)0)
 #endif
+#ifndef NM_FT_BEGIN /* include/frame_trace.h; host tools take this file without it */
+#define NM_FT_BEGIN(name) ((void)0)
+#define NM_FT_END(group,name) ((void)0)
+#endif
 #if !defined(SQ_PATH_EMIT) && defined(NM_DIAG_FRAME_TRACE)
 #define SQ_PATH_EMIT(kind,source,batch,list,faces) (nm_ft_emit[(source)!=0][kind]+=(faces))
 #endif
@@ -1284,9 +1288,9 @@ static inline __attribute__((always_inline)) unsigned sq_lod_level(const nm_sq_l
     if(level<NM_LOD_LEVELS-1 && far_side>group->depth[level]) {
         ++level;
         if(level<NM_LOD_LEVELS-1 && far_side>group->depth[level]) ++level;
-    } else if(level && near_side<group->depth[level-1]) {
+    } else if(level && nm_float_negative(near_side-group->depth[level-1])) { /* a sign test: no libgcc unordered call a group */
         --level;
-        if(level && near_side<group->depth[level-1]) --level;
+        if(level && nm_float_negative(near_side-group->depth[level-1])) --level;
     }
     return level;
 }
@@ -1932,10 +1936,12 @@ static int sq_stream_ready(const nm_sq_walk_t *walk); /* below the emitters */
 /* A position only proven stream faces read (marked inside, no SQ_MARK_VIEW):
  * x, y and q of its cached entry, the arithmetic of cache_draw_vertex_wide
  * and nm_cache_vertex_wide for a point proven inside (the instance matrix in
- * XMTRX, focus, the near-plane test, 1/z, the projection), without the view
- * coordinates and u, v that only the clipper reads. 0 when the point lies
- * behind the near plane after all: the caller then takes the whole routine,
- * which classifies it. nm_render_init compares the two on sample points
+ * XMTRX, focus, 1/z, the projection), without the view coordinates and u, v
+ * that only the clipper reads. The proof (a group or batch strictly inside the
+ * five planes of the guard view, nm_bounds_planes_classify's FTRV envelope
+ * included) holds the near plane: no test on the console, 10 cycles a point
+ * (0.2 ms in the race's heaviest frames). Host tools abort on a point behind
+ * it. nm_render_init compares the two on sample points
  * (sq_stream_transform_check). */
 static inline __attribute__((always_inline)) int sq_cache_point_lean(const nm_vertex_t *vertex,float focus_x,float focus_y,
         const nm_view_t *guard,nm_cached_vertex_t *out) {
@@ -1952,8 +1958,8 @@ static inline __attribute__((always_inline)) int sq_cache_point_lean(const nm_ve
 #else
     const shz_vec4_t t=shz_xmtrx_transform_vec4(shz_vec4_init(p[0],p[1],p[2],1));
     const float x=t.x*focus_x,y=t.y*focus_y,z=t.z;
+    if(nm_float_negative(z-guard->near_z)) { puts("FAIL: a proven point behind the near plane"); abort(); }
 #endif
-    if(nm_float_negative(z-guard->near_z)) return 0;
 #ifdef __DREAMCAST__
     /* z lies in [near_z, 2^42] (a stream batch is bounded, near_z >= 2^-10):
      * nm_cache_vertex_wide's range test, which picks FSRRA, holds. Its
@@ -2232,9 +2238,8 @@ static int sq_car_ready(const nm_sq_walk_t *walk) {
         !draw_inspect_strips && !draw_untextured && !SQ_GENERAL_EMITTER && sq_stream_far(walk->inst,walk->mesh);
 }
 /* The prepare step of a car stream batch: every distinct position of the
- * part, the lean form (proven inside, so no point test; the whole routine
- * should one lie behind the near plane after all, as in
- * sq_cache_points_stream). XMTRX holds the instance matrix. */
+ * part, the lean form (proven inside, so no point test). XMTRX holds the
+ * instance matrix. */
 static __attribute__((noinline)) void sq_car_batch_prepare(const nm_sq_walk_t *walk) {
     const nm_mesh_t *const mesh=walk->mesh;
     const nm_sq_car_mesh_t *const info=sq_car_meshes+(mesh-walk->pack->meshes);
@@ -2485,11 +2490,19 @@ static inline void sq_ss_batch(const nm_sq_batch_t *batch,const pvr_poly_hdr_t *
 }
 /* Visible instances of one source become batches; faces and vertices are
  * prepared in the object's first list callback (sq_submit_object). */
+/* In line, as they were before the view's call took them over GCC's limits: practice_prepare's slot (config/hot_layout.tsv). */
+static inline __attribute__((always_inline)) int sq_prepare_source(unsigned source, const nm_pack_t *pack);
+static inline __attribute__((always_inline)) int sq_prepare(void);
+/* Out of line: a frame's hot path holds a call, not its four libm calls. */
+static __attribute__((noinline)) void sq_instance_view(const nm_pack_t *pack,const nm_instance_t *inst,nm_view_t *out) {
+    *out=instance_view(pack,inst);
+}
 static int sq_prepare_source(unsigned source, const nm_pack_t *pack) {
     DRAW_PROFILE_SOURCE(source);
     unsigned points_used=0,faces_used=0;
     if(source) {
-        const nm_view_t view=pack->header->instances ? instance_view(pack,pack->instances) : (nm_view_t){0};
+        nm_view_t view={0};
+        if(pack->header->instances) sq_instance_view(pack,pack->instances,&view);
         nm_scenery_camera_prepare(&sq_scenery_camera,pack,&view);
     }
     sq_sources[source].count=0;
@@ -2500,11 +2513,25 @@ static int sq_prepare_source(unsigned source, const nm_pack_t *pack) {
     nm_bounds_planes_t planes;
     const nm_instance_t *planes_instance=NULL;
     nm_view_t planes_view;
+    /* Consecutive instances in one window (every part of every car) share their view: instance_view's four libm calls
+     * and their classifications once, not per instance. */
+    nm_view_t window_view;
+    int16_t window[6]={0,0,0,0,0,0};
+    int window_valid=0;
     for(unsigned i=0;i<pack->header->instances;++i) {
         DRAW_PHASE_START(bounds_started);
         const nm_instance_t *inst=pack->instances+i;
         const nm_mesh_t *mesh=pack->meshes+inst->mesh;
-        const nm_view_t view=source && sq_scenery_camera.shared ? sq_scenery_camera.view : instance_view(pack,inst);
+        const int shared_view=source && sq_scenery_camera.shared;
+        if(!shared_view) {
+            const int16_t *const v=inst->viewport,*const c=inst->center;
+            if(!window_valid || ((v[0]^window[0])|(v[1]^window[1])|(v[2]^window[2])|(v[3]^window[3])|(c[0]^window[4])|(c[1]^window[5]))) {
+                sq_instance_view(pack,inst,&window_view); window_valid=1;
+                for(unsigned k=0;k<4;++k) window[k]=v[k];
+                window[4]=c[0]; window[5]=c[1];
+            }
+        }
+        const nm_view_t view=shared_view ? sq_scenery_camera.view : window_view;
         if(!nm_view_valid(&view)) { DRAW_PHASE_END(11,bounds_started); continue; }
         /* nm_bounds_quick_classify first: when it decides (0 or 2) the planes would decide the same, at a tenth
          * of their cost (the pit crew's hundred parts a frame, each with its own matrix). */
